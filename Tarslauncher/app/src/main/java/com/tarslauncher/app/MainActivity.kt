@@ -21,6 +21,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.tarslauncher.app.data.model.*
 import com.tarslauncher.app.onboarding.OnboardingManager
+import com.tarslauncher.app.onboarding.OnboardingScreen
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
@@ -163,7 +164,8 @@ fun LauncherMain(onboardingManager: OnboardingManager) {
     val activity = context as MainActivity
 
     // Onboarding not used in main logic but kept for interface consistency
-    val showOnboarding by remember { mutableStateOf(!onboardingManager.isOnboardingComplete()) }
+    // Onboarding state
+    var showOnboarding by remember { mutableStateOf(!onboardingManager.isOnboardingComplete()) }
     
     val sharedPrefs = remember { SecurePreferences.getEncryptedPreferences(context) }
     val gson = remember { Gson() }
@@ -510,8 +512,18 @@ fun LauncherMain(onboardingManager: OnboardingManager) {
                             sharedPrefs.edit().putInt("app_drawer_icon_size", it).commit()
                         }
                     )
-                }
             }
         }
+
+        // Onboarding Overlay
+        if (showOnboarding) {
+            OnboardingScreen(
+                onOnboardingComplete = {
+                    onboardingManager.setOnboardingComplete()
+                    showOnboarding = false
+                }
+            )
+        }
     }
+}
 }

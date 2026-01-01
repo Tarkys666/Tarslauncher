@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -726,8 +727,8 @@ fun FolderAppsDialog(
 ) {
     val context = LocalContext.current
     // Long-press removal confirmation state
-    var appToRemove by remember { mutableStateOf<AppInfo?>(null) }
-    var showRemoveConfirm by remember { mutableStateOf(false) }
+    var appToManage by remember { mutableStateOf<AppInfo?>(null) }
+    var showManageDialog by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -751,8 +752,8 @@ fun FolderAppsDialog(
                         onClick = { onAppClick(app) },
                         onLongClick = {
                             if (!folderLocked) {
-                                appToRemove = app
-                                showRemoveConfirm = true
+                                appToManage = app
+                                showManageDialog = true
                             }
                         },
                         iconPackLoader = iconPackLoader
@@ -762,119 +763,116 @@ fun FolderAppsDialog(
         }
     }
 
-    // Confirmation dialog to remove app from folder
-    if (showRemoveConfirm && appToRemove != null) {
-        Dialog(onDismissRequest = { showRemoveConfirm = false }) {
+    // Management dialog (TARS Ultra-Minimal)
+    if (showManageDialog && appToManage != null) {
+        Dialog(onDismissRequest = { showManageDialog = false }) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.9f)
+                    containerColor = Color.Black.copy(alpha = 0.95f)
                 ),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
+                shape = RoundedCornerShape(2.dp),
+                modifier = Modifier.width(250.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .wrapContentWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(top = 24.dp, bottom = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Remove from folder?",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Light,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    appToRemove?.let { app ->
-                        Text(
-                            text = app.name,
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 11.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    Text(
-                        text = "Sistemden de silelim mi?",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Minimal Icon & Name
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                showRemoveConfirm = false
-                                appToRemove = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Black,
-                                contentColor = Color.White
-                            ),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier
-                                .size(width = 80.dp, height = 32.dp),
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("CANCEL", color = Color.White, fontWeight = FontWeight.Light, fontSize = 10.sp)
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        Button(
-                            onClick = {
-                                // Only remove from folder
-                                appToRemove?.let { onAppRemove(it) }
-                                showRemoveConfirm = false
-                                appToRemove = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White.copy(alpha = 0.1f),
-                                contentColor = Color.White
-                            ),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier
-                                .size(width = 80.dp, height = 32.dp),
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("REMOVE", color = Color.White, fontWeight = FontWeight.Light, fontSize = 10.sp)
-                        }
+                         val context = LocalContext.current
+                         val icon = remember(appToManage!!.packageName) {
+                             try {
+                                 val pm = context.packageManager
+                                 val info = pm.getApplicationInfo(appToManage!!.packageName, 0)
+                                 drawableToBitmap(info.loadIcon(pm)).asImageBitmap()
+                             } catch(e:Exception) { null }
+                         }
+                         if (icon != null) {
+                             Image(bitmap = icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                         }
+                    }
+                    
+                    Text(
+                        text = appToManage!!.name.uppercase(),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Divider
+                    HorizontalDivider(
+                        color = Color.White.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
-                        Button(
-                            onClick = {
-                                // Klasörden çıkar + sistemden kaldır
-                                appToRemove?.let { app ->
-                                    onAppRemove(app)
-                                    try {
-                                        val intent = Intent(Intent.ACTION_DELETE).apply {
-                                            data = Uri.parse("package:${app.packageName}")
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Uygulama kaldırılamıyor", Toast.LENGTH_LONG).show()
-                                    }
+                    // Actions
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // REMOVE
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    appToManage?.let { onAppRemove(it) }
+                                    showManageDialog = false
+                                    appToManage = null
                                 }
-                                showRemoveConfirm = false
-                                appToRemove = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Red.copy(alpha = 0.2f),
-                                contentColor = Color.White
-                            ),
-                            border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.6f)),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier
-                                .size(width = 80.dp, height = 32.dp),
-                            contentPadding = PaddingValues(0.dp)
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text("DELETE", color = Color.White, fontWeight = FontWeight.Light, fontSize = 10.sp)
+                            Text(
+                                text = "REMOVE",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        // UNINSTALL
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    appToManage?.let { app ->
+                                        try {
+                                            val intent = Intent(Intent.ACTION_DELETE).apply {
+                                                data = Uri.parse("package:${app.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    showManageDialog = false
+                                    appToManage = null
+                                }
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "UNINSTALL",
+                                color = Color(0xFFFF4444),
+                                fontSize = 11.sp,
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }

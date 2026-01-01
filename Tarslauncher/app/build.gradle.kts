@@ -30,13 +30,18 @@ android {
                 localProperties.load(FileInputStream(localPropertiesFile))
             }
 
-            // Always use the keystore in the project root
-            storeFile = rootProject.file("tarslauncher-release.jks")
-            
             // Keystore credentials
             storePassword = localProperties.getProperty("storePassword")
             keyAlias = localProperties.getProperty("keyAlias")
             keyPassword = localProperties.getProperty("keyPassword")
+            
+            // Allow custom keystore path from local.properties
+            val customStorePath = localProperties.getProperty("storeFile")
+            if (customStorePath != null) {
+                storeFile = file(customStorePath)
+            } else {
+                storeFile = rootProject.file("tarslauncher-release.jks")
+            }
         }
     }
 

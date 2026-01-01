@@ -104,15 +104,24 @@ fun SettingsScreen(
     }
     
     // Refresh launcher status when screen becomes visible (user returns from settings)
-    DisposableEffect(Unit) {
-        val refreshLauncherStatus = {
-            isDefaultLauncherSet = isDefaultLauncher(context)
+    // Lifecycle aware default launcher status check
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isDefaultLauncherSet = isDefaultLauncher(context)
+            }
         }
         
-        // Check status when effect starts
-        refreshLauncherStatus()
+        lifecycleOwner.lifecycle.addObserver(observer)
         
-        onDispose { }
+        // Initial check
+        isDefaultLauncherSet = isDefaultLauncher(context)
+        
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
     
     // Tree state management
