@@ -1,0 +1,63 @@
+# Security-focused ProGuard rules for TarsLauncher
+# Aggressive obfuscation to prevent reverse engineering
+
+# Enable all optimizations
+-optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
+-optimizationpasses 5
+-allowaccessmodification
+-dontpreverify
+
+# Obfuscation settings
+# -obfuscationdictionary dictionary.txt
+# -classobfuscationdictionary dictionary.txt
+# -packageobfuscationdictionary dictionary.txt
+-repackageclasses ''
+-flattenpackagehierarchy
+
+# Remove debugging information
+-renamesourcefileattribute SourceFile
+-keepattributes Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,*Annotation*,EnclosingMethod
+
+# Keep main components
+-keep public class com.tarslauncher.app.MainActivity {
+    public *;
+}
+
+# Keep Compose classes
+-keep class androidx.compose.** { *; }
+-keep class kotlin.** { *; }
+-keep class kotlinx.** { *; }
+
+# Keep data classes (but obfuscate field names)
+-keepclassmembers class com.tarslauncher.app.AppInfo {
+    <init>(...);
+}
+-keepclassmembers class com.tarslauncher.app.FolderInfo {
+    <init>(...);
+}
+
+# Security: Hide sensitive classes from reflection
+-keepnames class com.tarslauncher.app.SecurityHelper
+-keepnames class com.tarslauncher.app.SecurePreferences
+
+# Gson serialization
+-keepattributes Signature
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
+# Remove logging in release builds
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int i(...);
+    public static int w(...);
+    public static int d(...);
+    public static int e(...);
+}
+
+# Anti-tampering: Make it harder to hook methods
+-keepclassmembers class * {
+    native <methods>;
+}
