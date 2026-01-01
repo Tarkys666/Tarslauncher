@@ -1,4 +1,4 @@
-package com.example.tarslauncher
+package com.tarslauncher.app
 
 import android.content.Context
 import android.content.SharedPreferences

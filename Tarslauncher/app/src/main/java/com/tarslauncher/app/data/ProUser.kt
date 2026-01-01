@@ -1,4 +1,4 @@
-package com.example.tarslauncher.data
+package com.tarslauncher.app.data
 
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp

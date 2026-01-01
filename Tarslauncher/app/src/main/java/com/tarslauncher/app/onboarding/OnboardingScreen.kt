@@ -1,4 +1,4 @@
-package com.example.tarslauncher.onboarding
+package com.tarslauncher.app.onboarding
 
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable

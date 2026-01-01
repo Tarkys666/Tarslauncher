@@ -1,11 +1,11 @@
-package com.example.tarslauncher.service
+package com.tarslauncher.app.service
 
 import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.example.tarslauncher.data.ProUser
+import com.tarslauncher.app.data.ProUser
 import kotlinx.coroutines.tasks.await
 import java.util.*
 import kotlin.coroutines.resume

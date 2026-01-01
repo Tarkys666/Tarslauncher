@@ -1,4 +1,4 @@
-package com.example.tarslauncher.onboarding
+package com.tarslauncher.app.onboarding
 
 import android.content.Context
 import android.content.SharedPreferences

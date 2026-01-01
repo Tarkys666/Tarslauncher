@@ -1,10 +1,10 @@
-package com.example.tarslauncher
+package com.tarslauncher.app
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.example.tarslauncher.SecurePreferences
+
 
 class ProModeManager(
     private val context: Context,

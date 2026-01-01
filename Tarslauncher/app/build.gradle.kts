@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.security.MessageDigest
+import java.io.FileInputStream
 
 fun generateBuildHash(): String {
     val timestamp = System.currentTimeMillis().toString()
@@ -22,13 +23,20 @@ android {
     // --- Release signing configuration ---
     signingConfigs {
         create("release") {
+            // Load keystore credentials from local.properties
+            val localProperties = Properties()
+            val localPropertiesFile = rootProject.file("local.properties")
+            if (localPropertiesFile.exists()) {
+                localProperties.load(FileInputStream(localPropertiesFile))
+            }
+
             // Always use the keystore in the project root
             storeFile = rootProject.file("tarslauncher-release.jks")
             
             // Keystore credentials
-            storePassword = "M@v!5i_Star!ng"
-            keyAlias = "tarslauncher_alias"
-            keyPassword = "M@v!5i_Star!ng"
+            storePassword = localProperties.getProperty("storePassword")
+            keyAlias = localProperties.getProperty("keyAlias")
+            keyPassword = localProperties.getProperty("keyPassword")
         }
     }
 
