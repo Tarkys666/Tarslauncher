@@ -28,9 +28,7 @@ import com.tarslauncher.app.utils.*
 
 class MainActivity : ComponentActivity() {
     
-    internal lateinit var proModeManager: ProModeManager
     private lateinit var onboardingManager: OnboardingManager
-    internal val isProUser = mutableStateOf(true)
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,15 +41,6 @@ class MainActivity : ComponentActivity() {
             android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
         
-        // Initialize ProModeManager with callback to update UI state
-        proModeManager = ProModeManager(this) { isPro ->
-            Log.d("MainActivity", "Pro status callback received: $isPro")
-            // Update the UI state when pro status changes
-            runOnUiThread {
-                isProUser.value = isPro
-            }
-        }
-        proModeManager.initialize()
         onboardingManager = OnboardingManager(this)
         
         setContent {
@@ -61,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent
                 ) {
-                    LauncherMain(proModeManager = proModeManager, onboardingManager = onboardingManager)
+                    LauncherMain(onboardingManager = onboardingManager)
                 }
             }
         }
@@ -157,21 +146,19 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         
-        if (::proModeManager.isInitialized) {
-            proModeManager.handleActivityResult(requestCode, resultCode, data)
+        if (resultCode == RESULT_OK) {
+            // Handle other results if needed
         }
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        if (::proModeManager.isInitialized) {
-            proModeManager.cleanup()
-        }
+        super.onDestroy()
     }
 }
 
 @Composable
-fun LauncherMain(proModeManager: ProModeManager, onboardingManager: OnboardingManager) {
+fun LauncherMain(onboardingManager: OnboardingManager) {
     val context = LocalContext.current
     val activity = context as MainActivity
 
@@ -257,7 +244,6 @@ fun LauncherMain(proModeManager: ProModeManager, onboardingManager: OnboardingMa
     var buttonColorMode by remember { mutableStateOf(sharedPrefs.getString("button_color_mode", "black") ?: "black") }
     var folderLocked by remember { mutableStateOf(sharedPrefs.getBoolean("folder_locked", false)) }
     var showTarsHeader by remember { mutableStateOf(sharedPrefs.getBoolean("show_tars_header", true)) }
-    var isProUser by remember { activity.isProUser }
     var appDrawerIconSize by remember { mutableStateOf(sharedPrefs.getInt("app_drawer_icon_size", 32)) }
     
     // Uygulama kullanım istatistiklerini kaydetme fonksiyonu
@@ -325,7 +311,6 @@ fun LauncherMain(proModeManager: ProModeManager, onboardingManager: OnboardingMa
         showTarsHeader = sharedPrefs.getBoolean("show_tars_header", true)
         showClock = sharedPrefs.getBoolean("show_clock", true)
         doubleTapLockEnabled = sharedPrefs.getBoolean("double_tap_lock", true)
-        isProUser = sharedPrefs.getBoolean("is_pro_user", true)
     }
 
     val iconPackLoader = remember(selectedIconPack) {
@@ -511,17 +496,8 @@ fun LauncherMain(proModeManager: ProModeManager, onboardingManager: OnboardingMa
                         },
                         showTarsHeader = showTarsHeader,
                         onShowTarsHeaderChange = {
-                            if (it == false && !isProUser) {
-                                Toast.makeText(context, "TARS Header'ı gizlemek için Pro sürüm gereklidir", Toast.LENGTH_LONG).show()
-                            } else {
-                                showTarsHeader = it
-                                sharedPrefs.edit().putBoolean("show_tars_header", it).commit()
-                            }
-                        },
-                        isProUser = isProUser,
-                        onProStatusChange = {
-                            isProUser = it
-                            sharedPrefs.edit().putBoolean("is_pro_user", it).commit()
+                            showTarsHeader = it
+                            sharedPrefs.edit().putBoolean("show_tars_header", it).commit()
                         },
                         showClock = showClock,
                         onShowClockChange = {
@@ -532,8 +508,7 @@ fun LauncherMain(proModeManager: ProModeManager, onboardingManager: OnboardingMa
                         onAppDrawerIconSizeChange = {
                             appDrawerIconSize = it
                             sharedPrefs.edit().putInt("app_drawer_icon_size", it).commit()
-                        },
-                        proModeManager = proModeManager
+                        }
                     )
                 }
             }

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.tarslauncher.app.MainActivity
-import com.tarslauncher.app.ProModeManager
 import com.tarslauncher.app.data.model.IconPackInfo
 import com.tarslauncher.app.utils.isDefaultLauncher
 
@@ -59,9 +58,8 @@ enum class SettingType {
     SELECTION,
     INFO,
     LAUNCHER_STATUS,
-    SLIDER,
-    PRO_STATUS,
-    PRO_PURCHASE
+
+    SLIDER
 }
 
 @Composable
@@ -84,13 +82,11 @@ fun SettingsScreen(
     onDoubleTapLockEnabledChange: (Boolean) -> Unit,
     showTarsHeader: Boolean,
     onShowTarsHeaderChange: (Boolean) -> Unit,
-    isProUser: Boolean,
-    onProStatusChange: (Boolean) -> Unit,
+
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     appDrawerIconSize: Int,
-    onAppDrawerIconSizeChange: (Int) -> Unit,
-    proModeManager: ProModeManager
+    onAppDrawerIconSizeChange: (Int) -> Unit
 ) {
     val context = LocalContext.current
     
@@ -145,7 +141,7 @@ fun SettingsScreen(
                 ))
                 add(SettingsItem.Setting(
                     title = "TARS Header",
-                    description = if (!isProUser) "Show TARS text on home screen (Pro feature - to hide)" else "Show TARS text on home screen",
+                    description = "Show TARS text on home screen",
                     type = SettingType.TOGGLE,
                     currentValue = showTarsHeader,
                     onValueChange = { onShowTarsHeaderChange(it as Boolean) }
@@ -296,24 +292,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         // Pro Upgrade Box (only show if not pro user)
-        if (!isProUser) {
-            ProUpgradeBox(
-                onUpgradeClick = {
-                    val activity = context as MainActivity
-                    android.widget.Toast.makeText(context, "Pro satın alma başlıyor...", android.widget.Toast.LENGTH_SHORT).show()
-                    proModeManager.signInWithGoogle(activity) { success, email ->
-                        if (success) {
-                            android.widget.Toast.makeText(context, "Google ile giriş başarılı: $email", android.widget.Toast.LENGTH_SHORT).show()
-                            proModeManager.purchaseProVersion(activity)
-                        } else {
-                            android.widget.Toast.makeText(context, "Google giriş hatası: $email", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+
         
         // Tree-based settings
         settingsTree.forEach { category ->
@@ -484,46 +463,26 @@ fun SettingsScreen(
                         items(grid5xOptions) { option ->
                             Button(
                                 onClick = {
-                                    if (isProUser) {
-                                        onGridSizeChange(option)
-                                        showGridSizeDialog = false
-                                    } else {
-                                        // Pro özellik gerekli - kullanıcıyı bilgilendir
-                                        Toast.makeText(context, "5x klasör seçenekleri için Pro sürüm gereklidir", Toast.LENGTH_LONG).show()
-                                    }
+                                    onGridSizeChange(option)
+                                    showGridSizeDialog = false
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (gridSize == option) 
                                         Color.White.copy(alpha = 0.2f) 
-                                    else if (!isProUser)
-                                        Color.Gray.copy(alpha = 0.3f)
                                     else 
                                         Color.Black,
-                                    contentColor = if (!isProUser) Color.Gray else Color.White
+                                    contentColor = Color.White
                                 ),
-                                border = BorderStroke(1.dp, if (!isProUser) Color.Gray.copy(alpha = 0.5f) else Color.Gray),
+                                border = BorderStroke(1.dp, Color.Gray),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(40.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = option,
-                                        color = if (!isProUser) Color.Gray else Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    if (!isProUser) {
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "PRO",
-                                            color = Color.Yellow,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
+                                Text(
+                                    text = option,
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
                             }
                         }
                     }
@@ -542,7 +501,7 @@ fun SettingsScreen(
                 }
             }
         }
-    }
+        }
     
     if (showIconPackDialog) {
         IconPackSelectionDialog(
@@ -833,82 +792,6 @@ fun SettingsItemView(
                 }
                 SettingType.INFO -> {
                     // Just display info, no interaction
-                }
-                SettingType.PRO_STATUS -> {
-                    val isProActive = setting.currentValue as? Boolean ?: false
-                    
-                    // Pro status indicator with animated colors
-                    val statusColor by animateColorAsState(
-                        targetValue = if (isProActive) Color.Green else Color.Gray,
-                        animationSpec = tween(durationMillis = 300),
-                        label = "proStatusColor"
-                    )
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Status indicator circle
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(
-                                    color = statusColor,
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                )
-                        )
-                        
-                        Text(
-                            text = if (isProActive) "AKTIF" else "PASIF",
-                            color = statusColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                SettingType.PRO_PURCHASE -> {
-                    Button(
-                        onClick = { setting.onClick?.invoke() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4285F4), // Google Blue
-                            contentColor = Color.White
-                        ),
-                        border = BorderStroke(1.dp, Color(0xFF4285F4)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Google icon placeholder
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .background(
-                                        Color.White,
-                                        shape = androidx.compose.foundation.shape.CircleShape
-                                    )
-                            ) {
-                                Text(
-                                    text = "G",
-                                    color = Color(0xFF4285F4),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
-                            }
-                            
-                            Text(
-                                text = "GOOGLE İLE GİRİŞ YAP & SATIN AL",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -1250,59 +1133,4 @@ fun PrivacyPolicyPermissionItem(
     }
 }
 
-@Composable
-fun ProUpgradeBox(
-    onUpgradeClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onUpgradeClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Black
-        ),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            2.dp, 
-            Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFFFFD700), // Gold
-                    Color(0xFF8B4513)  // Brown
-                )
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Become Pro",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Text(
-                    text = "- Remove TARS header",
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
-                
-                Text(
-                    text = "- Extra folder",
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
-            }
-        }
-    }
-}
+
