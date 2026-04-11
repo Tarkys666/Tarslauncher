@@ -2,7 +2,9 @@ package com.tarslauncher.app.ui.screens
 
 import android.annotation.SuppressLint
 import android.webkit.*
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -10,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,7 +37,19 @@ fun LocationScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    var isHudVisible by remember { mutableStateOf(true) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { _, dragAmount ->
+                    if (dragAmount < -20) isHudVisible = false
+                    if (dragAmount > 20) isHudVisible = true
+                }
+            }
+    ) {
         // Fullscreen WebView Map
         TarsLeafletMap(
             lat = locationState.latitude,
@@ -43,41 +58,60 @@ fun LocationScreen(
         )
 
         // OS Technical Data Overlay
-        Column(
+        AnimatedVisibility(
+            visible = isHudVisible,
+            enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                .padding(8.dp)
         ) {
-            Text("TARS_TRACKING_MODE: ACTIVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            val cell = locationState.cellData
-            TechnicalRow("MCC", cell?.mcc ?: "---")
-            TechnicalRow("MNC", cell?.mnc ?: "---")
-            TechnicalRow("LAC", cell?.lac?.toString() ?: "---")
-            TechnicalRow("CID", cell?.cid?.toString() ?: "---")
-            TechnicalRow("CELLS", cell?.totalVisible?.toString() ?: "0")
-            TechnicalRow("WIFI", locationState.wifiCount.toString())
-            TechnicalRow("SIG", "${cell?.signalStrength ?: "0"} DBM")
-            TechnicalRow("TYPE", cell?.type ?: "SCANNING")
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("POS_DATA:", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            TechnicalRow("LAT", String.format("%.6f", locationState.latitude))
-            TechnicalRow("LNG", String.format("%.6f", locationState.longitude))
-            TechnicalRow("ACC", "${locationState.accuracy}M")
+            Column(
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                    .padding(8.dp)
+            ) {
+                val cell = locationState.cellData
+                val status = if (cell == null && locationState.wifiCount == 0) "PERMISSION_REQ" else "ACTIVE"
+                Text("TARS_TRACKING_MODE: $status", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                TechnicalRow("MCC", cell?.mcc ?: "---")
+                TechnicalRow("MNC", cell?.mnc ?: "---")
+                TechnicalRow("LAC", cell?.lac?.toString() ?: "---")
+                TechnicalRow("CID", cell?.cid?.toString() ?: "---")
+                TechnicalRow("CELLS", cell?.totalVisible?.toString() ?: "0")
+                TechnicalRow("WIFI", locationState.wifiCount.toString())
+                TechnicalRow("SIG", if (cell != null) "${cell.signalStrength ?: "0"} DBM" else "---")
+                TechnicalRow("TYPE", cell?.type ?: "SCANNING")
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("POS_DATA:", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                TechnicalRow("LAT", String.format("%.6f", locationState.latitude))
+                TechnicalRow("LNG", String.format("%.6f", locationState.longitude))
+                TechnicalRow("ACC", "${locationState.accuracy}M")
+            }
         }
 
-        // Back Button Bottom Right
+        // Hidden indicator Handle
+        if (!isHudVisible) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(4.dp)
+                    .height(40.dp)
+                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
+            )
+        }
+
+        // Back Button Bottom Right (Fixed Padding)
         Button(
             onClick = onBackClick,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(16.dp),
+                .padding(bottom = 24.dp, end = 24.dp), // Extra padding for safety
             colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.7f)),
             shape = RoundedCornerShape(4.dp)
         ) {

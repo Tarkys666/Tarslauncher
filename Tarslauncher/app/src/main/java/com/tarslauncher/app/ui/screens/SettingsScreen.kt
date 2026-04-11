@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.tarslauncher.app.MainActivity
+import com.tarslauncher.app.data.model.AppInfo
 import com.tarslauncher.app.data.model.IconPackInfo
 import com.tarslauncher.app.utils.isDefaultLauncher
 
@@ -87,7 +88,18 @@ fun SettingsScreen(
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     appDrawerIconSize: Int,
-    onAppDrawerIconSizeChange: (Int) -> Unit
+    onAppDrawerIconSizeChange: (Int) -> Unit,
+    internetCheckEnabled: Boolean,
+    onInternetCheckEnabledChange: (Boolean) -> Unit,
+    onMuteAll: () -> Unit,
+    onRestoreSounds: () -> Unit,
+    adaptiveVolumeEnabled: Boolean,
+    onAdaptiveVolumeEnabledChange: (Boolean) -> Unit,
+    adaptiveVolumeSensitivity: Float,
+    onAdaptiveVolumeSensitivityChange: (Float) -> Unit,
+    adaptiveVolumeApps: Set<String>,
+    onAdaptiveAppChecked: (String, Boolean) -> Unit,
+    installedApps: List<AppInfo>
 ) {
     val context = LocalContext.current
     
@@ -130,6 +142,7 @@ fun SettingsScreen(
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showAppSelectionDialog by remember { mutableStateOf(false) }
     
     val grid2xOptions = listOf("2x1", "2x2", "2x3", "2x4")
     val grid3xOptions = listOf("3x1", "3x2", "3x3")
@@ -230,6 +243,19 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
+            title = "NETWORK",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Internet Watchdog",
+                    description = "Periodically check real internet access",
+                    type = SettingType.TOGGLE,
+                    currentValue = internetCheckEnabled,
+                    onValueChange = { onInternetCheckEnabledChange(it as Boolean) }
+                )
+            )
+        ),
+        SettingsItem.Category(
             title = "TRACKING & LOCATION",
             icon = "",
             children = listOf(
@@ -238,6 +264,50 @@ fun SettingsScreen(
                     description = "Open cellular base-station tracking",
                     type = SettingType.BUTTON,
                     onClick = onLocationTrackingClick
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "SYSTEM AUDIO",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Mute All Systems",
+                    description = "Silence ringer, music, and notifications",
+                    type = SettingType.BUTTON,
+                    onClick = onMuteAll
+                ),
+                SettingsItem.Setting(
+                    title = "Restore All Sounds",
+                    description = "Restore sounds to previous levels",
+                    type = SettingType.BUTTON,
+                    onClick = onRestoreSounds
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "ADAPTIVE VOLUME",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Smart Noise Shield",
+                    description = "Adjust volume based on ambient noise",
+                    type = SettingType.TOGGLE,
+                    currentValue = adaptiveVolumeEnabled,
+                    onValueChange = { onAdaptiveVolumeEnabledChange(it as Boolean) }
+                ),
+                SettingsItem.Setting(
+                    title = "Sensitivity",
+                    description = "Aggressiveness: ${(adaptiveVolumeSensitivity * 100).toInt()}%",
+                    type = SettingType.SLIDER,
+                    currentValue = (adaptiveVolumeSensitivity * 100).toInt(),
+                    onValueChange = { onAdaptiveVolumeSensitivityChange((it as Int) / 100f) }
+                ),
+                SettingsItem.Setting(
+                    title = "Selected Apps",
+                    description = "${adaptiveVolumeApps.size} apps monitored",
+                    type = SettingType.BUTTON,
+                    onClick = { showAppSelectionDialog = true }
                 )
             )
         ),
@@ -542,6 +612,14 @@ fun SettingsScreen(
         )
     }
 
+    if (showAppSelectionDialog) {
+        AppSelectionDialog(
+            installedApps = installedApps,
+            selectedApps = adaptiveVolumeApps,
+            onDismiss = { showAppSelectionDialog = false },
+            onAppChecked = onAdaptiveAppChecked
+        )
+    }
 }
 
 @Composable

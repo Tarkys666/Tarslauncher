@@ -67,7 +67,9 @@ fun HomeScreen(
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
     showClock: Boolean,
-    doubleTapLockEnabled: Boolean
+    doubleTapLockEnabled: Boolean,
+    isInternetAvailable: Boolean?,
+    internetCheckEnabled: Boolean
 ) {
     // Stable state variables to prevent recomposition issues
     var showFolderSelectDialog by remember { mutableStateOf(false) }
@@ -265,6 +267,22 @@ fun HomeScreen(
                         letterSpacing = 2.sp
                     )
                 }
+                
+                // Internet Watchdog Indicator (Minimal Dot)
+                if (internetCheckEnabled) {
+                    val dotColor = when (isInternetAvailable) {
+                        true -> Color(0xFF4CAF50) // Green
+                        false -> Color(0xFFF44336) // Red
+                        null -> Color.Gray
+                    }
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .size(4.dp)
+                            .background(dotColor, CircleShape)
+                    )
+                }
+
                 if (showTarsHeader) {
                     Text(
                         text = "T A R S",

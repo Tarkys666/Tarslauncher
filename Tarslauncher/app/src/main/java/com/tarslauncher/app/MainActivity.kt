@@ -28,6 +28,7 @@ import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
 import com.tarslauncher.app.ui.screens.LocationScreen
 import com.tarslauncher.app.repository.LocationRepository
+import com.tarslauncher.app.repository.ConnectivityRepository
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
 import com.tarslauncher.app.utils.*
 
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     
     private lateinit var repository: AppRepository
     private lateinit var locationRepository: LocationRepository
+    private lateinit var connectivityRepository: ConnectivityRepository
     private lateinit var viewModel: LauncherViewModel
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,11 +52,12 @@ class MainActivity : ComponentActivity() {
         
         repository = AppRepository(this)
         locationRepository = LocationRepository(this)
+        connectivityRepository = ConnectivityRepository(this)
         val onboardingManager = OnboardingManager(this)
         
         viewModel = ViewModelProvider(
             this, 
-            LauncherViewModelFactory(repository, locationRepository)
+            LauncherViewModelFactory(repository, locationRepository, connectivityRepository)
         )[LauncherViewModel::class.java]
         
         // Initial onboarding check
@@ -78,10 +81,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkLocationPermissions() {
-        val permissions = arrayOf(
+        val permissions = mutableListOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.READ_PHONE_STATE
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.RECORD_AUDIO,
+            android.Manifest.permission.ACCESS_WIFI_STATE,
+            android.Manifest.permission.CHANGE_WIFI_STATE
         )
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
         
         val missingPermissions = permissions.filter {
             androidx.core.content.ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -127,6 +138,20 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
 
     LaunchedEffect(iconPackLoader) {
         iconPackLoader?.load()
+    }
+
+    // Adaptive Volume Service Lifecycle
+    LaunchedEffect(uiState.adaptiveVolumeEnabled) {
+        val serviceIntent = Intent(context, com.tarslauncher.app.service.AdaptiveVolumeService::class.java)
+        if (uiState.adaptiveVolumeEnabled) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } else {
+            context.stopService(serviceIntent)
+        }
     }
     
     val getButtonColor = remember(uiState.buttonColorMode) {
@@ -174,7 +199,9 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         showTarsHeader = uiState.showTarsHeader,
                         appDrawerIconSize = uiState.appDrawerIconSize,
                         showClock = uiState.showClock,
-                        doubleTapLockEnabled = uiState.doubleTapLockEnabled
+                        doubleTapLockEnabled = uiState.doubleTapLockEnabled,
+                        isInternetAvailable = uiState.isInternetAvailable,
+                        internetCheckEnabled = uiState.internetCheckEnabled
                     )
                 } else if (uiState.currentScreen == "settings") {
                     SettingsScreen(
@@ -220,7 +247,30 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         appDrawerIconSize = uiState.appDrawerIconSize,
                         onAppDrawerIconSizeChange = {
                             viewModel.updateSetting("app_drawer_icon_size", it)
-                        }
+                        },
+                        internetCheckEnabled = uiState.internetCheckEnabled,
+                        onInternetCheckEnabledChange = {
+                            viewModel.updateSetting("internet_check_enabled", it)
+                        },
+                        onMuteAll = {
+                            viewModel.muteAllSounds(context)
+                        },
+                        onRestoreSounds = {
+                            viewModel.restoreAllSounds(context)
+                        },
+                        adaptiveVolumeEnabled = uiState.adaptiveVolumeEnabled,
+                        onAdaptiveVolumeEnabledChange = {
+                            viewModel.updateSetting("adaptive_enabled", it)
+                        },
+                        adaptiveVolumeSensitivity = uiState.adaptiveVolumeSensitivity,
+                        onAdaptiveVolumeSensitivityChange = {
+                            viewModel.updateSetting("adaptive_sensitivity", it)
+                        },
+                        adaptiveVolumeApps = uiState.adaptiveVolumeApps,
+                        onAdaptiveAppChecked = { pkg, checked ->
+                            viewModel.updateAdaptiveApps(pkg, checked)
+                        },
+                        installedApps = uiState.installedApps
                     )
                 } else if (uiState.currentScreen == "location") {
                     LocationScreen(
