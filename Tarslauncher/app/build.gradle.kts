@@ -48,7 +48,7 @@ android {
     defaultConfig {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
-        targetSdkVersion(36)
+        targetSdk = 36
         versionCode = 9
         versionName = "1.0"
 
@@ -93,10 +93,6 @@ android {
             versionNameSuffix = "-debug"
             // Use release signing for debug to avoid package conflicts
             signingConfig = signingConfigs.getByName("release")
-            
-            // Force single APK generation
-            splits.abi.isEnable = false
-            splits.density.isEnable = false
         }
     }
     compileOptions {

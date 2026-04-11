@@ -65,6 +65,7 @@ enum class SettingType {
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onLocationTrackingClick: () -> Unit,
     showAppDrawer: Boolean,
     batteryFriendly: Boolean,
     onShowAppDrawerChange: (Boolean) -> Unit,
@@ -225,6 +226,18 @@ fun SettingsScreen(
                             context.startActivity(intent)
                         }
                     }
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "TRACKING & LOCATION",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Tracking System",
+                    description = "Open cellular base-station tracking",
+                    type = SettingType.BUTTON,
+                    onClick = onLocationTrackingClick
                 )
             )
         ),
