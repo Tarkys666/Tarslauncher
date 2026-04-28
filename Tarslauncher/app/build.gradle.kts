@@ -12,7 +12,6 @@ fun generateBuildHash(): String {
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
-    id("com.google.gms.google-services")
 }
 
 
@@ -91,8 +90,8 @@ android {
             isMinifyEnabled = false
             isDebuggable = true
             versionNameSuffix = "-debug"
-            // Use release signing for debug to avoid package conflicts
-            signingConfig = signingConfigs.getByName("release")
+            // Use default debug signing instead of release signing to fix build
+            // signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -142,16 +141,10 @@ dependencies {
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.coil.compose)
     implementation(libs.gson)
-    implementation(libs.google.play.billing)
-    implementation(libs.google.signin)
     
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     
-    // Firebase Firestore
-    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-auth-ktx")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

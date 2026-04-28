@@ -26,17 +26,12 @@ import com.tarslauncher.app.onboarding.OnboardingManager
 import com.tarslauncher.app.onboarding.OnboardingScreen
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
-import com.tarslauncher.app.ui.screens.LocationScreen
-import com.tarslauncher.app.repository.LocationRepository
-import com.tarslauncher.app.repository.ConnectivityRepository
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
 import com.tarslauncher.app.utils.*
 
 class MainActivity : ComponentActivity() {
     
     private lateinit var repository: AppRepository
-    private lateinit var locationRepository: LocationRepository
-    private lateinit var connectivityRepository: ConnectivityRepository
     private lateinit var viewModel: LauncherViewModel
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,22 +46,17 @@ class MainActivity : ComponentActivity() {
         )
         
         repository = AppRepository(this)
-        locationRepository = LocationRepository(this)
-        connectivityRepository = ConnectivityRepository(this)
         val onboardingManager = OnboardingManager(this)
         
         viewModel = ViewModelProvider(
             this, 
-            LauncherViewModelFactory(repository, locationRepository, connectivityRepository)
+            LauncherViewModelFactory(repository)
         )[LauncherViewModel::class.java]
         
         // Initial onboarding check
         if (!onboardingManager.isOnboardingComplete()) {
             viewModel.setShowOnboarding(true)
         }
-        
-        // Permission handling for location
-        checkLocationPermissions()
         
         setContent {
             TarslauncherTheme {
@@ -77,29 +67,6 @@ class MainActivity : ComponentActivity() {
                     LauncherMain(viewModel = viewModel, onboardingManager = onboardingManager)
                 }
             }
-        }
-    }
-
-    private fun checkLocationPermissions() {
-        val permissions = mutableListOf(
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.READ_PHONE_STATE,
-            android.Manifest.permission.RECORD_AUDIO,
-            android.Manifest.permission.ACCESS_WIFI_STATE,
-            android.Manifest.permission.CHANGE_WIFI_STATE
-        )
-        
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
-        }
-        
-        val missingPermissions = permissions.filter {
-            androidx.core.content.ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-        
-        if (missingPermissions.isNotEmpty()) {
-            androidx.core.app.ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), 1001)
         }
     }
 }
@@ -121,7 +88,11 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
             addDataScheme("package")
         }
         
-        context.registerReceiver(receiver, filter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
         
         onDispose {
             try {
@@ -137,20 +108,8 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
     }
 
     LaunchedEffect(iconPackLoader) {
-        iconPackLoader?.load()
-    }
-
-    // Adaptive Volume Service Lifecycle
-    LaunchedEffect(uiState.adaptiveVolumeEnabled) {
-        val serviceIntent = Intent(context, com.tarslauncher.app.service.AdaptiveVolumeService::class.java)
-        if (uiState.adaptiveVolumeEnabled) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
-        } else {
-            context.stopService(serviceIntent)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            iconPackLoader?.load()
         }
     }
     
@@ -161,7 +120,7 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         }
     }
     
-    val scaleFactor = if (uiState.batteryFriendly) 0.3f else 0.5f
+    val scaleFactor = 0.5f
 
     CompositionLocalProvider(LocalMotionDurationScale provides StaticMotionDurationScale(scaleFactor)) {
         Box(
@@ -195,25 +154,16 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         gridSize = uiState.gridSize,
                         iconPackLoader = iconPackLoader,
                         buttonColor = getButtonColor,
-                        folderLocked = uiState.folderLocked,
                         showTarsHeader = uiState.showTarsHeader,
                         appDrawerIconSize = uiState.appDrawerIconSize,
-                        showClock = uiState.showClock,
-                        doubleTapLockEnabled = uiState.doubleTapLockEnabled,
-                        isInternetAvailable = uiState.isInternetAvailable,
-                        internetCheckEnabled = uiState.internetCheckEnabled
+                        showClock = uiState.showClock
                     )
                 } else if (uiState.currentScreen == "settings") {
                     SettingsScreen(
                         onBackClick = { viewModel.setScreen("home") },
-                        onLocationTrackingClick = { viewModel.setScreen("location") },
                         showAppDrawer = uiState.showAppDrawer,
-                        batteryFriendly = uiState.batteryFriendly,
                         onShowAppDrawerChange = {
                             viewModel.updateSetting("show_app_drawer", it)
-                        },
-                        onBatteryFriendlyChange = {
-                            viewModel.updateSetting("battery_friendly", it)
                         },
                         gridSize = uiState.gridSize,
                         onGridSizeChange = {
@@ -228,14 +178,6 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         onButtonColorModeChange = {
                             viewModel.updateSetting("button_color_mode", it)
                         },
-                        folderLocked = uiState.folderLocked,
-                        onFolderLockedChange = {
-                            viewModel.updateSetting("folder_locked", it)
-                        },
-                        doubleTapLockEnabled = uiState.doubleTapLockEnabled,
-                        onDoubleTapLockEnabledChange = {
-                            viewModel.updateSetting("double_tap_lock", it)
-                        },
                         showTarsHeader = uiState.showTarsHeader,
                         onShowTarsHeaderChange = {
                             viewModel.updateSetting("show_tars_header", it)
@@ -247,37 +189,7 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         appDrawerIconSize = uiState.appDrawerIconSize,
                         onAppDrawerIconSizeChange = {
                             viewModel.updateSetting("app_drawer_icon_size", it)
-                        },
-                        internetCheckEnabled = uiState.internetCheckEnabled,
-                        onInternetCheckEnabledChange = {
-                            viewModel.updateSetting("internet_check_enabled", it)
-                        },
-                        onMuteAll = {
-                            viewModel.muteAllSounds(context)
-                        },
-                        onRestoreSounds = {
-                            viewModel.restoreAllSounds(context)
-                        },
-                        adaptiveVolumeEnabled = uiState.adaptiveVolumeEnabled,
-                        onAdaptiveVolumeEnabledChange = {
-                            viewModel.updateSetting("adaptive_enabled", it)
-                        },
-                        adaptiveVolumeSensitivity = uiState.adaptiveVolumeSensitivity,
-                        onAdaptiveVolumeSensitivityChange = {
-                            viewModel.updateSetting("adaptive_sensitivity", it)
-                        },
-                        adaptiveVolumeApps = uiState.adaptiveVolumeApps,
-                        onAdaptiveAppChecked = { pkg, checked ->
-                            viewModel.updateAdaptiveApps(pkg, checked)
-                        },
-                        installedApps = uiState.installedApps
-                    )
-                } else if (uiState.currentScreen == "location") {
-                    LocationScreen(
-                        locationState = uiState.tarsLocation,
-                        onBackClick = { viewModel.setScreen("settings") },
-                        onStartTracking = { viewModel.startTracking() },
-                        onStopTracking = { viewModel.stopTracking() }
+                        }
                     )
                 }
             }

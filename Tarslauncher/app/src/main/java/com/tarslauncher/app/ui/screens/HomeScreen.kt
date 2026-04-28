@@ -46,7 +46,6 @@ import com.tarslauncher.app.IconPackLoader
 import com.tarslauncher.app.data.model.AppInfo
 import com.tarslauncher.app.data.model.FolderInfo
 import com.tarslauncher.app.utils.drawableToBitmap
-import com.tarslauncher.app.utils.turnOffDevice
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -63,13 +62,9 @@ fun HomeScreen(
     gridSize: String,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color,
-    folderLocked: Boolean,
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
-    showClock: Boolean,
-    doubleTapLockEnabled: Boolean,
-    isInternetAvailable: Boolean?,
-    internetCheckEnabled: Boolean
+    showClock: Boolean
 ) {
     // Stable state variables to prevent recomposition issues
     var showFolderSelectDialog by remember { mutableStateOf(false) }
@@ -80,15 +75,37 @@ fun HomeScreen(
     // Stable time state with key to prevent unnecessary recompositions
     var currentTime by remember { mutableStateOf("") }
     
-    // Update time every second with stable key
-    LaunchedEffect("time_updater") {
-        while (true) {
-            currentTime = try {
-                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-            } catch (e: Exception) {
-                "00:00"
+    // Update time only when minute changes using ACTION_TIME_TICK
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                currentTime = try {
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                } catch (e: Exception) {
+                    "00:00"
+                }
             }
-            kotlinx.coroutines.delay(1000) // Update every second
+        }
+        
+        currentTime = try {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        } catch (e: Exception) {
+            "00:00"
+        }
+        
+        val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIME_TICK)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                // Ignore
+            }
         }
     }
     
@@ -144,20 +161,10 @@ fun HomeScreen(
     // Responsive padding
     val mainPadding = (screenWidth * 0.04f).coerceAtLeast(12.dp).coerceAtMost(20.dp)
 
-    // Ana Box container - tüm overlay'ler için
-    val baseModifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)
-    val gestureModifier = if (doubleTapLockEnabled) {
-        baseModifier.pointerInput("double_tap_detector") {
-            detectTapGestures(onDoubleTap = {
-                turnOffDevice(context)
-            })
-        }
-    } else baseModifier
-
     Box(
-        modifier = gestureModifier
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
     ) {
         // Main content column - sadece butonlar ve command bar için
         Column(
@@ -183,24 +190,27 @@ fun HomeScreen(
                     .navigationBarsPadding(),
                 horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
             ) {
-                Button(
-                    onClick = onSettingsClick,
+                Box(
                     modifier = Modifier
                         .padding(bottom = (screenHeight * 0.01f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
-                        .height(buttonHeight), // Responsive height
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = buttonColor
-                    ),
-                    contentPadding = PaddingValues(
-                        horizontal = (screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp),
-                        vertical = (screenHeight * 0.005f).coerceAtLeast(3.dp).coerceAtMost(6.dp)
-                    ),
-                    interactionSource = remember { MutableInteractionSource() } // Remove ripple animation
+                        .height(buttonHeight)
+                        .background(buttonColor, RoundedCornerShape(4.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            onSettingsClick()
+                        }
+                        .padding(
+                            horizontal = (screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp),
+                            vertical = (screenHeight * 0.005f).coerceAtLeast(3.dp).coerceAtMost(6.dp)
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "SETTINGS",
                         color = Color.White,
-                        fontSize = buttonFontSize, // Responsive font size
+                        fontSize = buttonFontSize,
                         fontWeight = FontWeight.ExtraLight,
                         letterSpacing = 0.5.sp
                     )
@@ -228,12 +238,12 @@ fun HomeScreen(
                             .padding(horizontal = mainPadding), // Responsive padding
                         horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp))
                     ) {
-                        items(installedApps) { app ->
+                        items(installedApps, key = { it.packageName }) { app ->
                             AppIconWithoutName(
                                 app = app,
                                 onAppClick = onAppClick,
                                 onAppLongClick = { longClickedApp ->
-                                    if (!folderLocked && longClickedApp.packageName.isNotBlank()) {
+                                    if (longClickedApp.packageName.isNotBlank()) {
                                         selectedApp = longClickedApp
                                         showFolderSelectDialog = true
                                     }
@@ -267,21 +277,6 @@ fun HomeScreen(
                         letterSpacing = 2.sp
                     )
                 }
-                
-                // Internet Watchdog Indicator (Minimal Dot)
-                if (internetCheckEnabled) {
-                    val dotColor = when (isInternetAvailable) {
-                        true -> Color(0xFF4CAF50) // Green
-                        false -> Color(0xFFF44336) // Red
-                        null -> Color.Gray
-                    }
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .size(4.dp)
-                            .background(dotColor, CircleShape)
-                    )
-                }
 
                 if (showTarsHeader) {
                     Text(
@@ -311,8 +306,7 @@ fun HomeScreen(
                 onAppClick = onAppClick,
                 gridSize = gridSize,
                 iconPackLoader = iconPackLoader,
-                buttonColor = buttonColor,
-                folderLocked = folderLocked
+                buttonColor = buttonColor
             )
         }
     }
@@ -365,8 +359,7 @@ fun FolderGrid(
     onAppClick: (AppInfo) -> Unit,
     gridSize: String,
     iconPackLoader: IconPackLoader?,
-    buttonColor: Color,
-    folderLocked: Boolean
+    buttonColor: Color
 ) {
     // Stable state variables with keys to prevent recomposition issues
     var showFolderAppsDialog by remember("folder_dialog_state") { mutableStateOf(false) }
@@ -426,18 +419,15 @@ fun FolderGrid(
                 selectedFolder = null
             },
             onAppRemove = { app ->
-                if (!folderLocked) {
-                    val updatedFolder = selectedFolder!!.copy(
-                        apps = selectedFolder!!.apps.filter { it.packageName != app.packageName }.toMutableList()
-                    )
-                    val updatedFolders = folders.map {
-                        if (it.id == updatedFolder.id) updatedFolder else it
-                    }
-                    onFoldersUpdate(updatedFolders)
+                val updatedFolder = selectedFolder!!.copy(
+                    apps = selectedFolder!!.apps.filter { it.packageName != app.packageName }.toMutableList()
+                )
+                val updatedFolders = folders.map {
+                    if (it.id == updatedFolder.id) updatedFolder else it
                 }
+                onFoldersUpdate(updatedFolders)
             },
-            iconPackLoader = iconPackLoader,
-            folderLocked = folderLocked
+            iconPackLoader = iconPackLoader
         )
     }
 }
@@ -483,8 +473,7 @@ fun FolderItem(
                             if (appIndex < folder.apps.size) {
                                 val app = folder.apps[appIndex]
                                 val appIcon = remember(app.packageName, iconPackLoader) {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                    val activityName = launchIntent?.component?.className ?: ""
+                                    val activityName = app.activityName
                                     val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
                                     (themedIcon ?: app.icon)?.let {
                                         drawableToBitmap(it).asImageBitmap()
@@ -521,7 +510,7 @@ fun AppDrawer(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(installedApps) { app ->
+            items(installedApps, key = { it.packageName }) { app ->
                 AppIconWithoutName(
                     app = app,
                     onAppClick = onAppClick,
@@ -546,9 +535,7 @@ fun AppIconWithoutName(
     
     // Icon'u composable dışında hazırlıyoruz
     val appIcon = remember(app.packageName, iconPackLoader) {
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-        val activityName = launchIntent?.component?.className ?: ""
-
+        val activityName = app.activityName
         val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
 
         (themedIcon ?: app.icon)?.toBitmap()?.asImageBitmap()
@@ -740,8 +727,7 @@ fun FolderAppsDialog(
     onDismiss: () -> Unit,
     onAppClick: (AppInfo) -> Unit,
     onAppRemove: (AppInfo) -> Unit,
-    iconPackLoader: IconPackLoader?,
-    folderLocked: Boolean
+    iconPackLoader: IconPackLoader?
 ) {
     val context = LocalContext.current
     // Long-press removal confirmation state
@@ -764,15 +750,13 @@ fun FolderAppsDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(folder.apps) { app ->
+                items(folder.apps, key = { it.packageName }) { app ->
                     FolderAppItem(
                         app = app,
                         onClick = { onAppClick(app) },
                         onLongClick = {
-                            if (!folderLocked) {
-                                appToManage = app
-                                showManageDialog = true
-                            }
+                            appToManage = app
+                            showManageDialog = true
                         },
                         iconPackLoader = iconPackLoader
                     )
@@ -910,8 +894,7 @@ fun FolderAppItem(
     val context = LocalContext.current
     val appIcon = remember(app.packageName, iconPackLoader) {
         try {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-            val activityName = launchIntent?.component?.className ?: ""
+            val activityName = app.activityName
             val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
             (themedIcon ?: app.icon)?.let {
                 drawableToBitmap(it).asImageBitmap()

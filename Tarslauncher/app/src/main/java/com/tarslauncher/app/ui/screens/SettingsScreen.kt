@@ -66,11 +66,8 @@ enum class SettingType {
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    onLocationTrackingClick: () -> Unit,
     showAppDrawer: Boolean,
-    batteryFriendly: Boolean,
     onShowAppDrawerChange: (Boolean) -> Unit,
-    onBatteryFriendlyChange: (Boolean) -> Unit,
     gridSize: String,
     onGridSizeChange: (String) -> Unit,
     installedIconPacks: List<IconPackInfo>,
@@ -78,28 +75,12 @@ fun SettingsScreen(
     onIconPackSelected: (String?) -> Unit,
     buttonColorMode: String,
     onButtonColorModeChange: (String) -> Unit,
-    folderLocked: Boolean,
-    onFolderLockedChange: (Boolean) -> Unit,
-    doubleTapLockEnabled: Boolean,
-    onDoubleTapLockEnabledChange: (Boolean) -> Unit,
     showTarsHeader: Boolean,
     onShowTarsHeaderChange: (Boolean) -> Unit,
-
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     appDrawerIconSize: Int,
-    onAppDrawerIconSizeChange: (Int) -> Unit,
-    internetCheckEnabled: Boolean,
-    onInternetCheckEnabledChange: (Boolean) -> Unit,
-    onMuteAll: () -> Unit,
-    onRestoreSounds: () -> Unit,
-    adaptiveVolumeEnabled: Boolean,
-    onAdaptiveVolumeEnabledChange: (Boolean) -> Unit,
-    adaptiveVolumeSensitivity: Float,
-    onAdaptiveVolumeSensitivityChange: (Float) -> Unit,
-    adaptiveVolumeApps: Set<String>,
-    onAdaptiveAppChecked: (String, Boolean) -> Unit,
-    installedApps: List<AppInfo>
+    onAppDrawerIconSizeChange: (Int) -> Unit
 ) {
     val context = LocalContext.current
     
@@ -142,7 +123,6 @@ fun SettingsScreen(
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
-    var showAppSelectionDialog by remember { mutableStateOf(false) }
     
     val grid2xOptions = listOf("2x1", "2x2", "2x3", "2x4")
     val grid3xOptions = listOf("3x1", "3x2", "3x3")
@@ -183,7 +163,6 @@ fun SettingsScreen(
                     currentValue = appDrawerIconSize,
                     onValueChange = { onAppDrawerIconSizeChange(it as Int) }
                 ))
-                // (Removed) Dark Mode button
                 add(SettingsItem.Setting(
                     title = "Grid Size",
                     description = "Current: $gridSize",
@@ -211,23 +190,9 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "SECURITY & FOLDERS",
+            title = "SECURITY",
             icon = "",
             children = listOf(
-                SettingsItem.Setting(
-                    title = "Folder Lock",
-                    description = "Prevent adding/removing apps from folders",
-                    type = SettingType.TOGGLE,
-                    currentValue = folderLocked,
-                    onValueChange = { onFolderLockedChange(it as Boolean) }
-                ),
-                SettingsItem.Setting(
-                    title = "Double-tap to Lock",
-                    description = "Turn screen off with double-tap on home",
-                    type = SettingType.TOGGLE,
-                    currentValue = doubleTapLockEnabled,
-                    onValueChange = { onDoubleTapLockEnabledChange(it as Boolean) }
-                ),
                 SettingsItem.Setting(
                     title = "Default Launcher",
                     description = if (isDefaultLauncherSet) "TARS is set as default" else "Set TARS as default home screen",
@@ -239,88 +204,6 @@ fun SettingsScreen(
                             context.startActivity(intent)
                         }
                     }
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "NETWORK",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Internet Watchdog",
-                    description = "Periodically check real internet access",
-                    type = SettingType.TOGGLE,
-                    currentValue = internetCheckEnabled,
-                    onValueChange = { onInternetCheckEnabledChange(it as Boolean) }
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "TRACKING & LOCATION",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Tracking System",
-                    description = "Open cellular base-station tracking",
-                    type = SettingType.BUTTON,
-                    onClick = onLocationTrackingClick
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "SYSTEM AUDIO",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Mute All Systems",
-                    description = "Silence ringer, music, and notifications",
-                    type = SettingType.BUTTON,
-                    onClick = onMuteAll
-                ),
-                SettingsItem.Setting(
-                    title = "Restore All Sounds",
-                    description = "Restore sounds to previous levels",
-                    type = SettingType.BUTTON,
-                    onClick = onRestoreSounds
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "ADAPTIVE VOLUME",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Smart Noise Shield",
-                    description = "Adjust volume based on ambient noise",
-                    type = SettingType.TOGGLE,
-                    currentValue = adaptiveVolumeEnabled,
-                    onValueChange = { onAdaptiveVolumeEnabledChange(it as Boolean) }
-                ),
-                SettingsItem.Setting(
-                    title = "Sensitivity",
-                    description = "Aggressiveness: ${(adaptiveVolumeSensitivity * 100).toInt()}%",
-                    type = SettingType.SLIDER,
-                    currentValue = (adaptiveVolumeSensitivity * 100).toInt(),
-                    onValueChange = { onAdaptiveVolumeSensitivityChange((it as Int) / 100f) }
-                ),
-                SettingsItem.Setting(
-                    title = "Selected Apps",
-                    description = "${adaptiveVolumeApps.size} apps monitored",
-                    type = SettingType.BUTTON,
-                    onClick = { showAppSelectionDialog = true }
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "PERFORMANCE",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Battery Friendly",
-                    description = "Reduce animations and optimize performance",
-                    type = SettingType.TOGGLE,
-                    currentValue = batteryFriendly,
-                    onValueChange = { onBatteryFriendlyChange(it as Boolean) }
                 )
             )
         ),
@@ -612,14 +495,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showAppSelectionDialog) {
-        AppSelectionDialog(
-            installedApps = installedApps,
-            selectedApps = adaptiveVolumeApps,
-            onDismiss = { showAppSelectionDialog = false },
-            onAppChecked = onAdaptiveAppChecked
-        )
-    }
 }
 
 @Composable

@@ -19,18 +19,6 @@ class AppRepository(private val context: Context) {
         const val KEY_SHOW_TARS_HEADER = "show_tars_header"
         const val KEY_SHOW_CLOCK = "show_clock"
         const val KEY_APP_DRAWER_ICON_SIZE = "app_drawer_icon_size"
-        const val KEY_INTERNET_CHECK_ENABLED = "internet_check_enabled"
-        
-        // Volume Keys
-        const val KEY_RING_VOL = "ring_vol"
-        const val KEY_MUSIC_VOL = "music_vol"
-        const val KEY_NOTIF_VOL = "notif_vol"
-        const val KEY_SYSTEM_VOL = "system_vol"
-        
-        // Adaptive Volume Keys
-        const val KEY_ADAPTIVE_ENABLED = "adaptive_enabled"
-        const val KEY_ADAPTIVE_SENSITIVITY = "adaptive_sensitivity"
-        const val KEY_ADAPTIVE_APPS = "adaptive_apps"
     }
 
     fun getInstalledApps(): List<AppInfo> {
@@ -78,7 +66,7 @@ class AppRepository(private val context: Context) {
                         }
                     }
                     
-                    apps.add(AppInfo(name = appName.take(50).trim(), packageName = packageName, icon = icon))
+                    apps.add(AppInfo(name = appName.take(50).trim(), packageName = packageName, icon = icon, activityName = activityInfo.name))
                 } catch (e: Exception) {
                     Log.w("AppRepository", "Error loading app: $e")
                 }
@@ -182,39 +170,5 @@ class AppRepository(private val context: Context) {
     fun saveIntSetting(key: String, value: Int) = sharedPrefs.edit().putInt(key, value).apply()
     fun saveFloatSetting(key: String, value: Float) = sharedPrefs.edit().putFloat(key, value).apply()
 
-    // Specialized volume helpers
-    fun saveVolumes(ring: Int, music: Int, notif: Int, system: Int) {
-        sharedPrefs.edit()
-            .putInt(KEY_RING_VOL, ring)
-            .putInt(KEY_MUSIC_VOL, music)
-            .putInt(KEY_NOTIF_VOL, notif)
-            .putInt(KEY_SYSTEM_VOL, system)
-            .apply()
-    }
 
-    fun getSavedVolumes(): Map<String, Int> {
-        return mapOf(
-            "ring" to sharedPrefs.getInt(KEY_RING_VOL, -1),
-            "music" to sharedPrefs.getInt(KEY_MUSIC_VOL, -1),
-            "notif" to sharedPrefs.getInt(KEY_NOTIF_VOL, -1),
-            "system" to sharedPrefs.getInt(KEY_SYSTEM_VOL, -1)
-        )
-    }
-
-    // Adaptive Volume
-    fun getAdaptiveApps(): Set<String> {
-        return sharedPrefs.getStringSet(KEY_ADAPTIVE_APPS, emptySet()) ?: emptySet()
-    }
-
-    fun saveAdaptiveApps(apps: Set<String>) {
-        sharedPrefs.edit().putStringSet(KEY_ADAPTIVE_APPS, apps).apply()
-    }
-
-    fun getAdaptiveSensitivity(): Float {
-        return sharedPrefs.getFloat(KEY_ADAPTIVE_SENSITIVITY, 0.5f)
-    }
-
-    fun saveAdaptiveSensitivity(sensitivity: Float) {
-        sharedPrefs.edit().putFloat(KEY_ADAPTIVE_SENSITIVITY, sensitivity).apply()
-    }
 }
