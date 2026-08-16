@@ -3,10 +3,18 @@ import java.security.MessageDigest
 import java.io.FileInputStream
 
 fun generateBuildHash(): String {
-    val timestamp = System.currentTimeMillis().toString()
-    val md = MessageDigest.getInstance("SHA-256")
-    val hash = md.digest(timestamp.toByteArray())
-    return hash.joinToString("") { "%02x".format(it) }.take(16)
+    return try {
+        val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD").start()
+        val sha = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        if (sha.isNotEmpty() && !sha.contains("fatal")) {
+            sha
+        } else {
+            "dev-${System.currentTimeMillis().toString().takeLast(7)}"
+        }
+    } catch (e: Exception) {
+        "dev-${System.currentTimeMillis().toString().takeLast(7)}"
+    }
 }
 
 plugins {
@@ -48,8 +56,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.0"
+        versionCode = 10
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -140,6 +148,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.6.7")
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.gson)
     
     // Security

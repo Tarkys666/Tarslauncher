@@ -22,10 +22,12 @@ import com.tarslauncher.app.repository.AppRepository
 import com.tarslauncher.app.ui.LauncherViewModel
 import com.tarslauncher.app.ui.LauncherViewModelFactory
 import com.tarslauncher.app.data.model.*
+import com.tarslauncher.app.data.updater.UpdateManager
 import com.tarslauncher.app.onboarding.OnboardingManager
 import com.tarslauncher.app.onboarding.OnboardingScreen
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
+import com.tarslauncher.app.ui.screens.UpdateDialog
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
 import com.tarslauncher.app.utils.*
 
@@ -46,11 +48,12 @@ class MainActivity : ComponentActivity() {
         )
         
         repository = AppRepository(this)
+        val updateManager = UpdateManager(this)
         val onboardingManager = OnboardingManager(this)
         
         viewModel = ViewModelProvider(
             this, 
-            LauncherViewModelFactory(repository)
+            LauncherViewModelFactory(repository, updateManager)
         )[LauncherViewModel::class.java]
         
         // Initial onboarding check
@@ -85,6 +88,8 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         val filter = android.content.IntentFilter().apply {
             addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
             addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
+            addAction(android.content.Intent.ACTION_PACKAGE_CHANGED)
             addDataScheme("package")
         }
         
@@ -137,17 +142,13 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         onSettingsClick = { viewModel.setScreen("settings") },
                         onAppClick = { appInfo ->
                             viewModel.incrementAppUsage(appInfo)
-                            if (SecurityHelper.validatePackageName(appInfo.packageName)) {
-                                val safeIntent = runCatching {
-                                    context.packageManager.getLaunchIntentForPackage(appInfo.packageName)
-                                }.getOrNull()
-                                safeIntent?.let { intent ->
-                                    if (!SecurityHelper.safeStartActivity(context, intent)) {
-                                        Log.w("TarsLauncher", "Failed to start app safely: ${appInfo.packageName}")
-                                    }
-                                }
-                            } else {
-                                Log.w("TarsLauncher", "Invalid package name blocked: ${appInfo.packageName}")
+                            val started = SecurityHelper.safeStartApp(
+                                context = context,
+                                packageName = appInfo.packageName,
+                                activityName = appInfo.activityName
+                            )
+                            if (!started) {
+                                Toast.makeText(context, "Uygulama başlatılamadı", Toast.LENGTH_SHORT).show()
                             }
                         },
                         showAppDrawer = uiState.showAppDrawer,
@@ -162,33 +163,23 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     SettingsScreen(
                         onBackClick = { viewModel.setScreen("home") },
                         showAppDrawer = uiState.showAppDrawer,
-                        onShowAppDrawerChange = {
-                            viewModel.updateSetting("show_app_drawer", it)
-                        },
+                        onShowAppDrawerChange = { viewModel.updateShowAppDrawer(it) },
                         gridSize = uiState.gridSize,
-                        onGridSizeChange = {
-                            viewModel.updateSetting("grid_size", it)
-                        },
+                        onGridSizeChange = { viewModel.updateGridSize(it) },
                         installedIconPacks = uiState.iconPacks,
                         selectedIconPack = uiState.selectedIconPack,
-                        onIconPackSelected = {
-                            viewModel.updateSetting("icon_pack", it ?: "")
-                        },
+                        onIconPackSelected = { viewModel.updateSelectedIconPack(it) },
                         buttonColorMode = uiState.buttonColorMode,
-                        onButtonColorModeChange = {
-                            viewModel.updateSetting("button_color_mode", it)
-                        },
+                        onButtonColorModeChange = { viewModel.updateButtonColorMode(it) },
                         showTarsHeader = uiState.showTarsHeader,
-                        onShowTarsHeaderChange = {
-                            viewModel.updateSetting("show_tars_header", it)
-                        },
+                        onShowTarsHeaderChange = { viewModel.updateShowTarsHeader(it) },
                         showClock = uiState.showClock,
-                        onShowClockChange = {
-                            viewModel.updateSetting("show_clock", it)
-                        },
+                        onShowClockChange = { viewModel.updateShowClock(it) },
                         appDrawerIconSize = uiState.appDrawerIconSize,
-                        onAppDrawerIconSizeChange = {
-                            viewModel.updateSetting("app_drawer_icon_size", it)
+                        onAppDrawerIconSizeChange = { viewModel.updateAppDrawerIconSize(it) },
+                        appVersion = "1.1.0",
+                        onCheckForUpdates = {
+                            viewModel.checkForUpdates("1.1.0")
                         }
                     )
                 }
@@ -203,6 +194,14 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     }
                 )
             }
+
+            // In-App Update Dialog Modal
+            UpdateDialog(
+                updateState = uiState.updateState,
+                onStartDownload = { info -> viewModel.startUpdateDownload(info) },
+                onInstallApk = { viewModel.installDownloadedApk() },
+                onDismiss = { viewModel.dismissUpdateDialog() }
+            )
         }
     }
 }

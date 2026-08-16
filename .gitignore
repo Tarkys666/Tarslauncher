@@ -1,0 +1,29 @@
+# Android & Gradle
+*.iml
+.gradle/
+build/
+*/build/
+/local.properties
+local.properties
+
+# IDE & OS
+.idea/
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+
+# Keystores & Secrets
+*.jks
+*.keystore
+keystore.properties
+
+# Build & Release outputs
+*.apk
+*.aab
+*.ap_
+app/release/
+release/
+*.log
+build_*.txt
+lint_output.txt

@@ -50,6 +50,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.gestures.detectTapGestures
 
+import com.tarslauncher.app.data.model.GridSize
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -59,7 +61,7 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onAppClick: (AppInfo) -> Unit,
     showAppDrawer: Boolean,
-    gridSize: String,
+    gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color,
     showTarsHeader: Boolean,
@@ -357,7 +359,7 @@ fun FolderGrid(
     folders: List<FolderInfo>,
     onFoldersUpdate: (List<FolderInfo>) -> Unit,
     onAppClick: (AppInfo) -> Unit,
-    gridSize: String,
+    gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color
 ) {
@@ -366,7 +368,8 @@ fun FolderGrid(
     var selectedFolder by remember("selected_folder_state") { mutableStateOf<FolderInfo?>(null) }
     
     // Stable grid dimensions
-    val (cols, rows) = remember(gridSize) { gridSize.split("x").map { it.toInt() } }
+    val cols = gridSize.columns
+    val rows = gridSize.rows
     
     // Stable column layout with fixed positioning
     Column(
@@ -590,7 +593,7 @@ fun FolderSelectDialog(
     folders: List<FolderInfo>,
     onDismiss: () -> Unit,
     onFolderSelected: (FolderInfo) -> Unit,
-    gridSize: String,
+    gridSize: GridSize,
     iconPackLoader: IconPackLoader? = null,
     buttonColor: Color = Color.Gray
 ) {
@@ -603,10 +606,8 @@ fun FolderSelectDialog(
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
-            // Grid layout matching home screen settings
-            val gridParts = gridSize.split("x")
-            val columns = gridParts[0].toIntOrNull() ?: 4
-            val rows = gridParts[1].toIntOrNull() ?: 2
+            val columns = gridSize.columns
+            val rows = gridSize.rows
             
             Column(
                 modifier = Modifier

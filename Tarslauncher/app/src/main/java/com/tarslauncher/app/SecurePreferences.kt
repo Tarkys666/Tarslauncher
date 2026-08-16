@@ -2,27 +2,27 @@ package com.tarslauncher.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
- * Secure preferences helper for storing sensitive data
+ * Secure preferences helper for storing sensitive data.
+ * Ensures data is encrypted at rest using Android Keystore and never silently falls back to plaintext.
  */
 object SecurePreferences {
-    
+    private const val TAG = "SecurePreferences"
     private const val PREFS_NAME = "tarslauncher_secure_prefs"
     
     /**
-     * Get encrypted shared preferences instance
+     * Get encrypted shared preferences instance, or null if secure storage is unavailable.
      */
-    fun getEncryptedPreferences(context: Context): SharedPreferences {
+    fun getEncryptedPreferences(context: Context): SharedPreferences? {
         return try {
-            // Create or retrieve the master key for encryption
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
             
-            // Create encrypted shared preferences
             EncryptedSharedPreferences.create(
                 context,
                 PREFS_NAME,
@@ -31,9 +31,8 @@ object SecurePreferences {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // Fallback to regular SharedPreferences if encryption fails
-            // This can happen on older devices or in specific configurations
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            Log.e(TAG, "EncryptedSharedPreferences initialization failed", e)
+            null
         }
     }
 }

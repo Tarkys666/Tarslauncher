@@ -6,26 +6,38 @@ import android.content.pm.PackageManager
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.tarslauncher.app.data.datastore.LauncherDataStore
 import com.tarslauncher.app.data.model.*
-import com.tarslauncher.app.SecurePreferences
 import com.tarslauncher.app.utils.SecurityHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
-class AppRepository(private val context: Context) {
-    private val packageManager = context.packageManager
-    private val sharedPrefs = SecurePreferences.getEncryptedPreferences(context)
+class AppRepository(
+    private val context: Context,
+    private val dataStore: LauncherDataStore = LauncherDataStore(context)
+) {
+    private val packageManager: PackageManager = context.packageManager
     private val gson = Gson()
 
     companion object {
-        const val KEY_SHOW_TARS_HEADER = "show_tars_header"
-        const val KEY_SHOW_CLOCK = "show_clock"
-        const val KEY_APP_DRAWER_ICON_SIZE = "app_drawer_icon_size"
+        private const val TAG = "AppRepository"
     }
 
-    fun getInstalledApps(): List<AppInfo> {
-        return try {
-            val intent = Intent(Intent.ACTION_MAIN, null)
-            intent.addCategory(Intent.CATEGORY_LAUNCHER)
-            
+    val settingsFlow: Flow<LauncherSettings> = dataStore.settingsFlow
+
+    suspend fun initialize() {
+        withContext(Dispatchers.IO) {
+            dataStore.migrateFromLegacyPrefsIfNeeded()
+        }
+    }
+
+    suspend fun getInstalledApps(): RepositoryResult<List<AppInfo>> = withContext(Dispatchers.IO) {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+
             val resolveInfoList = try {
                 packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             } catch (e: Exception) {
@@ -35,27 +47,27 @@ class AppRepository(private val context: Context) {
                     packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
                 }
             }
-            
+
             val apps = mutableListOf<AppInfo>()
             resolveInfoList.forEach { resolveInfo ->
                 try {
                     val activityInfo = resolveInfo.activityInfo ?: return@forEach
                     val packageName = activityInfo.packageName
-                    
+
                     if (packageName == context.packageName) return@forEach
-                    
+
                     if (!SecurityHelper.validatePackageName(packageName)) {
                         return@forEach
                     }
-                    
+
                     val appName = try {
                         activityInfo.loadLabel(packageManager).toString()
                     } catch (e: Exception) {
                         packageName.substringAfterLast(".")
                     }
-                    
+
                     if (appName.isBlank()) return@forEach
-                    
+
                     val icon = try {
                         activityInfo.loadIcon(packageManager)
                     } catch (e: Exception) {
@@ -65,110 +77,141 @@ class AppRepository(private val context: Context) {
                             null
                         }
                     }
-                    
-                    apps.add(AppInfo(name = appName.take(50).trim(), packageName = packageName, icon = icon, activityName = activityInfo.name))
+
+                    apps.add(
+                        AppInfo(
+                            name = appName.take(50).trim(),
+                            packageName = packageName,
+                            icon = icon,
+                            activityName = activityInfo.name
+                        )
+                    )
                 } catch (e: Exception) {
-                    Log.w("AppRepository", "Error loading app: $e")
+                    Log.w(TAG, "Error loading app info: ${e.message}")
                 }
             }
-            apps.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
+
+            val result = apps.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
+            RepositoryResult.Success(result)
         } catch (e: Exception) {
-            emptyList()
+            Log.e(TAG, "Failed to load installed apps", e)
+            RepositoryResult.Error(e, "Uygulamalar yüklenirken bir hata oluştu.")
         }
     }
 
-    fun getInstalledIconPacks(): List<IconPackInfo> {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory("com.anddoes.launcher.THEME")
-        return packageManager.queryIntentActivities(intent, 0).mapNotNull {
-            try {
-                val appName = it.loadLabel(packageManager).toString()
-                val packageName = it.activityInfo.packageName
-                val icon = it.loadIcon(packageManager)
-                IconPackInfo(name = appName, packageName = packageName, icon = icon)
-            } catch (e: Exception) {
-                null
-            }
-        }.sortedBy { it.name }
+    suspend fun getInstalledIconPacks(): RepositoryResult<List<IconPackInfo>> = withContext(Dispatchers.IO) {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory("com.anddoes.launcher.THEME")
+            val list = packageManager.queryIntentActivities(intent, 0).mapNotNull {
+                try {
+                    val appName = it.loadLabel(packageManager).toString()
+                    val packageName = it.activityInfo.packageName
+                    val icon = it.loadIcon(packageManager)
+                    IconPackInfo(name = appName, packageName = packageName, icon = icon)
+                } catch (e: Exception) {
+                    null
+                }
+            }.sortedBy { it.name }
+            RepositoryResult.Success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load icon packs", e)
+            RepositoryResult.Error(e, "İkon paketleri yüklenirken hata oluştu.")
+        }
     }
 
-    fun getUsageStats(): List<AppUsageStats> {
-        return try {
-            val json = sharedPrefs.getString("app_usage_stats", null)
-            if (json != null) {
+    suspend fun getUsageStats(): RepositoryResult<List<AppUsageStats>> = withContext(Dispatchers.IO) {
+        try {
+            val json = dataStore.getUsageStatsJson()
+            if (!json.isNullOrBlank()) {
                 val type = object : TypeToken<List<AppUsageStats>>() {}.type
-                gson.fromJson(json, type) ?: emptyList<AppUsageStats>()
+                val list: List<AppUsageStats> = gson.fromJson(json, type) ?: emptyList()
+                RepositoryResult.Success(list)
             } else {
-                emptyList()
+                RepositoryResult.Success(emptyList())
             }
         } catch (e: Exception) {
-            emptyList()
+            Log.e(TAG, "Error parsing usage stats", e)
+            RepositoryResult.Error(e, "Kullanım istatistikleri okunamadı.")
         }
     }
 
-    fun saveUsageStats(stats: List<AppUsageStats>) {
+    suspend fun saveUsageStats(stats: List<AppUsageStats>) = withContext(Dispatchers.IO) {
         try {
             val json = gson.toJson(stats)
-            sharedPrefs.edit().putString("app_usage_stats", json).apply()
+            dataStore.saveUsageStatsJson(json)
         } catch (e: Exception) {
-            Log.e("AppRepository", "Error saving usage stats", e)
+            Log.e(TAG, "Error saving usage stats", e)
         }
     }
 
-    fun getFolders(totalFolders: Int, installedApps: List<AppInfo>): List<FolderInfo> {
-        val savedJson = sharedPrefs.getString("folders", null)
-        val listType = object : TypeToken<List<PersistFolder>>() {}.type
-        val saved: List<PersistFolder>? = try {
-            if (savedJson != null) gson.fromJson<List<PersistFolder>>(savedJson, listType) else null
-        } catch (e: Exception) {
-            null
-        }
-
-        return (1..totalFolders).map { index ->
-            val id = index.toString()
-            val match = saved?.find { it.id == id }
-            val appList = if (installedApps.isNotEmpty() && match?.apps != null) {
-                match.apps.mapNotNull { pkg -> 
-                    installedApps.find { it.packageName == pkg }
-                }.toMutableList()
-            } else {
-                mutableListOf()
-            }
-            FolderInfo(id, "", appList)
-        }
-    }
-
-    fun saveFolders(folders: List<FolderInfo>) {
+    suspend fun getFolders(totalFolders: Int, installedApps: List<AppInfo>): RepositoryResult<List<FolderInfo>> = withContext(Dispatchers.IO) {
         try {
-            val existingJson = sharedPrefs.getString("folders", null)
+            val savedJson = dataStore.getFoldersJson()
             val listType = object : TypeToken<List<PersistFolder>>() {}.type
-            val existing: MutableMap<String, PersistFolder> = try {
-                val list: List<PersistFolder>? = if (existingJson != null) gson.fromJson(existingJson, listType) else null
-                list?.associateBy { it.id }?.toMutableMap() ?: mutableMapOf()
-            } catch (_: Exception) {
+            val saved: List<PersistFolder>? = if (!savedJson.isNullOrBlank()) {
+                try {
+                    gson.fromJson(savedJson, listType)
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+
+            // O(1) map lookup for mapping packages to installed apps
+            val appMap = installedApps.associateBy { it.packageName }
+            val savedMap = saved?.associateBy { it.id } ?: emptyMap()
+
+            val folderList = (1..totalFolders).map { index ->
+                val id = index.toString()
+                val match = savedMap[id]
+                val appList = if (match?.apps != null) {
+                    match.apps.mapNotNull { pkg -> appMap[pkg] }.toMutableList()
+                } else {
+                    mutableListOf()
+                }
+                FolderInfo(id = id, name = "", apps = appList)
+            }
+            RepositoryResult.Success(folderList)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading folders", e)
+            RepositoryResult.Error(e, "Klasörler yüklenirken hata oluştu.")
+        }
+    }
+
+    suspend fun saveFolders(folders: List<FolderInfo>) = withContext(Dispatchers.IO) {
+        try {
+            val existingJson = dataStore.getFoldersJson()
+            val listType = object : TypeToken<List<PersistFolder>>() {}.type
+            val existingMap: MutableMap<String, PersistFolder> = if (!existingJson.isNullOrBlank()) {
+                try {
+                    val list: List<PersistFolder>? = gson.fromJson(existingJson, listType)
+                    list?.associateBy { it.id }?.toMutableMap() ?: mutableMapOf()
+                } catch (_: Exception) {
+                    mutableMapOf()
+                }
+            } else {
                 mutableMapOf()
             }
 
             folders.forEach { f ->
-                existing[f.id] = PersistFolder(f.id, f.apps.map { a -> a.packageName })
+                existingMap[f.id] = PersistFolder(f.id, f.apps.map { a -> a.packageName })
             }
 
-            val mergedList = existing.values.sortedBy { it.id.toIntOrNull() ?: Int.MAX_VALUE }
+            val mergedList = existingMap.values.sortedBy { it.id.toIntOrNull() ?: Int.MAX_VALUE }
             val json = gson.toJson(mergedList)
-            sharedPrefs.edit().putString("folders", json).apply()
+            dataStore.saveFoldersJson(json)
         } catch (e: Exception) {
-            Log.e("AppRepository", "Error saving folders", e)
+            Log.e(TAG, "Error saving folders", e)
         }
     }
 
-    fun getBooleanSetting(key: String, defaultValue: Boolean): Boolean = sharedPrefs.getBoolean(key, defaultValue)
-    fun getStringSetting(key: String, defaultValue: String?): String? = sharedPrefs.getString(key, defaultValue)
-    fun getIntSetting(key: String, defaultValue: Int): Int = sharedPrefs.getInt(key, defaultValue)
-    fun getFloatSetting(key: String, defaultValue: Float): Float = sharedPrefs.getFloat(key, defaultValue)
-
-    fun saveBooleanSetting(key: String, value: Boolean) = sharedPrefs.edit().putBoolean(key, value).apply()
-    fun saveStringSetting(key: String, value: String?) = sharedPrefs.edit().putString(key, value).apply()
-    fun saveIntSetting(key: String, value: Int) = sharedPrefs.edit().putInt(key, value).apply()
-    fun saveFloatSetting(key: String, value: Float) = sharedPrefs.edit().putFloat(key, value).apply()
-
-
+    // Type-safe setting updates
+    suspend fun updateShowAppDrawer(show: Boolean) = dataStore.updateShowAppDrawer(show)
+    suspend fun updateGridSize(gridSize: GridSize) = dataStore.updateGridSize(gridSize)
+    suspend fun updateButtonColorMode(mode: String) = dataStore.updateButtonColorMode(mode)
+    suspend fun updateShowTarsHeader(show: Boolean) = dataStore.updateShowTarsHeader(show)
+    suspend fun updateShowClock(show: Boolean) = dataStore.updateShowClock(show)
+    suspend fun updateSelectedIconPack(pack: String?) = dataStore.updateSelectedIconPack(pack)
+    suspend fun updateAppDrawerIconSize(size: Int) = dataStore.updateAppDrawerIconSize(size)
 }

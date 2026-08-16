@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.tarslauncher.app.MainActivity
 import com.tarslauncher.app.data.model.AppInfo
+import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.IconPackInfo
 import com.tarslauncher.app.utils.isDefaultLauncher
 
@@ -68,8 +69,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     showAppDrawer: Boolean,
     onShowAppDrawerChange: (Boolean) -> Unit,
-    gridSize: String,
-    onGridSizeChange: (String) -> Unit,
+    gridSize: GridSize,
+    onGridSizeChange: (GridSize) -> Unit,
     installedIconPacks: List<IconPackInfo>,
     selectedIconPack: String?,
     onIconPackSelected: (String?) -> Unit,
@@ -80,7 +81,9 @@ fun SettingsScreen(
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     appDrawerIconSize: Int,
-    onAppDrawerIconSizeChange: (Int) -> Unit
+    onAppDrawerIconSizeChange: (Int) -> Unit,
+    appVersion: String = "1.1.0",
+    onCheckForUpdates: () -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -124,10 +127,10 @@ fun SettingsScreen(
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     
-    val grid2xOptions = listOf("2x1", "2x2", "2x3", "2x4")
-    val grid3xOptions = listOf("3x1", "3x2", "3x3")
-    val grid4xOptions = listOf("4x1", "4x2", "4x3", "4x4")
-    val grid5xOptions = listOf("5x1", "5x2", "5x3", "5x4", "5x5")
+    val grid2xOptions = listOf(GridSize(2, 1), GridSize(2, 2), GridSize(2, 3), GridSize(2, 4))
+    val grid3xOptions = listOf(GridSize(3, 1), GridSize(3, 2), GridSize(3, 3))
+    val grid4xOptions = listOf(GridSize(4, 1), GridSize(4, 2), GridSize(4, 3), GridSize(4, 4))
+    val grid5xOptions = listOf(GridSize(5, 1), GridSize(5, 2), GridSize(5, 3), GridSize(5, 4), GridSize(5, 5))
     
     // Create settings tree structure - remove remember to allow state updates
     val settingsTree = listOf(
@@ -211,6 +214,12 @@ fun SettingsScreen(
             title = "ABOUT",
             icon = "",
             children = listOf(
+                SettingsItem.Setting(
+                    title = "Check for Updates",
+                    description = "Version $appVersion (Tap to check)",
+                    type = SettingType.BUTTON,
+                    onClick = onCheckForUpdates
+                ),
                 SettingsItem.Setting(
                     title = "Privacy Policy",
                     description = "Tarslauncher – Privacy Policy",
@@ -343,7 +352,7 @@ fun SettingsScreen(
                                     .height(40.dp)
                             ) {
                                 Text(
-                                    text = option,
+                                    text = option.serialize(),
                                     color = Color.White,
                                     fontSize = 14.sp
                                 )
@@ -380,7 +389,7 @@ fun SettingsScreen(
                                     .height(40.dp)
                             ) {
                                 Text(
-                                    text = option,
+                                    text = option.serialize(),
                                     color = Color.White,
                                     fontSize = 14.sp
                                 )
@@ -417,7 +426,7 @@ fun SettingsScreen(
                                     .height(40.dp)
                             ) {
                                 Text(
-                                    text = option,
+                                    text = option.serialize(),
                                     color = Color.White,
                                     fontSize = 14.sp
                                 )
@@ -454,7 +463,7 @@ fun SettingsScreen(
                                     .height(40.dp)
                             ) {
                                 Text(
-                                    text = option,
+                                    text = option.serialize(),
                                     color = Color.White,
                                     fontSize = 14.sp
                                 )
