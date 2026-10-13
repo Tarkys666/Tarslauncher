@@ -9,10 +9,12 @@ import com.tarslauncher.app.agent.domain.prompt.AgentPromptProvider
 import com.tarslauncher.app.agent.domain.safety.SafetyGate
 import com.tarslauncher.app.agent.service.TarsAccessibilityService
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 
 class AgentLoopRunner(
@@ -126,5 +128,5 @@ class AgentLoopRunner(
         }
 
         emit(AgentEvent.Failure("Maksimum adım sınırına ($maxSteps) ulaşıldı."))
-    }
+    }.flowOn(Dispatchers.Default)
 }

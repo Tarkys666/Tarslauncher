@@ -8,6 +8,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -150,66 +151,74 @@ class UpdateManager(
             var redirects = 0
             val maxRedirects = 6
 
-            while (true) {
-                val url = URL(currentUrl)
-                connection = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                    instanceFollowRedirects = false
-                    setRequestProperty("User-Agent", "TarsLauncher-Android")
-                    setRequestProperty("Accept-Encoding", "identity")
-                    setRequestProperty("Connection", "keep-alive")
-                }
-
-                val code = connection.responseCode
-                if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
-                    val location = connection.getHeaderField("Location")
-                        ?: return@withContext Result.failure(Exception("İndirme yönlendirme adresi bulunamadı."))
-                    currentUrl = location
-                    redirects++
-                    if (redirects > maxRedirects) {
-                        return@withContext Result.failure(Exception("Çok fazla yönlendirme hatası."))
+            var activeConnection: HttpURLConnection? = null
+            try {
+                while (true) {
+                    val url = URL(currentUrl)
+                    connection = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        instanceFollowRedirects = false
+                        setRequestProperty("User-Agent", "TarsLauncher-Android")
+                        setRequestProperty("Accept-Encoding", "identity")
+                        setRequestProperty("Connection", "keep-alive")
                     }
-                } else if (code in 200..299) {
-                    break
-                } else {
-                    return@withContext Result.failure(Exception("APK indirme hatası: HTTP $code"))
-                }
-            }
+                    activeConnection = connection
 
-            val totalLength = connection.contentLengthLong
-            var downloaded = 0L
-
-            val bufferSize = 64 * 1024 // 64 KB high-throughput buffer to maximize socket I/O efficiency
-            val buffer = ByteArray(bufferSize)
-            var bytesRead: Int
-
-            var lastProgressTime = 0L
-            val throttleIntervalMs = 120L // Throttles progress emission to prevent Compose UI recomposition bottleneck
-
-            BufferedInputStream(connection.inputStream, bufferSize).use { input ->
-                BufferedOutputStream(FileOutputStream(file), bufferSize).use { output ->
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloaded += bytesRead
-
-                        val now = System.currentTimeMillis()
-                        if (now - lastProgressTime >= throttleIntervalMs || (totalLength > 0 && downloaded >= totalLength)) {
-                            lastProgressTime = now
-                            val progress = if (totalLength > 0) downloaded.toFloat() / totalLength else 0f
-                            onProgress(progress, downloaded, totalLength)
+                    val code = connection.responseCode
+                    if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
+                        val location = connection.getHeaderField("Location")
+                            ?: return@withContext Result.failure(Exception("İndirme yönlendirme adresi bulunamadı."))
+                        connection.disconnect()
+                        currentUrl = location
+                        redirects++
+                        if (redirects > maxRedirects) {
+                            return@withContext Result.failure(Exception("Çok fazla yönlendirme hatası."))
                         }
+                    } else if (code in 200..299) {
+                        break
+                    } else {
+                        return@withContext Result.failure(Exception("APK indirme hatası: HTTP $code"))
                     }
-                    output.flush()
                 }
-            }
 
-            // Ensure terminal 100% progress event is emitted
-            if (totalLength > 0 && downloaded >= totalLength) {
-                onProgress(1f, totalLength, totalLength)
-            }
+                val totalLength = connection.contentLengthLong
+                var downloaded = 0L
 
-            Result.success(file)
+                val bufferSize = 64 * 1024 // 64 KB high-throughput buffer to maximize socket I/O efficiency
+                val buffer = ByteArray(bufferSize)
+                var bytesRead: Int
+
+                var lastProgressTime = 0L
+                val throttleIntervalMs = 120L // Throttles progress emission to prevent Compose UI recomposition bottleneck
+
+                BufferedInputStream(connection.inputStream, bufferSize).use { input ->
+                    BufferedOutputStream(FileOutputStream(file), bufferSize).use { output ->
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            coroutineContext.ensureActive()
+                            output.write(buffer, 0, bytesRead)
+                            downloaded += bytesRead
+
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgressTime >= throttleIntervalMs || (totalLength > 0 && downloaded >= totalLength)) {
+                                lastProgressTime = now
+                                val progress = if (totalLength > 0) downloaded.toFloat() / totalLength else 0f
+                                onProgress(progress, downloaded, totalLength)
+                            }
+                        }
+                        output.flush()
+                    }
+                }
+
+                // Ensure terminal 100% progress event is emitted
+                if (totalLength > 0 && downloaded >= totalLength) {
+                    onProgress(1f, totalLength, totalLength)
+                }
+
+                Result.success(file)
+            } finally {
+                activeConnection?.disconnect()
+            }
         } catch (e: Exception) {
             targetFile?.let { if (it.exists()) it.delete() }
             Result.failure(e)

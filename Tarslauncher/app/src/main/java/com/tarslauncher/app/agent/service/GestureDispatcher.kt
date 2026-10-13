@@ -12,16 +12,31 @@ class GestureDispatcher(
     private val serviceProvider: () -> AccessibilityService?
 ) {
 
+    @Suppress("DEPRECATION")
     fun performClick(node: AccessibilityNodeInfo?): Boolean {
         if (node == null) return false
 
         // 1. Try finding a clickable ancestor or the node itself
         var current: AccessibilityNodeInfo? = node
-        while (current != null) {
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return true
+        val parentsToRecycle = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            mutableListOf<AccessibilityNodeInfo>()
+        } else null
+
+        try {
+            while (current != null) {
+                if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true
+                }
+                val parent = current.parent
+                if (parent != null && parentsToRecycle != null) {
+                    parentsToRecycle.add(parent)
+                }
+                current = parent
             }
-            current = current.parent
+        } finally {
+            if (parentsToRecycle != null) {
+                parentsToRecycle.forEach { runCatching { it.recycle() } }
+            }
         }
 
         // 2. Fallback to physical touch gesture at the node's center coordinate

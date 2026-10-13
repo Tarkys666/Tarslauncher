@@ -1,7 +1,7 @@
 {
-  "versionCode": 15,
-  "versionName": "1.3.2",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.3.2/TarsLauncher-release.apk",
-  "apkSize": 11035000,
-  "releaseNotes": "TARS monokrom arayüz, tek dokunuşla panodan API yapıştırma (PASTE butonu) ve klavye uyumluluğu."
+  "versionCode": 16,
+  "versionName": "1.3.3",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.3.3/TarsLauncher-release.apk",
+  "apkSize": 11034888,
+  "releaseNotes": "TARS monokrom arayüz, PASTE butonu, klavye uyumluluğu, bellek yönetimi (Android <14 node recycle) ve performans optimizasyonu."
 }

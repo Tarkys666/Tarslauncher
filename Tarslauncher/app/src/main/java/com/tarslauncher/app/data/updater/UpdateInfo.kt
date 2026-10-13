@@ -15,10 +15,10 @@ data class UpdateInfo(
 
 @Immutable
 sealed class UpdateState {
-    object Idle : UpdateState()
-    object Checking : UpdateState()
+    data object Idle : UpdateState()
+    data object Checking : UpdateState()
     data class Available(val info: UpdateInfo) : UpdateState()
-    object UpToDate : UpdateState()
+    data object UpToDate : UpdateState()
     data class Downloading(val progress: Float, val bytesDownloaded: Long, val totalBytes: Long) : UpdateState()
     data class ReadyToInstall(val apkFile: File) : UpdateState()
     data class Error(val message: String) : UpdateState()

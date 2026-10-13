@@ -13,6 +13,7 @@ class AccessibilityTreeParser {
     fun getNode(id: Int): AccessibilityNodeInfo? = activeNodeMap[id]
 
     @Synchronized
+    @Suppress("DEPRECATION")
     fun parseScreenTree(rootNode: AccessibilityNodeInfo?): ScreenDump {
         recycleOldNodes()
 
@@ -31,8 +32,8 @@ class AccessibilityTreeParser {
         var elementCounter = 0
         val screenBounds = Rect()
 
-        fun traverse(node: AccessibilityNodeInfo?, depth: Int) {
-            if (node == null || depth > 18 || elementCounter >= 100) return
+        fun traverse(node: AccessibilityNodeInfo?, depth: Int): Boolean {
+            if (node == null || depth > 18 || elementCounter >= 100) return false
 
             val isVisible = node.isVisibleToUser
             val text = node.text?.toString()?.trim()?.take(70).orEmpty()
@@ -70,17 +71,22 @@ class AccessibilityTreeParser {
 
             for (i in 0 until node.childCount) {
                 val child = node.getChild(i)
-                traverse(child, depth + 1)
-                // If on API < 34 and child was not retained in activeNodeMap, recycle it
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    if (child != null && !activeNodeMap.containsValue(child)) {
+                if (child != null) {
+                    val isChildRetained = traverse(child, depth + 1)
+                    // If on API < 34 and child was not retained in activeNodeMap, recycle it
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !isChildRetained) {
                         runCatching { child.recycle() }
                     }
                 }
             }
+
+            return isRelevant
         }
 
-        traverse(rootNode, 0)
+        val isRootRetained = traverse(rootNode, 0)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !isRootRetained) {
+            runCatching { rootNode.recycle() }
+        }
 
         return ScreenDump(
             packageName = packageName,
@@ -94,6 +100,7 @@ class AccessibilityTreeParser {
         recycleOldNodes()
     }
 
+    @Suppress("DEPRECATION")
     private fun recycleOldNodes() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             activeNodeMap.values.forEach { node ->
