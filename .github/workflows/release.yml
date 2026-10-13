@@ -40,13 +40,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Verify Keystore
+      - name: Decode Release Keystore from GitHub Secrets
         working-directory: ./Tarslauncher
         run: |
-          if [ -f tarslauncher-release.jks ]; then
-            echo "Permanent repository keystore verified: tarslauncher-release.jks"
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > tarslauncher-release.jks
+            echo "Release keystore successfully decoded from GitHub Secrets."
           else
-            echo "Error: tarslauncher-release.jks missing!" && exit 1
+            echo "Error: RELEASE_KEYSTORE_BASE64 secret is not set in repository settings!" && exit 1
           fi
 
       - name: Grant execute permission for gradlew
@@ -59,6 +60,11 @@ jobs:
 
       - name: Build Release APK
         working-directory: ./Tarslauncher
+        env:
+          RELEASE_STORE_FILE: "tarslauncher-release.jks"
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Locate and Rename APK
@@ -83,3 +89,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+
+      - name: Clean up Decoded Keystore
+        if: always()
+        working-directory: ./Tarslauncher
+        run: rm -f tarslauncher-release.jks

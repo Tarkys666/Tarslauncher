@@ -29,20 +29,33 @@ android {
     namespace = "com.tarslauncher.app"
     compileSdk = 36
 
-    // Load local.properties for keystore configs
+    // Load local.properties or environment variables for keystore configs
     val localProperties = Properties()
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
         localProperties.load(FileInputStream(localPropertiesFile))
     }
 
-    // --- Permanent fixed release signing configuration ---
+    val releaseStoreFilePath = System.getenv("RELEASE_STORE_FILE")
+        ?: localProperties.getProperty("RELEASE_STORE_FILE")
+        ?: "tarslauncher-release.jks"
+    val releaseStoreFile = rootProject.file(releaseStoreFilePath)
+
+    val releaseStorePassword = System.getenv("RELEASE_STORE_PASSWORD")
+        ?: localProperties.getProperty("RELEASE_STORE_PASSWORD")
+    val releaseKeyAlias = System.getenv("RELEASE_KEY_ALIAS")
+        ?: localProperties.getProperty("RELEASE_KEY_ALIAS")
+    val releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+        ?: localProperties.getProperty("RELEASE_KEY_PASSWORD")
+
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("tarslauncher-release.jks")
-            storePassword = "tarslauncher123"
-            keyAlias = "tarslauncher"
-            keyPassword = "tarslauncher123"
+            if (releaseStoreFile.exists() && !releaseStorePassword.isNullOrEmpty()) {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias ?: "tarslauncher"
+                keyPassword = releaseKeyPassword ?: releaseStorePassword
+            }
         }
     }
 
@@ -72,7 +85,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning?.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                signingConfig = releaseSigning
+            }
             
             // Additional security settings
             isDebuggable = false
