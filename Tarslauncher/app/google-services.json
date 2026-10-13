@@ -1,44 +1,26 @@
 {
   "project_info": {
-    "project_number": "306072714025",
-    "project_id": "tars-470001",
-    "storage_bucket": "tars-470001.firebasestorage.app"
+    "project_number": "691832963274",
+    "project_id": "tarslauncher-7b985",
+    "storage_bucket": "tarslauncher-7b985.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:306072714025:android:5ba31fc8437c846dcf9538",
+        "mobilesdk_app_id": "1:691832963274:android:a63002e45169781ddcf433",
         "android_client_info": {
           "package_name": "com.tarslauncher.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "306072714025-svolkorq88qhngc082a0dtg4m4mh6527.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.tarslauncher.app",
-            "certificate_hash": "5a80fdbc8b6767fc44d66ce7f7b44b50414c863b"
-          }
-        },
-        {
-          "client_id": "306072714025-l37c2abvs4stkti7c3gjlc5fuo0d0dcq.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyACQLaMJWf-08q2zMolGpwvXHn3BXEPZ7U"
+          "current_key": "AIzaSyACUUt9EQ6aQAhabH4PlbBUppReoTNENcc"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "306072714025-l37c2abvs4stkti7c3gjlc5fuo0d0dcq.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

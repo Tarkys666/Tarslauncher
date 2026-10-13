@@ -9,6 +9,7 @@ import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.LauncherSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
@@ -29,7 +30,10 @@ class LauncherDataStore(private val context: Context) {
         val KEY_APP_DRAWER_ICON_SIZE = intPreferencesKey("app_drawer_icon_size")
         val KEY_FOLDERS_JSON = stringPreferencesKey("folders_json")
         val KEY_USAGE_STATS_JSON = stringPreferencesKey("usage_stats_json")
+        val KEY_PWAS_JSON = stringPreferencesKey("pwas_json")
+        val KEY_PWAS_SEEDED = booleanPreferencesKey("pwas_seeded")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
+        val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
     }
 
     val settingsFlow: Flow<LauncherSettings> = context.dataStore.data
@@ -52,16 +56,7 @@ class LauncherDataStore(private val context: Context) {
                 appDrawerIconSize = preferences[KEY_APP_DRAWER_ICON_SIZE] ?: 32
             )
         }
-
-    val foldersJsonFlow: Flow<String?> = context.dataStore.data
-        .catch { emit(emptyPreferences()) }
-        .map { it[KEY_FOLDERS_JSON] }
-
-    val usageStatsJsonFlow: Flow<String?> = context.dataStore.data
-        .catch { emit(emptyPreferences()) }
-        .map { it[KEY_USAGE_STATS_JSON] }
-
-    suspend fun getSettings(): LauncherSettings = settingsFlow.first()
+        .distinctUntilChanged()
 
     suspend fun updateShowAppDrawer(show: Boolean) {
         context.dataStore.edit { it[KEY_SHOW_APP_DRAWER] = show }
@@ -111,6 +106,46 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun getUsageStatsJson(): String? {
         return context.dataStore.data.first()[KEY_USAGE_STATS_JSON]
+    }
+
+    suspend fun savePwasJson(json: String) {
+        context.dataStore.edit { it[KEY_PWAS_JSON] = json }
+    }
+
+    suspend fun getPwasJson(): String? {
+        return context.dataStore.data.first()[KEY_PWAS_JSON]
+    }
+
+    suspend fun isPwasSeeded(): Boolean {
+        return context.dataStore.data.first()[KEY_PWAS_SEEDED] ?: false
+    }
+
+    suspend fun setPwasSeeded(seeded: Boolean) {
+        context.dataStore.edit { it[KEY_PWAS_SEEDED] = seeded }
+    }
+
+    suspend fun getLastBackupTime(): Long {
+        return context.dataStore.data.first()[KEY_LAST_BACKUP_TIME] ?: 0L
+    }
+
+    suspend fun setLastBackupTime(time: Long) {
+        context.dataStore.edit { it[KEY_LAST_BACKUP_TIME] = time }
+    }
+
+    suspend fun saveAllSettings(settings: LauncherSettings) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
+            prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
+            prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
+            prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
+            prefs[KEY_SHOW_CLOCK] = settings.showClock
+            if (settings.selectedIconPack.isNullOrBlank()) {
+                prefs.remove(KEY_SELECTED_ICON_PACK)
+            } else {
+                prefs[KEY_SELECTED_ICON_PACK] = settings.selectedIconPack
+            }
+            prefs[KEY_APP_DRAWER_ICON_SIZE] = settings.appDrawerIconSize
+        }
     }
 
     /**

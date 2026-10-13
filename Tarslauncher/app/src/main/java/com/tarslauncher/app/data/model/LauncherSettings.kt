@@ -1,5 +1,8 @@
 package com.tarslauncher.app.data.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class LauncherSettings(
     val showAppDrawer: Boolean = true,
     val gridSize: GridSize = GridSize.DEFAULT,

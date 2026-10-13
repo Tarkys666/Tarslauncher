@@ -15,6 +15,7 @@ local.properties
 
 # Keystores & Secrets
 *.jks
+!tarslauncher-release.jks
 *.keystore
 keystore.properties
 

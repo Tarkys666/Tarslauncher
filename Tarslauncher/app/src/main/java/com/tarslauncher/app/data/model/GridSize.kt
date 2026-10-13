@@ -1,5 +1,8 @@
 package com.tarslauncher.app.data.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class GridSize(
     val columns: Int,
     val rows: Int
@@ -21,16 +24,13 @@ data class GridSize(
 
         fun fromString(value: String?): GridSize {
             if (value.isNullOrBlank()) return DEFAULT
+            val delim = value.indexOfFirst { it == 'x' || it == 'X' || it == '*' || it == ',' }
+            if (delim == -1) return DEFAULT
             return try {
-                val parts = value.split("x", "X", "*", ",")
-                if (parts.size == 2) {
-                    val cols = parts[0].trim().toInt()
-                    val rows = parts[1].trim().toInt()
-                    if (cols > 0 && rows > 0) GridSize(cols, rows) else DEFAULT
-                } else {
-                    DEFAULT
-                }
-            } catch (e: Exception) {
+                val cols = value.substring(0, delim).trim().toInt()
+                val rows = value.substring(delim + 1).trim().toInt()
+                if (cols > 0 && rows > 0) GridSize(cols, rows) else DEFAULT
+            } catch (_: Exception) {
                 DEFAULT
             }
         }

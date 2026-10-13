@@ -28,13 +28,13 @@
 -keep class kotlin.** { *; }
 -keep class kotlinx.** { *; }
 
-# Keep data classes (but obfuscate field names)
--keepclassmembers class com.tarslauncher.app.AppInfo {
-    <init>(...);
-}
--keepclassmembers class com.tarslauncher.app.FolderInfo {
-    <init>(...);
-}
+# Keep data model classes and their fields for Gson serialization
+-keep class com.tarslauncher.app.data.model.** { *; }
+-keepclassmembers class com.tarslauncher.app.data.model.** { *; }
+-keep class com.tarslauncher.app.data.sync.** { *; }
+
+# Firebase
+-keep class com.google.firebase.** { *; }
 
 # Security: Hide sensitive classes from reflection
 -keepnames class com.tarslauncher.app.SecurityHelper

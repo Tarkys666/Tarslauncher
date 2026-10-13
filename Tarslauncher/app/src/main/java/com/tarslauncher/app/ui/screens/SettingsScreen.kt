@@ -3,7 +3,9 @@ package com.tarslauncher.app.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -20,7 +22,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -29,14 +30,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.tarslauncher.app.MainActivity
-import com.tarslauncher.app.data.model.AppInfo
 import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.IconPackInfo
+import com.tarslauncher.app.data.model.PwaInfo
 import com.tarslauncher.app.utils.isDefaultLauncher
 
 // Tree-based settings data structure
+@Immutable
 sealed class SettingsItem {
+    @Immutable
     data class Category(
         val title: String,
         val icon: String,
@@ -44,6 +46,7 @@ sealed class SettingsItem {
         val isExpanded: Boolean = false
     ) : SettingsItem()
     
+    @Immutable
     data class Setting(
         val title: String,
         val description: String,
@@ -60,9 +63,13 @@ enum class SettingType {
     SELECTION,
     INFO,
     LAUNCHER_STATUS,
-
     SLIDER
 }
+
+private val Grid2xOptions = listOf(GridSize(2, 1), GridSize(2, 2), GridSize(2, 3), GridSize(2, 4))
+private val Grid3xOptions = listOf(GridSize(3, 1), GridSize(3, 2), GridSize(3, 3))
+private val Grid4xOptions = listOf(GridSize(4, 1), GridSize(4, 2), GridSize(4, 3), GridSize(4, 4))
+private val Grid5xOptions = listOf(GridSize(5, 1), GridSize(5, 2), GridSize(5, 3), GridSize(5, 4), GridSize(5, 5))
 
 @Composable
 fun SettingsScreen(
@@ -82,8 +89,15 @@ fun SettingsScreen(
     onShowClockChange: (Boolean) -> Unit,
     appDrawerIconSize: Int,
     onAppDrawerIconSizeChange: (Int) -> Unit,
-    appVersion: String = "1.1.0",
-    onCheckForUpdates: () -> Unit = {}
+    appVersion: String = "1.2.0",
+    installedPwas: List<PwaInfo> = emptyList(),
+    pwaPresets: List<PwaInfo> = emptyList(),
+    onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
+    onDeletePwa: (pwaId: String) -> Unit = {},
+    isSyncing: Boolean = false,
+    lastBackupTime: Long = 0L,
+    onBackupToCloud: () -> Unit = {},
+    onRestoreFromCloud: () -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -95,15 +109,8 @@ fun SettingsScreen(
     // Default launcher state
     var isDefaultLauncherSet by remember { mutableStateOf(false) }
     
-    // Check default launcher status on composition and when returning from system settings
-    LaunchedEffect(Unit) {
-        isDefaultLauncherSet = isDefaultLauncher(context)
-    }
-    
     // Refresh launcher status when screen becomes visible (user returns from settings)
-    // Lifecycle aware default launcher status check
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
@@ -112,8 +119,6 @@ fun SettingsScreen(
         }
         
         lifecycleOwner.lifecycle.addObserver(observer)
-        
-        // Initial check
         isDefaultLauncherSet = isDefaultLauncher(context)
         
         onDispose {
@@ -126,36 +131,47 @@ fun SettingsScreen(
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showAddPwaDialog by remember { mutableStateOf(false) }
+    var showManagePwasDialog by remember { mutableStateOf(false) }
     
-    val grid2xOptions = listOf(GridSize(2, 1), GridSize(2, 2), GridSize(2, 3), GridSize(2, 4))
-    val grid3xOptions = listOf(GridSize(3, 1), GridSize(3, 2), GridSize(3, 3))
-    val grid4xOptions = listOf(GridSize(4, 1), GridSize(4, 2), GridSize(4, 3), GridSize(4, 4))
-    val grid5xOptions = listOf(GridSize(5, 1), GridSize(5, 2), GridSize(5, 3), GridSize(5, 4), GridSize(5, 5))
-    
-    // Create settings tree structure - remove remember to allow state updates
-    val settingsTree = listOf(
-        SettingsItem.Category(
-            title = "INTERFACE",
-            icon = "",
-            children = buildList {
-                add(SettingsItem.Setting(
-                    title = "App Drawer",
-                    description = "Show app list at bottom",
-                    type = SettingType.TOGGLE,
-                    currentValue = showAppDrawer,
-                    onValueChange = { onShowAppDrawerChange(it as Boolean) }
-                ))
-                add(SettingsItem.Setting(
-                    title = "TARS Header",
-                    description = "Show TARS text on home screen",
-                    type = SettingType.TOGGLE,
-                    currentValue = showTarsHeader,
-                    onValueChange = { onShowTarsHeaderChange(it as Boolean) }
-                ))
-                add(SettingsItem.Setting(
-                    title = "Clock",
-                    description = "Show clock on home screen",
-                    type = SettingType.TOGGLE,
+    // Create settings tree structure - memoized to prevent reallocations on every composition
+    val settingsTree = remember(
+        showAppDrawer,
+        showTarsHeader,
+        showClock,
+        appDrawerIconSize,
+        gridSize,
+        buttonColorMode,
+        selectedIconPack,
+        isDefaultLauncherSet,
+        installedPwas.size,
+        appVersion,
+        isSyncing,
+        lastBackupTime
+    ) {
+        listOf(
+            SettingsItem.Category(
+                title = "INTERFACE",
+                icon = "",
+                children = buildList {
+                    add(SettingsItem.Setting(
+                        title = "App Drawer",
+                        description = "Show app list at bottom",
+                        type = SettingType.TOGGLE,
+                        currentValue = showAppDrawer,
+                        onValueChange = { onShowAppDrawerChange(it as Boolean) }
+                    ))
+                    add(SettingsItem.Setting(
+                        title = "TARS Header",
+                        description = "Show TARS text on home screen",
+                        type = SettingType.TOGGLE,
+                        currentValue = showTarsHeader,
+                        onValueChange = { onShowTarsHeaderChange(it as Boolean) }
+                    ))
+                    add(SettingsItem.Setting(
+                        title = "Clock",
+                        description = "Show clock on home screen",
+                        type = SettingType.TOGGLE,
                     currentValue = showClock,
                     onValueChange = { onShowClockChange(it as Boolean) }
                 ))
@@ -211,14 +227,49 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
+            title = "WEB APPS (PWA)",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Add Web App (PWA)",
+                    description = "Install websites as native apps with Presets or URL",
+                    type = SettingType.BUTTON,
+                    onClick = { showAddPwaDialog = true }
+                ),
+                SettingsItem.Setting(
+                    title = "Manage Web Apps",
+                    description = "${installedPwas.size} web app(s) installed",
+                    type = SettingType.BUTTON,
+                    onClick = { showManagePwasDialog = true }
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "CLOUD BACKUP (FIREBASE)",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Backup to Cloud",
+                    description = if (isSyncing) "Syncing..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout & settings to Firestore",
+                    type = SettingType.BUTTON,
+                    onClick = onBackupToCloud
+                ),
+                SettingsItem.Setting(
+                    title = "Restore from Cloud",
+                    description = if (isSyncing) "Restoring..." else "Download and apply cloud backup",
+                    type = SettingType.BUTTON,
+                    onClick = onRestoreFromCloud
+                )
+            )
+        ),
+        SettingsItem.Category(
             title = "ABOUT",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "Check for Updates",
-                    description = "Version $appVersion (Tap to check)",
-                    type = SettingType.BUTTON,
-                    onClick = onCheckForUpdates
+                    title = "Version",
+                    description = "Version $appVersion",
+                    type = SettingType.INFO
                 ),
                 SettingsItem.Setting(
                     title = "Privacy Policy",
@@ -229,6 +280,7 @@ fun SettingsScreen(
             )
         )
     )
+}
     
     val scrollState = rememberScrollState()
 
@@ -275,27 +327,22 @@ fun SettingsScreen(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Pro Upgrade Box (only show if not pro user)
-
-        
         // Tree-based settings
         settingsTree.forEach { category ->
-            if (category is SettingsItem.Category) {
-                SettingsCategoryItem(
-                    category = category,
-                    isExpanded = expandedCategories.contains(category.title),
-                    onExpandToggle = {
-                        expandedCategories = if (expandedCategories.contains(category.title)) {
-                            expandedCategories - category.title
-                        } else {
-                            expandedCategories + category.title
-                        }
-                    },
-                    onButtonColorModeChange = onButtonColorModeChange,
-                    buttonColorMode = buttonColorMode
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            SettingsCategoryItem(
+                category = category,
+                isExpanded = expandedCategories.contains(category.title),
+                onExpandToggle = {
+                    expandedCategories = if (expandedCategories.contains(category.title)) {
+                        expandedCategories - category.title
+                    } else {
+                        expandedCategories + category.title
+                    }
+                },
+                onButtonColorModeChange = onButtonColorModeChange,
+                buttonColorMode = buttonColorMode
+            )
+            Spacer(modifier = Modifier.height(8.dp))
         }
         
     }
@@ -333,7 +380,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         }
-                        items(grid2xOptions) { option ->
+                        items(Grid2xOptions, key = { it.serialize() }) { option ->
                             Button(
                                 onClick = {
                                     onGridSizeChange(option)
@@ -370,7 +417,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         }
-                        items(grid3xOptions) { option ->
+                        items(Grid3xOptions, key = { it.serialize() }) { option ->
                             Button(
                                 onClick = {
                                     onGridSizeChange(option)
@@ -407,7 +454,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         }
-                        items(grid4xOptions) { option ->
+                        items(Grid4xOptions, key = { it.serialize() }) { option ->
                             Button(
                                 onClick = {
                                     onGridSizeChange(option)
@@ -444,7 +491,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         }
-                        items(grid5xOptions) { option ->
+                        items(Grid5xOptions, key = { it.serialize() }) { option ->
                             Button(
                                 onClick = {
                                     onGridSizeChange(option)
@@ -501,6 +548,26 @@ fun SettingsScreen(
     if (showPrivacyPolicyDialog) {
         PrivacyPolicyDialog(
             onDismiss = { showPrivacyPolicyDialog = false }
+        )
+    }
+
+    if (showAddPwaDialog) {
+        AddPwaDialog(
+            presets = pwaPresets,
+            onDismiss = { showAddPwaDialog = false },
+            onAddPwa = onAddPwa
+        )
+    }
+
+    if (showManagePwasDialog) {
+        ManagePwasDialog(
+            pwas = installedPwas,
+            onDismiss = { showManagePwasDialog = false },
+            onDeletePwa = onDeletePwa,
+            onAddNewClick = {
+                showManagePwasDialog = false
+                showAddPwaDialog = true
+            }
         )
     }
 
@@ -610,37 +677,17 @@ fun SettingsItemView(
                 SettingType.TOGGLE -> {
                     val isChecked = setting.currentValue as? Boolean ?: false
                     
-                    // Animated colors for smooth transitions
-                    val thumbColor by animateColorAsState(
-                        targetValue = if (isChecked) Color.White else Color.Gray,
-                        animationSpec = tween(durationMillis = 300),
-                        label = "thumbColor"
-                    )
-                    val trackColor by animateColorAsState(
-                        targetValue = if (isChecked) Color.White.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.3f),
-                        animationSpec = tween(durationMillis = 300),
-                        label = "trackColor"
-                    )
-                    
                     Switch(
                         checked = isChecked,
                         onCheckedChange = { newValue ->
-                            // Immediate state update with animation
                             setting.onValueChange?.invoke(newValue)
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = thumbColor,
-                            checkedTrackColor = trackColor,
-                            uncheckedThumbColor = thumbColor,
-                            uncheckedTrackColor = trackColor
-                        ),
-                        modifier = Modifier
-                            .graphicsLayer {
-                                // Enable smooth animations with proper scaling
-                                scaleX = 1.0f
-                                scaleY = 1.0f
-                                alpha = 1.0f
-                            }
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color.White.copy(alpha = 0.3f),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.Gray.copy(alpha = 0.3f)
+                        )
                     )
                 }
                 SettingType.BUTTON -> {
@@ -744,22 +791,24 @@ fun SettingsItemView(
                 }
                 SettingType.SLIDER -> {
                     val currentValue = setting.currentValue as? Int ?: 32
+                    var sliderPosition by remember(currentValue) { mutableFloatStateOf(currentValue.toFloat()) }
                     
                     Column {
                         // Değer gösterimi
                         Text(
-                            text = "${currentValue}dp",
+                            text = "${sliderPosition.toInt()}dp",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             modifier = Modifier.align(Alignment.End)
                         )
                         
-                        // Uzun yatay slider
+                        // Uzun yatay slider with debounce on finish
                         Slider(
-                            value = currentValue.toFloat(),
-                            onValueChange = { newValue ->
-                                setting.onValueChange?.invoke(newValue.toInt())
+                            value = sliderPosition,
+                            onValueChange = { sliderPosition = it },
+                            onValueChangeFinished = {
+                                setting.onValueChange?.invoke(sliderPosition.toInt())
                             },
                             valueRange = 20f..36f, // 20dp - 36dp aralığı
                             steps = 15, // 1dp artışlarla (20,21,22...36)
@@ -828,7 +877,7 @@ fun IconPackSelectionDialog(
                             )
                         }
                     }
-                    items(iconPacks) { iconPack ->
+                    items(iconPacks, key = { it.packageName }) { iconPack ->
                         Button(
                             onClick = {
                                 onIconPackSelected(iconPack.packageName)

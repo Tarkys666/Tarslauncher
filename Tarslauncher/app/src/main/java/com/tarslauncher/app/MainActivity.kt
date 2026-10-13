@@ -1,8 +1,5 @@
 package com.tarslauncher.app
 
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -22,12 +19,10 @@ import com.tarslauncher.app.repository.AppRepository
 import com.tarslauncher.app.ui.LauncherViewModel
 import com.tarslauncher.app.ui.LauncherViewModelFactory
 import com.tarslauncher.app.data.model.*
-import com.tarslauncher.app.data.updater.UpdateManager
 import com.tarslauncher.app.onboarding.OnboardingManager
 import com.tarslauncher.app.onboarding.OnboardingScreen
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
-import com.tarslauncher.app.ui.screens.UpdateDialog
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
 import com.tarslauncher.app.utils.*
 
@@ -48,12 +43,11 @@ class MainActivity : ComponentActivity() {
         )
         
         repository = AppRepository(this)
-        val updateManager = UpdateManager(this)
         val onboardingManager = OnboardingManager(this)
         
         viewModel = ViewModelProvider(
             this, 
-            LauncherViewModelFactory(repository, updateManager)
+            LauncherViewModelFactory(repository)
         )[LauncherViewModel::class.java]
         
         // Initial onboarding check
@@ -125,64 +119,83 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         }
     }
     
-    val scaleFactor = 0.5f
+    val motionScale = remember { StaticMotionDurationScale(0.5f) }
 
-    CompositionLocalProvider(LocalMotionDurationScale provides StaticMotionDurationScale(scaleFactor)) {
+    val onFoldersUpdate = remember(viewModel) { { f: List<FolderInfo> -> viewModel.updateFolders(f) } }
+    val onSettingsClick = remember(viewModel) { { viewModel.setScreen("settings") } }
+    val onBackClick = remember(viewModel) { { viewModel.setScreen("home") } }
+    val onAppClick = remember(context, viewModel) {
+        { appInfo: AppInfo ->
+            viewModel.incrementAppUsage(appInfo)
+            val started = PwaLauncherHelper.launchApp(context, appInfo)
+            if (!started) {
+                Toast.makeText(context, "Uygulama başlatılamadı", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val onAddPwa = remember(viewModel) { { name: String, url: String -> viewModel.addPwa(name, url) } }
+    val onDeletePwa = remember(viewModel) { { pwaId: String -> viewModel.deletePwa(pwaId) } }
+
+    CompositionLocalProvider(LocalMotionDurationScale provides motionScale) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Transparent)
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (uiState.currentScreen == "home") {
-                    HomeScreen(
-                        installedApps = uiState.installedApps,
-                        folders = uiState.folders,
-                        onFoldersUpdate = { viewModel.updateFolders(it) },
-                        onSettingsClick = { viewModel.setScreen("settings") },
-                        onAppClick = { appInfo ->
-                            viewModel.incrementAppUsage(appInfo)
-                            val started = SecurityHelper.safeStartApp(
-                                context = context,
-                                packageName = appInfo.packageName,
-                                activityName = appInfo.activityName
-                            )
-                            if (!started) {
-                                Toast.makeText(context, "Uygulama başlatılamadı", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        showAppDrawer = uiState.showAppDrawer,
-                        gridSize = uiState.gridSize,
-                        iconPackLoader = iconPackLoader,
-                        buttonColor = getButtonColor,
-                        showTarsHeader = uiState.showTarsHeader,
-                        appDrawerIconSize = uiState.appDrawerIconSize,
-                        showClock = uiState.showClock
-                    )
-                } else if (uiState.currentScreen == "settings") {
-                    SettingsScreen(
-                        onBackClick = { viewModel.setScreen("home") },
-                        showAppDrawer = uiState.showAppDrawer,
-                        onShowAppDrawerChange = { viewModel.updateShowAppDrawer(it) },
-                        gridSize = uiState.gridSize,
-                        onGridSizeChange = { viewModel.updateGridSize(it) },
-                        installedIconPacks = uiState.iconPacks,
-                        selectedIconPack = uiState.selectedIconPack,
-                        onIconPackSelected = { viewModel.updateSelectedIconPack(it) },
-                        buttonColorMode = uiState.buttonColorMode,
-                        onButtonColorModeChange = { viewModel.updateButtonColorMode(it) },
-                        showTarsHeader = uiState.showTarsHeader,
-                        onShowTarsHeaderChange = { viewModel.updateShowTarsHeader(it) },
-                        showClock = uiState.showClock,
-                        onShowClockChange = { viewModel.updateShowClock(it) },
-                        appDrawerIconSize = uiState.appDrawerIconSize,
-                        onAppDrawerIconSizeChange = { viewModel.updateAppDrawerIconSize(it) },
-                        appVersion = "1.1.0",
-                        onCheckForUpdates = {
-                            viewModel.checkForUpdates("1.1.0")
+            if (uiState.currentScreen == "home") {
+                HomeScreen(
+                    installedApps = uiState.installedApps,
+                    folders = uiState.folders,
+                    onFoldersUpdate = onFoldersUpdate,
+                    onSettingsClick = onSettingsClick,
+                    onAppClick = onAppClick,
+                    showAppDrawer = uiState.showAppDrawer,
+                    gridSize = uiState.gridSize,
+                    iconPackLoader = iconPackLoader,
+                    buttonColor = getButtonColor,
+                    showTarsHeader = uiState.showTarsHeader,
+                    appDrawerIconSize = uiState.appDrawerIconSize,
+                    showClock = uiState.showClock,
+                    pwaPresets = uiState.pwaPresets,
+                    onAddPwa = onAddPwa,
+                    onDeletePwa = onDeletePwa
+                )
+            } else if (uiState.currentScreen == "settings") {
+                SettingsScreen(
+                    onBackClick = onBackClick,
+                    showAppDrawer = uiState.showAppDrawer,
+                    onShowAppDrawerChange = { viewModel.updateShowAppDrawer(it) },
+                    gridSize = uiState.gridSize,
+                    onGridSizeChange = { viewModel.updateGridSize(it) },
+                    installedIconPacks = uiState.iconPacks,
+                    selectedIconPack = uiState.selectedIconPack,
+                    onIconPackSelected = { viewModel.updateSelectedIconPack(it) },
+                    buttonColorMode = uiState.buttonColorMode,
+                    onButtonColorModeChange = { viewModel.updateButtonColorMode(it) },
+                    showTarsHeader = uiState.showTarsHeader,
+                    onShowTarsHeaderChange = { viewModel.updateShowTarsHeader(it) },
+                    showClock = uiState.showClock,
+                    onShowClockChange = { viewModel.updateShowClock(it) },
+                    appDrawerIconSize = uiState.appDrawerIconSize,
+                    onAppDrawerIconSizeChange = { viewModel.updateAppDrawerIconSize(it) },
+                    appVersion = BuildConfig.VERSION_NAME,
+                    installedPwas = uiState.installedPwas,
+                    pwaPresets = uiState.pwaPresets,
+                    onAddPwa = onAddPwa,
+                    onDeletePwa = onDeletePwa,
+                    isSyncing = uiState.isSyncing,
+                    lastBackupTime = uiState.lastBackupTime,
+                    onBackupToCloud = {
+                        viewModel.backupToCloud { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
-                    )
-                }
+                    },
+                    onRestoreFromCloud = {
+                        viewModel.restoreFromCloud { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
 
             // Onboarding Overlay
@@ -194,14 +207,6 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     }
                 )
             }
-
-            // In-App Update Dialog Modal
-            UpdateDialog(
-                updateState = uiState.updateState,
-                onStartDownload = { info -> viewModel.startUpdateDownload(info) },
-                onInstallApk = { viewModel.installDownloadedApk() },
-                onDismiss = { viewModel.dismissUpdateDialog() }
-            )
         }
     }
 }

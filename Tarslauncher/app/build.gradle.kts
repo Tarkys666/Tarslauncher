@@ -20,6 +20,8 @@ fun generateBuildHash(): String {
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.googleServices)
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 
@@ -27,28 +29,20 @@ android {
     namespace = "com.tarslauncher.app"
     compileSdk = 36
 
-    // --- Release signing configuration ---
+    // Load local.properties for keystore configs
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(FileInputStream(localPropertiesFile))
+    }
+
+    // --- Permanent fixed release signing configuration ---
     signingConfigs {
         create("release") {
-            // Load keystore credentials from local.properties
-            val localProperties = Properties()
-            val localPropertiesFile = rootProject.file("local.properties")
-            if (localPropertiesFile.exists()) {
-                localProperties.load(FileInputStream(localPropertiesFile))
-            }
-
-            // Keystore credentials
-            storePassword = localProperties.getProperty("storePassword")
-            keyAlias = localProperties.getProperty("keyAlias")
-            keyPassword = localProperties.getProperty("keyPassword")
-            
-            // Allow custom keystore path from local.properties
-            val customStorePath = localProperties.getProperty("storeFile")
-            if (customStorePath != null) {
-                storeFile = file(customStorePath)
-            } else {
-                storeFile = rootProject.file("tarslauncher-release.jks")
-            }
+            storeFile = rootProject.file("tarslauncher-release.jks")
+            storePassword = "tarslauncher123"
+            keyAlias = "tarslauncher"
+            keyPassword = "tarslauncher123"
         }
     }
 
@@ -56,8 +50,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.1.0"
+        versionCode = 11
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -78,7 +72,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Explicitly set signing config to our release config
             signingConfig = signingConfigs.getByName("release")
             
             // Additional security settings
@@ -113,9 +106,6 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -149,10 +139,14 @@ dependencies {
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.coil.compose)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.browser)
     implementation(libs.gson)
     
-    // Security
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.firestore.ktx)
+    implementation(libs.firebase.auth.ktx)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

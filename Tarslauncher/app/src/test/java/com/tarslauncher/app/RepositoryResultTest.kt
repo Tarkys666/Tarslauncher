@@ -1,6 +1,6 @@
 package com.tarslauncher.app
 
-import com.tarslauncher.app.data.model.RepositoryResult
+import com.tarslauncher.app.data.model.*
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -1,6 +1,6 @@
 [versions]
-agp = "8.4.1"
-kotlin = "1.9.22"
+agp = "8.7.2"
+kotlin = "2.0.20"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 androidxJunit = "1.1.5"
@@ -8,12 +8,12 @@ espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.8.0"
 activityCompose = "1.9.0"
 composeBom = "2024.05.00"
-constraintlayoutCompose = "1.0.1"
 accompanist = "0.32.0"
-googlePlayBilling = "6.1.0"
-googleSignIn = "20.7.0"
 gson = "2.13.1"
 datastore = "1.1.1"
+browser = "1.8.0"
+googleServices = "4.4.2"
+firebaseBom = "33.5.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,15 +30,17 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 material3 = { group = "androidx.compose.material3", name = "material3" }
-androidx-constraintlayout-compose = { group = "androidx.constraintlayout", name = "constraintlayout-compose", version.ref = "constraintlayoutCompose" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version = "2.5.0" }
 accompanist-drawablepainter = { group = "com.google.accompanist", name = "accompanist-drawablepainter", version = "0.32.0" }
-google-play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "googlePlayBilling" }
-google-signin = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "googleSignIn" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
+firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+googleServices = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 

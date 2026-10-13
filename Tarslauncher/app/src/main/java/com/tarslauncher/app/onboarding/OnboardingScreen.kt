@@ -24,8 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +67,7 @@ fun OnboardingScreen(onOnboardingComplete: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header / Step Indicator
+                val indicatorShape = remember { RoundedCornerShape(2.dp) }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                     horizontalArrangement = Arrangement.Center
@@ -76,7 +77,7 @@ fun OnboardingScreen(onOnboardingComplete: () -> Unit) {
                             modifier = Modifier
                                 .padding(horizontal = 4.dp)
                                 .size(width = if (index == currentStep) 24.dp else 8.dp, height = 4.dp)
-                                .clip(RoundedCornerShape(2.dp))
+                                .clip(indicatorShape)
                                 .background(
                                     if (index == currentStep) Color.White else Color.White.copy(alpha = 0.2f)
                                 )
@@ -204,7 +205,10 @@ fun StepFolderTutorial() {
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .scale(scale)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .background(Color.White.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {

@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -51,6 +50,7 @@ import java.util.*
 import androidx.compose.foundation.gestures.detectTapGestures
 
 import com.tarslauncher.app.data.model.GridSize
+import com.tarslauncher.app.data.model.PwaInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,56 +66,17 @@ fun HomeScreen(
     buttonColor: Color,
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
-    showClock: Boolean
+    showClock: Boolean,
+    pwaPresets: List<PwaInfo> = emptyList(),
+    onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
+    onDeletePwa: (pwaId: String) -> Unit = {}
 ) {
     // Stable state variables to prevent recomposition issues
     var showFolderSelectDialog by remember { mutableStateOf(false) }
+    var showAddPwaDialog by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     
     val context = LocalContext.current
-    
-    // Stable time state with key to prevent unnecessary recompositions
-    var currentTime by remember { mutableStateOf("") }
-    
-    // Update time only when minute changes using ACTION_TIME_TICK
-    DisposableEffect(context) {
-        val receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                currentTime = try {
-                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-                } catch (e: Exception) {
-                    "00:00"
-                }
-            }
-        }
-        
-        currentTime = try {
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        } catch (e: Exception) {
-            "00:00"
-        }
-        
-        val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIME_TICK)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
-        
-        onDispose {
-            try {
-                context.unregisterReceiver(receiver)
-            } catch (e: Exception) {
-                // Ignore
-            }
-        }
-    }
-    
-    // Stable scroll state
-    val scrollState = rememberScrollState()
-
-    // Stable feedback list
-    val feedbackList = remember { mutableStateListOf<String>() }
     
     // Responsive layout calculations
     val configuration = LocalConfiguration.current
@@ -124,7 +85,6 @@ fun HomeScreen(
     
     // Responsive padding values based on screen size
     val clockTopPadding = (screenHeight * 0.08f).coerceAtLeast(32.dp).coerceAtMost(64.dp)
-    val commandBarTopPadding = (screenHeight * 0.18f).coerceAtLeast(120.dp).coerceAtMost(200.dp)
     val commandBarSpacerHeight = (screenHeight * 0.25f).coerceAtLeast(150.dp).coerceAtMost(250.dp)
     
     // Responsive font sizes
@@ -177,8 +137,6 @@ fun HomeScreen(
         ) {
             // Command bar overlay için responsive boş alan
             Spacer(modifier = Modifier.height(commandBarSpacerHeight))
-            
-            // Stable command bar section - overlay olarak konumlandırılacak
             
             // App drawer ile butonlar arasında esnek boşluk - daha küçük weight
             Spacer(modifier = Modifier.weight(0.15f))
@@ -234,25 +192,65 @@ fun HomeScreen(
                         .padding(horizontal = mainPadding), // Responsive padding
                     contentAlignment = Alignment.Center
                 ) {
+                    val onAppLongClickMemo: (AppInfo) -> Unit = remember {
+                        { longClickedApp ->
+                            if (longClickedApp.packageName.isNotBlank()) {
+                                selectedApp = longClickedApp
+                                showFolderSelectDialog = true
+                            }
+                        }
+                    }
+
                     LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = mainPadding), // Responsive padding
                         horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp))
                     ) {
-                        items(installedApps, key = { it.packageName }) { app ->
+                        items(
+                            items = installedApps,
+                            key = { it.packageName },
+                            contentType = { "app_icon" }
+                        ) { app ->
                             AppIconWithoutName(
                                 app = app,
                                 onAppClick = onAppClick,
-                                onAppLongClick = { longClickedApp ->
-                                    if (longClickedApp.packageName.isNotBlank()) {
-                                        selectedApp = longClickedApp
-                                        showFolderSelectDialog = true
-                                    }
-                                },
+                                onAppLongClick = onAppLongClickMemo,
                                 iconPackLoader = iconPackLoader,
                                 iconSize = appDrawerIconSize
                             )
+                        }
+
+                        item(key = "add_pwa_button", contentType = "add_pwa") {
+                            Card(
+                                modifier = Modifier
+                                    .size((appDrawerIconSize + 18).dp)
+                                    .clickable { showAddPwaDialog = true },
+                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(appDrawerIconSize.dp)
+                                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "+",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = (appDrawerIconSize * 0.5f).sp,
+                                            fontWeight = FontWeight.Light
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -267,29 +265,12 @@ fun HomeScreen(
                 .padding(top = clockTopPadding),
             contentAlignment = Alignment.TopCenter
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (showClock) {
-                    Text(
-                        text = currentTime,
-                        color = Color.White,
-                        fontSize = clockFontSize, // Responsive font size
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 2.sp
-                    )
-                }
-
-                if (showTarsHeader) {
-                    Text(
-                        text = "T A R S",
-                        color = Color.White,
-                        fontSize = tarsFontSize,
-                        fontWeight = FontWeight.ExtraLight,
-                        letterSpacing = 4.sp
-                    )
-                }
-            }
+            ClockHeader(
+                showClock = showClock,
+                showTarsHeader = showTarsHeader,
+                clockFontSize = clockFontSize,
+                tarsFontSize = tarsFontSize
+            )
         }
         
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
@@ -308,7 +289,8 @@ fun HomeScreen(
                 onAppClick = onAppClick,
                 gridSize = gridSize,
                 iconPackLoader = iconPackLoader,
-                buttonColor = buttonColor
+                buttonColor = buttonColor,
+                onDeletePwa = onDeletePwa
             )
         }
     }
@@ -352,6 +334,14 @@ fun HomeScreen(
         )
     }
 
+    if (showAddPwaDialog) {
+        AddPwaDialog(
+            presets = pwaPresets,
+            onDismiss = { showAddPwaDialog = false },
+            onAddPwa = onAddPwa
+        )
+    }
+
 }
 
 @Composable
@@ -361,7 +351,8 @@ fun FolderGrid(
     onAppClick: (AppInfo) -> Unit,
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
-    buttonColor: Color
+    buttonColor: Color,
+    onDeletePwa: (String) -> Unit = {}
 ) {
     // Stable state variables with keys to prevent recomposition issues
     var showFolderAppsDialog by remember("folder_dialog_state") { mutableStateOf(false) }
@@ -430,6 +421,7 @@ fun FolderGrid(
                 }
                 onFoldersUpdate(updatedFolders)
             },
+            onDeletePwa = onDeletePwa,
             iconPackLoader = iconPackLoader
         )
     }
@@ -494,32 +486,6 @@ fun FolderItem(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun AppDrawer(
-    installedApps: List<AppInfo>,
-    onAppClick: (AppInfo) -> Unit,
-    onAppLongClick: (AppInfo) -> Unit,
-    iconPackLoader: IconPackLoader?
-) {
-    if (installedApps.isNotEmpty()) {
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(installedApps, key = { it.packageName }) { app ->
-                AppIconWithoutName(
-                    app = app,
-                    onAppClick = onAppClick,
-                    onAppLongClick = onAppLongClick,
-                    iconPackLoader = iconPackLoader
-                )
             }
         }
     }
@@ -698,9 +664,7 @@ fun FolderSelectItem(
                             if (appIndex < folder.apps.size) {
                                 val app = folder.apps[appIndex]
                                 val appIcon = remember(app.packageName, iconPackLoader) {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                    val activityName = launchIntent?.component?.className ?: ""
-                                    val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
+                                    val themedIcon = iconPackLoader?.getIconForApp(app.packageName, app.activityName)
                                     (themedIcon ?: app.icon)?.let {
                                         drawableToBitmap(it).asImageBitmap()
                                     }
@@ -728,6 +692,7 @@ fun FolderAppsDialog(
     onDismiss: () -> Unit,
     onAppClick: (AppInfo) -> Unit,
     onAppRemove: (AppInfo) -> Unit,
+    onDeletePwa: (String) -> Unit = {},
     iconPackLoader: IconPackLoader?
 ) {
     val context = LocalContext.current
@@ -786,13 +751,8 @@ fun FolderAppsDialog(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.padding(bottom = 16.dp)
                     ) {
-                         val context = LocalContext.current
-                         val icon = remember(appToManage!!.packageName) {
-                             try {
-                                 val pm = context.packageManager
-                                 val info = pm.getApplicationInfo(appToManage!!.packageName, 0)
-                                 drawableToBitmap(info.loadIcon(pm)).asImageBitmap()
-                             } catch(e:Exception) { null }
+                         val icon = remember(appToManage?.packageName) {
+                             appToManage?.icon?.let { drawableToBitmap(it).asImageBitmap() }
                          }
                          if (icon != null) {
                              Image(bitmap = icon, contentDescription = null, modifier = Modifier.size(40.dp))
@@ -848,34 +808,93 @@ fun FolderAppsDialog(
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
 
-                        // UNINSTALL
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    appToManage?.let { app ->
-                                        try {
-                                            val intent = Intent(Intent.ACTION_DELETE).apply {
-                                                data = Uri.parse("package:${app.packageName}")
+                        val isCustomPwa = appToManage!!.packageName.startsWith("pwa_") || appToManage!!.pwaId != null
+                        if (isCustomPwa) {
+                            if (!appToManage!!.webUrl.isNullOrBlank()) {
+                                // OPEN IN BROWSER
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            appToManage?.let { app ->
+                                                if (!app.webUrl.isNullOrBlank()) {
+                                                    com.tarslauncher.app.utils.PwaLauncherHelper.launchPwa(context, app.webUrl)
+                                                }
                                             }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                                            showManageDialog = false
+                                            appToManage = null
                                         }
-                                    }
-                                    showManageDialog = false
-                                    appToManage = null
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "OPEN IN BROWSER",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        letterSpacing = 2.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "UNINSTALL",
-                                color = Color(0xFFFF4444),
-                                fontSize = 11.sp,
-                                letterSpacing = 2.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+
+                                HorizontalDivider(
+                                    color = Color.White.copy(alpha = 0.1f),
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                            }
+
+                            // DELETE PWA
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        appToManage?.let { app ->
+                                            val pwaId = app.pwaId ?: app.packageName.removePrefix("pwa_")
+                                            onDeletePwa(pwaId)
+                                        }
+                                        showManageDialog = false
+                                        appToManage = null
+                                    }
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "DELETE PWA",
+                                    color = Color(0xFFFF4444),
+                                    fontSize = 11.sp,
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        } else {
+                            // UNINSTALL
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        appToManage?.let { app ->
+                                            try {
+                                                val intent = Intent(Intent.ACTION_DELETE).apply {
+                                                    data = Uri.parse("package:${app.packageName}")
+                                                }
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                        showManageDialog = false
+                                        appToManage = null
+                                    }
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "UNINSTALL",
+                                    color = Color(0xFFFF4444),
+                                    fontSize = 11.sp,
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
                 }
@@ -933,6 +952,68 @@ fun FolderAppItem(
                     fontSize = 10.sp
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun ClockHeader(
+    showClock: Boolean,
+    showTarsHeader: Boolean,
+    clockFontSize: androidx.compose.ui.unit.TextUnit,
+    tarsFontSize: androidx.compose.ui.unit.TextUnit,
+    modifier: Modifier = Modifier
+) {
+    if (!showClock && !showTarsHeader) return
+
+    val context = LocalContext.current
+    var currentTime by remember { mutableStateOf("00:00") }
+
+    if (showClock) {
+        DisposableEffect(context) {
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            fun updateTime() {
+                currentTime = try { timeFormat.format(Date()) } catch (_: Exception) { "00:00" }
+            }
+            updateTime()
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
+                    updateTime()
+                }
+            }
+            val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIME_TICK)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, filter)
+            }
+            onDispose {
+                try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (showClock) {
+            Text(
+                text = currentTime,
+                color = Color.White,
+                fontSize = clockFontSize,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 2.sp
+            )
+        }
+        if (showTarsHeader) {
+            Text(
+                text = "T A R S",
+                color = Color.White,
+                fontSize = tarsFontSize,
+                fontWeight = FontWeight.ExtraLight,
+                letterSpacing = 4.sp
+            )
         }
     }
 }

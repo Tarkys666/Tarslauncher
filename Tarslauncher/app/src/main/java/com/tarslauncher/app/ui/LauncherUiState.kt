@@ -1,8 +1,9 @@
 package com.tarslauncher.app.ui
 
 import com.tarslauncher.app.data.model.*
-import com.tarslauncher.app.data.updater.UpdateState
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class LauncherUiState(
     val installedApps: List<AppInfo> = emptyList(),
     val iconPacks: List<IconPackInfo> = emptyList(),
@@ -10,9 +11,12 @@ data class LauncherUiState(
     val settings: LauncherSettings = LauncherSettings(),
     val currentScreen: String = "home",
     val showOnboarding: Boolean = false,
+    val installedPwas: List<PwaInfo> = emptyList(),
+    val pwaPresets: List<PwaInfo> = emptyList(),
     val isLoading: Boolean = false,
-    val errorMessage: String? = null,
-    val updateState: UpdateState = UpdateState.Idle
+    val isSyncing: Boolean = false,
+    val lastBackupTime: Long = 0L,
+    val errorMessage: String? = null
 ) {
     // Convenience properties mapping to type-safe settings
     val showAppDrawer: Boolean get() = settings.showAppDrawer
