@@ -38,3 +38,12 @@ data class GitHubAsset(
     @SerializedName("size") val size: Long = 0L,
     @SerializedName("browser_download_url") val downloadUrl: String? = null
 )
+
+data class StaticVersionInfo(
+    @SerializedName("versionCode") val versionCode: Int = 0,
+    @SerializedName("versionName") val versionName: String? = null,
+    @SerializedName("downloadUrl") val downloadUrl: String? = null,
+    @SerializedName("apkSize") val apkSize: Long = 0L,
+    @SerializedName("releaseNotes") val releaseNotes: String? = null
+)
+

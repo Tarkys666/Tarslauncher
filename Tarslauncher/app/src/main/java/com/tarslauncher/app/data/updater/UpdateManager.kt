@@ -25,7 +25,57 @@ class UpdateManager(
     private val gson = Gson()
 
     suspend fun checkForUpdate(currentVersion: String): Result<UpdateInfo> = withContext(Dispatchers.IO) {
-        try {
+        // 1. Try static version.json first (Immune to GitHub 60 req/hr API rate limits and 403)
+        val staticResult = checkViaStaticVersion(currentVersion)
+        if (staticResult.isSuccess) {
+            return@withContext staticResult
+        }
+
+        // 2. Fallback to GitHub Releases API
+        checkViaGitHubApi(currentVersion)
+    }
+
+    private fun checkViaStaticVersion(currentVersion: String): Result<UpdateInfo> {
+        return try {
+            val rawUrl = "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json"
+            val url = URL(rawUrl)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8000
+                readTimeout = 10000
+                setRequestProperty("User-Agent", "TarsLauncher-Android")
+            }
+
+            if (connection.responseCode !in 200..299) {
+                return Result.failure(Exception("Static version HTTP ${connection.responseCode}"))
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val staticInfo = gson.fromJson(body, StaticVersionInfo::class.java)
+                ?: return Result.failure(Exception("Statik sürüm bilgisi ayrıştırılamadı."))
+
+            val tagName = staticInfo.versionName.orEmpty().removePrefix("v").removePrefix("V").trim()
+            if (tagName.isEmpty() || staticInfo.downloadUrl.isNullOrEmpty()) {
+                return Result.failure(Exception("Geçersiz statik sürüm."))
+            }
+
+            val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
+            Result.success(
+                UpdateInfo(
+                    versionName = tagName,
+                    releaseNotes = staticInfo.releaseNotes.orEmpty(),
+                    downloadUrl = staticInfo.downloadUrl,
+                    apkSize = staticInfo.apkSize,
+                    hasUpdate = isNewer
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun checkViaGitHubApi(currentVersion: String): Result<UpdateInfo> {
+        return try {
             val apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
             val url = URL(apiUrl)
             val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -38,25 +88,25 @@ class UpdateManager(
 
             val responseCode = connection.responseCode
             if (responseCode == 404) {
-                return@withContext Result.failure(Exception("Henüz yayınlanmış bir sürüm bulunamadı."))
+                return Result.failure(Exception("Henüz yayınlanmış bir sürüm bulunamadı."))
             }
             if (responseCode !in 200..299) {
-                return@withContext Result.failure(Exception("GitHub API hatası: HTTP $responseCode"))
+                return Result.failure(Exception("GitHub API hatası: HTTP $responseCode"))
             }
 
             val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
             val release = gson.fromJson(responseBody, GitHubRelease::class.java)
-                ?: return@withContext Result.failure(Exception("Sürüm bilgisi ayrıştırılamadı."))
+                ?: return Result.failure(Exception("Sürüm bilgisi ayrıştırılamadı."))
 
             val tagName = release.tagName.orEmpty().removePrefix("v").removePrefix("V").trim()
             if (tagName.isEmpty()) {
-                return@withContext Result.failure(Exception("Geçersiz sürüm numarası."))
+                return Result.failure(Exception("Geçersiz sürüm numarası."))
             }
 
             // Find APK asset
             val apkAsset = release.assets?.firstOrNull { 
                 it.name.orEmpty().endsWith(".apk", ignoreCase = true) 
-            } ?: return@withContext Result.failure(Exception("Sürüm içinde APK dosyası bulunamadı."))
+            } ?: return Result.failure(Exception("Sürüm içinde APK dosyası bulunamadı."))
 
             val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
             val updateInfo = UpdateInfo(
