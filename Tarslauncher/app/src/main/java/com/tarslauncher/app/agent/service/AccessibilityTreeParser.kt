@@ -36,8 +36,9 @@ class AccessibilityTreeParser {
             if (node == null || depth > 18 || elementCounter >= 100) return false
 
             val isVisible = node.isVisibleToUser
-            val text = node.text?.toString()?.trim()?.take(70).orEmpty()
-            val contentDesc = node.contentDescription?.toString()?.trim()?.take(70).orEmpty()
+            val isPassword = node.isPassword
+            val text = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(70).orEmpty()
+            val contentDesc = if (isPassword) "" else node.contentDescription?.toString()?.trim()?.take(70).orEmpty()
             val isClickable = node.isClickable
             val isEditable = node.isEditable
             val isScrollable = node.isScrollable

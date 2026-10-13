@@ -24,7 +24,14 @@ class SafetyGate {
         "hesabı sil"
     )
 
-    private val sensitiveAppKeywords = listOf("bank", "cüzdan", "wallet", "binance", "paribu", "btcturk")
+    private val sensitiveAppKeywords = listOf(
+        "bank", "cüzdan", "wallet", "binance", "paribu", "btcturk",
+        "ayar", "setting", "installer", "packageinstaller", "play store", "google play"
+    )
+
+    private val confirmationButtons = setOf(
+        "onayla", "devam", "tamam", "evet", "ileri", "öde", "sil", "kabul"
+    )
 
     private val nonWordRegex = Regex("""[^\p{L}\p{Nd}]+""")
 
@@ -39,14 +46,19 @@ class SafetyGate {
             is AgentAction.OpenApp -> {
                 val lower = action.appName.lowercase()
                 if (sensitiveAppKeywords.any { lower.contains(it) }) {
-                    return true to "Güvenlik Uyarısı: '${action.appName}' finansal/hassas bir uygulama. Açılması onaylanıyor mu?"
+                    return true to "Güvenlik Uyarısı: '${action.appName}' hassas/sistem uygulaması. Açılması onaylanıyor mu?"
                 }
             }
 
             is AgentAction.Tap -> {
                 val matchedLine = findTargetLine(action.targetId, screenContent)
-                if (matchedLine != null && isSensitive(matchedLine)) {
-                    return true to "Güvenlik Uyarısı: '${matchedLine.trim()}' öğesine dokunulmak isteniyor. Devam edilsin mi?"
+                val lineIsSensitive = matchedLine != null && isSensitive(matchedLine)
+                val screenIsSensitive = isSensitive(screenContent)
+                val isConfirmButton = matchedLine != null && confirmationButtons.any { matchedLine.contains(it, ignoreCase = true) }
+
+                if (lineIsSensitive || (screenIsSensitive && isConfirmButton)) {
+                    val desc = matchedLine?.trim() ?: "Hedef ID: ${action.targetId}"
+                    return true to "Güvenlik Uyarısı: '$desc' işlemine dokunulmak isteniyor. Devam edilsin mi?"
                 }
             }
 

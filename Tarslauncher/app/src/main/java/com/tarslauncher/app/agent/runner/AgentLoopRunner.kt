@@ -52,7 +52,10 @@ class AgentLoopRunner(
 
             // 1. Ekranı dökümle (Untrusted Screen State ile Prompt Injection izolasyonu)
             val screenDump = service.captureScreenDump()
-            val sanitizedScreenContent = "<untrusted_screen_state>\n${screenDump.formattedContent}\n</untrusted_screen_state>"
+            val sanitizedRawDump = screenDump.formattedContent
+                .replace("</untrusted_screen_state>", "[FILTERED_TAG]")
+                .replace("<untrusted_screen_state>", "[FILTERED_TAG]")
+            val sanitizedScreenContent = "<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
             history.add(ChatMessage(ChatMessage.Role.USER, "EKRAN:\n$sanitizedScreenContent"))
 
             // Bağlam boyutunu sınırla: son 10 mesajı tut

@@ -23,8 +23,9 @@ import java.util.Locale
  */
 class AgentDatasetCollector(private val context: Context) {
 
-    private val datasetFile: File = File(context.filesDir, "tars_agent_dataset.jsonl")
-    private val sessionLogFile: File = File(context.filesDir, "tars_agent_session.log")
+    private val datasetDir: File = File(context.filesDir, "datasets").apply { mkdirs() }
+    private val datasetFile: File = File(datasetDir, "tars_agent_dataset.jsonl")
+    private val sessionLogFile: File = File(datasetDir, "tars_agent_session.log")
     private val gson = Gson()
     private val mutex = Mutex()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
