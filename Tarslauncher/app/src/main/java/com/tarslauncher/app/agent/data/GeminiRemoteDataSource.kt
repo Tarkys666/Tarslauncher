@@ -12,14 +12,15 @@ import kotlinx.coroutines.withContext
 
 class GeminiRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val preferredModel: String = "gemini-2.5-flash"
+    private val preferredModel: String = "gemini-flash-latest"
 ) {
 
     private val candidateModels = listOf(
         preferredModel,
+        "gemini-flash-latest",
         "gemini-2.5-flash",
         "gemini-1.5-flash",
-        "gemini-2.0-flash"
+        "gemini-1.5-flash-latest"
     ).distinct()
 
     suspend fun generateContent(

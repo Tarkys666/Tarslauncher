@@ -1,7 +1,7 @@
 {
-  "versionCode": 17,
-  "versionName": "1.3.4",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.3.4/TarsLauncher-release.apk",
+  "versionCode": 18,
+  "versionName": "1.3.5",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.3.5/TarsLauncher-release.apk",
   "apkSize": 11034888,
-  "releaseNotes": "Google Gemini 2.0 emekli edildiği için güncel Gemini 2.5 Flash ve Gemini 1.5 Flash otomatik geçiş modeli eklendi."
+  "releaseNotes": "En güncel dinamik 'gemini-flash-latest' modeli ve otomatik çoklu model geçiş zinciri eklendi."
 }
