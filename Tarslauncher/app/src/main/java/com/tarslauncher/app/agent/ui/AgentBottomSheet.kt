@@ -200,7 +200,7 @@ fun AgentBottomSheet(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "GEMINI 2.0 FLASH API KEY",
+                            text = "GEMINI FLASH API KEY",
                             fontSize = 10.sp,
                             color = Color.White.copy(alpha = 0.6f),
                             fontFamily = FontFamily.Monospace,

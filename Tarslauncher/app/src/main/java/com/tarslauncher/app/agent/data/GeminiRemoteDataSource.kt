@@ -12,51 +12,86 @@ import kotlinx.coroutines.withContext
 
 class GeminiRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val modelName: String = "gemini-2.0-flash"
+    private val preferredModel: String = "gemini-2.5-flash"
 ) {
+
+    private val candidateModels = listOf(
+        preferredModel,
+        "gemini-2.5-flash",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash"
+    ).distinct()
 
     suspend fun generateContent(
         systemInstruction: String,
         messages: List<ChatMessage>
     ): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val key = apiKeyProvider().trim()
-            if (key.isBlank()) {
-                throw IllegalStateException("Gemini API anahtarı girilmemiş. Lütfen ayarlardan anahtarınızı ekleyin.")
-            }
-
-            val requestBody = buildRequestBody(systemInstruction, messages)
-            val endpoint = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent")
-
-            val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("x-goog-api-key", key)
-            }
-
-            connection.outputStream.use { output ->
-                output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
-            }
-
-            val statusCode = connection.responseCode
-            val inputStream: InputStream = if (statusCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
-            }
-
-            val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-
-            if (statusCode !in 200..299) {
-                throw RuntimeException("Gemini API Hatası ($statusCode): ${responseText.take(250)}")
-            }
-
-            extractTextFromResponse(responseText)
+        val key = apiKeyProvider().trim()
+        if (key.isBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("Gemini API anahtarı girilmemiş. Lütfen ayarlardan anahtarınızı ekleyin.")
+            )
         }
+
+        val requestBody = buildRequestBody(systemInstruction, messages)
+        var lastError: Throwable? = null
+
+        for (model in candidateModels) {
+            val callResult = runCatching {
+                val endpoint = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+
+                val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-goog-api-key", key)
+                }
+
+                connection.outputStream.use { output ->
+                    output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
+                }
+
+                val statusCode = connection.responseCode
+                val inputStream: InputStream = if (statusCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
+                }
+
+                val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+
+                if (statusCode !in 200..299) {
+                    throw RuntimeException("Gemini API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
+                }
+
+                extractTextFromResponse(responseText)
+            }
+
+            if (callResult.isSuccess) {
+                return@withContext callResult
+            }
+
+            val error = callResult.exceptionOrNull()
+            lastError = error
+            val msg = error?.message.orEmpty()
+
+            // If error is 404 (model not found / deprecated / no longer available), try next candidate
+            val isModelUnavailable = msg.contains("404") ||
+                msg.contains("not found", ignoreCase = true) ||
+                msg.contains("no longer available", ignoreCase = true) ||
+                msg.contains("deprecated", ignoreCase = true) ||
+                msg.contains("unsupported", ignoreCase = true)
+
+            if (!isModelUnavailable) {
+                // If it's an authentication error (401/403) or quota error (429), stop immediately
+                break
+            }
+        }
+
+        Result.failure(lastError ?: RuntimeException("Hiçbir Gemini modeliyle bağlantı kurulamadı."))
     }
 
     private fun buildRequestBody(
