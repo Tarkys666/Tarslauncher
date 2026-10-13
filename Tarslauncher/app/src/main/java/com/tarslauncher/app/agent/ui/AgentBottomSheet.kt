@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -406,16 +407,25 @@ fun AgentBottomSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (tempApiKey.isNotBlank()) {
-                                Text(
-                                    text = "[CLEAR]",
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.clickable { tempApiKey = "" }
-                                )
-                            } else {
-                                Spacer(modifier = Modifier.width(1.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (tempApiKey.isNotBlank()) {
+                                    Text(
+                                        text = "[CLEAR KEY]",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier.clickable { tempApiKey = "" }
+                                    )
+                                }
+                                if (uiState.datasetCount > 0) {
+                                    Text(
+                                        text = "[RESET DATASET]",
+                                        color = Color(0xFFFF5252).copy(alpha = 0.7f),
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier.clickable { viewModel.clearDataset(context) }
+                                    )
+                                }
                             }
 
                             Box(
@@ -555,7 +565,7 @@ fun AgentBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Terminal Output Header
+            // Terminal Output Header with 1-Tap Copy & Dataset Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -569,19 +579,54 @@ fun AgentBottomSheet(
                     fontFamily = FontFamily.Monospace
                 )
 
-                if (uiState.isRunning) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (uiState.isRunning) {
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier.size(10.dp),
                             strokeWidth = 1.5.dp
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
+                    // 1-Tap COPY ALL LOGS BUTTON
+                    Box(
+                        modifier = Modifier
+                            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
+                            .clickable {
+                                val logText = uiState.logs.joinToString("\n")
+                                if (logText.isNotBlank()) {
+                                    clipboardManager.setText(AnnotatedString(logText))
+                                    Toast.makeText(context, "Loglar Panoya Kopyalandı", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Kopyalanacak log yok", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
                         Text(
-                            text = "PROCESSING",
+                            text = "[COPY LOGS]",
                             color = Color.White,
                             fontSize = 9.sp,
-                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // 1-Tap EXPORT TRAINING DATASET (.JSONL)
+                    Box(
+                        modifier = Modifier
+                            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
+                            .clickable {
+                                viewModel.exportDataset(context)
+                            }
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "[DATASET: ${uiState.datasetCount}]",
+                            color = Color.White,
+                            fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace
                         )
                     }

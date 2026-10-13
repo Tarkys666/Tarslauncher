@@ -12,6 +12,7 @@ data class AgentUiState(
     val groqModel: String = "qwen/qwen3.8-27b",
     val taskInput: String = "",
     val logs: List<String> = emptyList(),
+    val datasetCount: Int = 0,
     val pendingConfirmation: AgentEvent.AwaitingConfirmation? = null,
     val pendingQuestion: String? = null,
     val finalMessage: String? = null,

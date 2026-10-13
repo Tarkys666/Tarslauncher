@@ -1,6 +1,7 @@
 package com.tarslauncher.app.agent.runner
 
 import android.content.Context
+import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
 import com.tarslauncher.app.agent.domain.model.AgentAction
 import com.tarslauncher.app.agent.domain.model.AgentEvent
@@ -16,11 +17,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
+import java.util.UUID
 
 class AgentLoopRunner(
     private val context: Context,
     private val agentBrain: AgentBrain,
     private val safetyGate: SafetyGate = SafetyGate(),
+    private val datasetCollector: AgentDatasetCollector = AgentDatasetCollector(context),
     private val maxSteps: Int = 25
 ) {
 
@@ -33,6 +36,7 @@ class AgentLoopRunner(
             return@flow
         }
 
+        val sessionId = "tars_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
         emit(AgentEvent.StatusLog("Hedef başlatılıyor: \"$userGoal\""))
 
         val history = mutableListOf<ChatMessage>()
@@ -68,20 +72,60 @@ class AgentLoopRunner(
 
             if (decisionResult.isFailure) {
                 val errorMsg = decisionResult.exceptionOrNull()?.message ?: "Bilinmeyen model hatası"
+                datasetCollector.recordStep(
+                    sessionId = sessionId,
+                    step = step,
+                    goal = userGoal,
+                    systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                    screenDump = screenDump.formattedContent,
+                    rawModelResponse = "HATA: $errorMsg",
+                    parsedAction = null,
+                    executionResult = "Model Hatası: $errorMsg",
+                    provider = "UNKNOWN",
+                    model = "UNKNOWN",
+                    status = "FAILED"
+                )
                 emit(AgentEvent.Failure("Yapay zeka yanıt veremedi: $errorMsg"))
                 return@flow
             }
 
-            val action = decisionResult.getOrThrow()
+            val decision = decisionResult.getOrThrow()
+            val action = decision.action
             emit(AgentEvent.StatusLog("Adım $step: ${action.thought}"))
 
             // 3. Sonlandırma veya Kullanıcıya soru kontrolleri
             when (action) {
                 is AgentAction.Done -> {
+                    datasetCollector.recordStep(
+                        sessionId = sessionId,
+                        step = step,
+                        goal = userGoal,
+                        systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                        screenDump = screenDump.formattedContent,
+                        rawModelResponse = decision.rawResponse,
+                        parsedAction = action,
+                        executionResult = action.summary,
+                        provider = decision.provider,
+                        model = decision.model,
+                        status = "COMPLETED"
+                    )
                     emit(AgentEvent.Success(action.summary))
                     return@flow
                 }
                 is AgentAction.AskUser -> {
+                    datasetCollector.recordStep(
+                        sessionId = sessionId,
+                        step = step,
+                        goal = userGoal,
+                        systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                        screenDump = screenDump.formattedContent,
+                        rawModelResponse = decision.rawResponse,
+                        parsedAction = action,
+                        executionResult = action.question,
+                        provider = decision.provider,
+                        model = decision.model,
+                        status = "ASK_USER"
+                    )
                     emit(AgentEvent.QuestionToUser(action.question))
                     return@flow
                 }
@@ -98,6 +142,19 @@ class AgentLoopRunner(
             previousActionSignature = currentSignature
 
             if (identicalActionRepeatCount >= 3) {
+                datasetCollector.recordStep(
+                    sessionId = sessionId,
+                    step = step,
+                    goal = userGoal,
+                    systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                    screenDump = screenDump.formattedContent,
+                    rawModelResponse = decision.rawResponse,
+                    parsedAction = action,
+                    executionResult = "Ajan aynı eylemde takıldı ($currentSignature)",
+                    provider = decision.provider,
+                    model = decision.model,
+                    status = "FAILED_STUCK"
+                )
                 emit(AgentEvent.Failure("Ajan aynı eylemde takıldı ($currentSignature). Güvenlik sebebiyle durduruldu."))
                 return@flow
             }
@@ -110,6 +167,19 @@ class AgentLoopRunner(
 
                 val isApproved = confirmationDeferred.await()
                 if (!isApproved) {
+                    datasetCollector.recordStep(
+                        sessionId = sessionId,
+                        step = step,
+                        goal = userGoal,
+                        systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                        screenDump = screenDump.formattedContent,
+                        rawModelResponse = decision.rawResponse,
+                        parsedAction = action,
+                        executionResult = "Hassas işlem kullanıcı tarafından reddedildi",
+                        provider = decision.provider,
+                        model = decision.model,
+                        status = "REJECTED_BY_USER"
+                    )
                     emit(AgentEvent.Failure("Hassas işlem kullanıcı tarafından reddedildi."))
                     return@flow
                 }
@@ -122,6 +192,21 @@ class AgentLoopRunner(
             // Model hafızasına eylem ve sonucunu ekle
             history.add(ChatMessage(ChatMessage.Role.MODEL, "DÜŞÜNCE: ${action.thought}\nEYLEM: ${action.toOperationalSignature()}"))
             history.add(ChatMessage(ChatMessage.Role.USER, "SONUÇ: $executionSummary"))
+
+            // Trajectory Dataset'ine adımı kaydet
+            datasetCollector.recordStep(
+                sessionId = sessionId,
+                step = step,
+                goal = userGoal,
+                systemPrompt = AgentPromptProvider.SYSTEM_PROMPT,
+                screenDump = screenDump.formattedContent,
+                rawModelResponse = decision.rawResponse,
+                parsedAction = action,
+                executionResult = executionSummary,
+                provider = decision.provider,
+                model = decision.model,
+                status = "IN_PROGRESS"
+            )
 
             // Sayfanın yüklenmesi ve animasyonların oturması için bekleme payı
             delay(900L)

@@ -1,6 +1,9 @@
 package com.tarslauncher.app.agent.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -11,6 +14,7 @@ import com.tarslauncher.app.agent.data.GeminiAgentBrain
 import com.tarslauncher.app.agent.data.GeminiRemoteDataSource
 import com.tarslauncher.app.agent.data.GroqAgentBrain
 import com.tarslauncher.app.agent.data.GroqRemoteDataSource
+import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
 import com.tarslauncher.app.agent.domain.model.AgentEvent
 import com.tarslauncher.app.agent.runner.AgentLoopRunner
@@ -24,7 +28,8 @@ import kotlinx.coroutines.launch
 
 class AgentViewModel(
     application: Application,
-    private val preferences: AgentPreferences = AgentPreferences(application)
+    private val preferences: AgentPreferences = AgentPreferences(application),
+    private val datasetCollector: AgentDatasetCollector = AgentDatasetCollector(application)
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
@@ -45,6 +50,14 @@ class AgentViewModel(
             TarsAccessibilityService.isServiceActive.collect { active ->
                 _uiState.update { it.copy(isServiceActive = active) }
             }
+        }
+        refreshDatasetCount()
+    }
+
+    fun refreshDatasetCount() {
+        viewModelScope.launch {
+            val count = datasetCollector.getDatasetCount()
+            _uiState.update { it.copy(datasetCount = count) }
         }
     }
 
@@ -131,10 +144,14 @@ class AgentViewModel(
                     apiKeyProvider = { _uiState.value.groqApiKey },
                     preferredModelProvider = { _uiState.value.groqModel }
                 )
-                GroqAgentBrain(remoteDataSource)
+                GroqAgentBrain(remoteDataSource, modelName = state.groqModel)
             }
         }
-        val runner = AgentLoopRunner(getApplication(), brain)
+        val runner = AgentLoopRunner(
+            context = getApplication(),
+            agentBrain = brain,
+            datasetCollector = datasetCollector
+        )
 
         currentExecutionJob = viewModelScope.launch {
             runner.runAgent(trimmedTask).collect { event ->
@@ -161,10 +178,33 @@ class AgentViewModel(
         _uiState.update { it.copy(pendingConfirmation = null) }
     }
 
+    fun exportDataset(context: Context) {
+        val intent = datasetCollector.createExportIntent(context)
+        if (intent != null) {
+            val chooser = Intent.createChooser(intent, "TARS Eğitim Veri Setini Paylaş (.jsonl)").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } else {
+            Toast.makeText(context, "Henüz toplanmış bir eğitim verisi yok.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun clearDataset(context: Context) {
+        viewModelScope.launch {
+            val cleared = datasetCollector.clearDataset()
+            refreshDatasetCount()
+            if (cleared) {
+                Toast.makeText(context, "Eğitim veri seti sıfırlandı.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun handleAgentEvent(event: AgentEvent) {
         when (event) {
             is AgentEvent.StatusLog -> {
                 _uiState.update { it.copy(logs = it.logs + event.message) }
+                refreshDatasetCount()
             }
             is AgentEvent.AwaitingConfirmation -> {
                 _uiState.update { it.copy(pendingConfirmation = event) }
@@ -176,6 +216,7 @@ class AgentViewModel(
                         logs = it.logs + "> [Soru] ${event.question}"
                     )
                 }
+                refreshDatasetCount()
             }
             is AgentEvent.Success -> {
                 _uiState.update {
@@ -186,6 +227,7 @@ class AgentViewModel(
                         logs = it.logs + "> [Tamamlandı] ${event.summary}"
                     )
                 }
+                refreshDatasetCount()
             }
             is AgentEvent.Failure -> {
                 _uiState.update {
@@ -196,6 +238,7 @@ class AgentViewModel(
                         logs = it.logs + "> [Hata] ${event.errorReason}"
                     )
                 }
+                refreshDatasetCount()
             }
         }
     }
