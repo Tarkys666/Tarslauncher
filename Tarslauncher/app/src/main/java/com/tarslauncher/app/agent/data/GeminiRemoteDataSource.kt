@@ -76,7 +76,15 @@ class GeminiRemoteDataSource(
             }
 
             val error = callResult.exceptionOrNull()
-            lastError = error
+            lastError = when (error) {
+                is java.net.UnknownHostException -> {
+                    RuntimeException("İnternet / DNS Hatası: Google Gemini sunucusuna bağlanılamadı. Lütfen internetinizi veya WARP/VPN bağlantınızı kapatıp tekrar deneyin.")
+                }
+                is java.net.SocketTimeoutException -> {
+                    RuntimeException("Zaman Aşımı: Google sunucusuna bağlanırken süre aşıldı. Lütfen internet hızınızı kontrol edin.")
+                }
+                else -> error
+            }
             val msg = error?.message.orEmpty()
 
             // If error is 404 (model not found / deprecated / no longer available), try next candidate
