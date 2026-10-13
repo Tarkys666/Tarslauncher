@@ -9,6 +9,8 @@ import androidx.core.content.FileProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -76,6 +78,7 @@ class UpdateManager(
         versionName: String,
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        var targetFile: File? = null
         try {
             val updatesDir = File(context.cacheDir, "updates").apply {
                 if (!exists()) mkdirs()
@@ -88,7 +91,8 @@ class UpdateManager(
                 }
             }
 
-            val targetFile = File(updatesDir, "TarsLauncher-v$versionName.apk")
+            val file = File(updatesDir, "TarsLauncher-v$versionName.apk")
+            targetFile = file
 
             // Download supporting redirects (GitHub redirects releases to S3/CDN)
             var currentUrl = downloadUrl
@@ -103,6 +107,8 @@ class UpdateManager(
                     readTimeout = 30000
                     instanceFollowRedirects = false
                     setRequestProperty("User-Agent", "TarsLauncher-Android")
+                    setRequestProperty("Accept-Encoding", "identity")
+                    setRequestProperty("Connection", "keep-alive")
                 }
 
                 val code = connection.responseCode
@@ -124,26 +130,38 @@ class UpdateManager(
             val totalLength = connection.contentLengthLong
             var downloaded = 0L
 
-            val inputStream: InputStream = connection.inputStream
-            val outputStream = FileOutputStream(targetFile)
-
-            val buffer = ByteArray(8 * 1024)
+            val bufferSize = 64 * 1024 // 64 KB high-throughput buffer to maximize socket I/O efficiency
+            val buffer = ByteArray(bufferSize)
             var bytesRead: Int
 
-            inputStream.use { input ->
-                outputStream.use { output ->
+            var lastProgressTime = 0L
+            val throttleIntervalMs = 120L // Throttles progress emission to prevent Compose UI recomposition bottleneck
+
+            BufferedInputStream(connection.inputStream, bufferSize).use { input ->
+                BufferedOutputStream(FileOutputStream(file), bufferSize).use { output ->
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
                         downloaded += bytesRead
-                        val progress = if (totalLength > 0) downloaded.toFloat() / totalLength else 0f
-                        onProgress(progress, downloaded, totalLength)
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastProgressTime >= throttleIntervalMs || (totalLength > 0 && downloaded >= totalLength)) {
+                            lastProgressTime = now
+                            val progress = if (totalLength > 0) downloaded.toFloat() / totalLength else 0f
+                            onProgress(progress, downloaded, totalLength)
+                        }
                     }
                     output.flush()
                 }
             }
 
-            Result.success(targetFile)
+            // Ensure terminal 100% progress event is emitted
+            if (totalLength > 0 && downloaded >= totalLength) {
+                onProgress(1f, totalLength, totalLength)
+            }
+
+            Result.success(file)
         } catch (e: Exception) {
+            targetFile?.let { if (it.exists()) it.delete() }
             Result.failure(e)
         }
     }

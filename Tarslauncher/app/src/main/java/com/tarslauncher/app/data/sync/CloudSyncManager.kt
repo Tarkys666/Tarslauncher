@@ -74,7 +74,7 @@ class CloudSyncManager(
             val backupPayload = hashMapOf<String, Any?>(
                 "updatedAt" to now,
                 "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}",
-                "appVersion" to "1.1.0",
+                "appVersion" to com.tarslauncher.app.BuildConfig.VERSION_NAME,
                 "foldersJson" to foldersJson,
                 "pwasJson" to pwasJson,
                 "usageStatsJson" to usageStatsJson,
