@@ -12,14 +12,14 @@ import kotlinx.coroutines.withContext
 
 class GeminiRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val preferredModel: String = "gemini-flash-latest"
+    private val preferredModel: String = "gemini-1.5-flash"
 ) {
 
     private val candidateModels = listOf(
         preferredModel,
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
         "gemini-1.5-flash",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
         "gemini-1.5-flash-latest"
     ).distinct()
 
@@ -76,28 +76,34 @@ class GeminiRemoteDataSource(
             }
 
             val error = callResult.exceptionOrNull()
-            lastError = when (error) {
-                is java.net.UnknownHostException -> {
-                    RuntimeException("İnternet / DNS Hatası: Google Gemini sunucusuna bağlanılamadı. Lütfen internetinizi veya WARP/VPN bağlantınızı kapatıp tekrar deneyin.")
+            val msg = error?.message.orEmpty()
+
+            lastError = when {
+                error is java.net.UnknownHostException -> {
+                    RuntimeException("İnternet / DNS Hatası: Google Gemini sunucusuna bağlanılamadı. Lütfen internetinizi veya WARP/VPN bağlantınızı kontrol edin.")
                 }
-                is java.net.SocketTimeoutException -> {
+                error is java.net.SocketTimeoutException -> {
                     RuntimeException("Zaman Aşımı: Google sunucusuna bağlanırken süre aşıldı. Lütfen internet hızınızı kontrol edin.")
+                }
+                msg.contains("503") || msg.contains("high demand", ignoreCase = true) || msg.contains("UNAVAILABLE", ignoreCase = true) -> {
+                    RuntimeException("Google Gemini sunucuları yoğunluk yaşıyor (503 High Demand). Lütfen birkaç saniye sonra tekrar deneyin.")
                 }
                 else -> error
             }
-            val msg = error?.message.orEmpty()
 
-            // If error is 404 (model not found / deprecated / no longer available), try next candidate
-            val isModelUnavailable = msg.contains("404") ||
-                msg.contains("not found", ignoreCase = true) ||
-                msg.contains("no longer available", ignoreCase = true) ||
-                msg.contains("deprecated", ignoreCase = true) ||
-                msg.contains("unsupported", ignoreCase = true)
+            // Fatal unrecoverable errors: Device is offline or API key is strictly invalid
+            val isFatal = error is java.net.UnknownHostException ||
+                msg.contains("API_KEY_INVALID", ignoreCase = true) ||
+                msg.contains("API key not valid", ignoreCase = true) ||
+                (msg.contains("400") && msg.contains("API_KEY", ignoreCase = true)) ||
+                (msg.contains("401") || (msg.contains("403") && msg.contains("PERMISSION_DENIED", ignoreCase = true)))
 
-            if (!isModelUnavailable) {
-                // If it's an authentication error (401/403) or quota error (429), stop immediately
+            if (isFatal) {
+                // If API key is invalid or device is offline, stop immediately
                 break
             }
+            // For 503 (high demand), 404 (model not found), 429 (rate limit), 500 (server error),
+            // loop automatically continues to the next candidate model
         }
 
         Result.failure(lastError ?: RuntimeException("Hiçbir Gemini modeliyle bağlantı kurulamadı."))
