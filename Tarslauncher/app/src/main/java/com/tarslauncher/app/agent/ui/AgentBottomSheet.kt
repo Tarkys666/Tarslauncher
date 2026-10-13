@@ -2,8 +2,8 @@ package com.tarslauncher.app.agent.ui
 
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,13 +16,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -58,10 +63,13 @@ fun AgentBottomSheet(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var showKeyEditor by remember { mutableStateOf(uiState.apiKey.isBlank()) }
     var tempApiKey by remember(uiState.apiKey) { mutableStateOf(uiState.apiKey) }
+
+    val mainScrollState = rememberScrollState()
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -82,6 +90,9 @@ fun AgentBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(mainScrollState)
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
         ) {
@@ -177,7 +188,7 @@ fun AgentBottomSheet(
                 }
             }
 
-            // Key Editor (Expandable Monochrome Card)
+            // Key Editor (Expandable Monochrome Card with 1-Tap Paste)
             AnimatedVisibility(visible = showKeyEditor) {
                 Card(
                     modifier = Modifier
@@ -195,46 +206,97 @@ fun AgentBottomSheet(
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = tempApiKey,
-                            onValueChange = { tempApiKey = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = {
-                                Text(
-                                    "AIzaSy...",
-                                    color = Color.White.copy(alpha = 0.3f),
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                color = Color.White,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp
-                            ),
-                            shape = RoundedCornerShape(3.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.White,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-                                focusedContainerColor = Color.Black,
-                                unfocusedContainerColor = Color.Black
-                            )
-                        )
                         Spacer(modifier = Modifier.height(8.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            OutlinedTextField(
+                                value = tempApiKey,
+                                onValueChange = { tempApiKey = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = {
+                                    Text(
+                                        "AIzaSy...",
+                                        color = Color.White.copy(alpha = 0.3f),
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp
+                                ),
+                                shape = RoundedCornerShape(3.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.White,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                    focusedContainerColor = Color.Black,
+                                    unfocusedContainerColor = Color.Black
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // 1-Tap PASTE Button for API Key
+                            Box(
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .border(BorderStroke(0.8.dp, Color.White), RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        val clipText = clipboardManager.getText()?.text
+                                        if (!clipText.isNullOrBlank()) {
+                                            tempApiKey = clipText.trim()
+                                            Toast.makeText(context, "API Key Panodan Yapıştırıldı", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Pano boş!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "PASTE",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (tempApiKey.isNotBlank()) {
+                                Text(
+                                    text = "[CLEAR]",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.clickable { tempApiKey = "" }
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.width(1.dp))
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .background(Color.White, RoundedCornerShape(3.dp))
                                     .clickable {
                                         viewModel.onSaveApiKey(tempApiKey)
                                         showKeyEditor = false
+                                        Toast.makeText(context, "API Key Kaydedildi", Toast.LENGTH_SHORT).show()
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    .padding(horizontal = 16.dp, vertical = 7.dp)
                             ) {
                                 Text(
                                     text = "SAVE KEY",
@@ -296,7 +358,33 @@ fun AgentBottomSheet(
                     )
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Paste button for prompt if empty
+                if (uiState.taskInput.isBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .height(52.dp)
+                            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(4.dp))
+                            .clickable {
+                                val clipText = clipboardManager.getText()?.text
+                                if (!clipText.isNullOrBlank()) {
+                                    viewModel.onTaskInputChanged(clipText.trim())
+                                }
+                            }
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "PASTE",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
 
                 Box(
                     modifier = Modifier
@@ -380,7 +468,7 @@ fun AgentBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(170.dp)
+                    .height(160.dp)
                     .background(Color.Black, RoundedCornerShape(4.dp))
                     .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.2f)), RoundedCornerShape(4.dp))
                     .padding(10.dp)
