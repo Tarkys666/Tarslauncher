@@ -1,6 +1,7 @@
 package com.tarslauncher.app.ui
 
 import com.tarslauncher.app.data.model.*
+import com.tarslauncher.app.data.updater.UpdateState
 import androidx.compose.runtime.Immutable
 
 @Immutable
@@ -16,6 +17,7 @@ data class LauncherUiState(
     val isLoading: Boolean = false,
     val isSyncing: Boolean = false,
     val lastBackupTime: Long = 0L,
+    val updateState: UpdateState = UpdateState.Idle,
     val errorMessage: String? = null
 ) {
     // Convenience properties mapping to type-safe settings

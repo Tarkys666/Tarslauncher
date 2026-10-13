@@ -32,6 +32,8 @@
 -keep class com.tarslauncher.app.data.model.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.model.** { *; }
 -keep class com.tarslauncher.app.data.sync.** { *; }
+-keep class com.tarslauncher.app.data.updater.** { *; }
+-keepclassmembers class com.tarslauncher.app.data.updater.** { *; }
 
 # Firebase
 -keep class com.google.firebase.** { *; }

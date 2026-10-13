@@ -97,7 +97,8 @@ fun SettingsScreen(
     isSyncing: Boolean = false,
     lastBackupTime: Long = 0L,
     onBackupToCloud: () -> Unit = {},
-    onRestoreFromCloud: () -> Unit = {}
+    onRestoreFromCloud: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -270,6 +271,12 @@ fun SettingsScreen(
                     title = "Version",
                     description = "Version $appVersion",
                     type = SettingType.INFO
+                ),
+                SettingsItem.Setting(
+                    title = "Check for Updates",
+                    description = "Check GitHub for new releases",
+                    type = SettingType.BUTTON,
+                    onClick = onCheckForUpdates
                 ),
                 SettingsItem.Setting(
                     title = "Privacy Policy",

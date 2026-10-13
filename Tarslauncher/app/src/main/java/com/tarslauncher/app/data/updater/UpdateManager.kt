@@ -1,0 +1,210 @@
+package com.tarslauncher.app.data.updater
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+
+class UpdateManager(
+    private val context: Context,
+    private val repoOwner: String = "Tarkys666",
+    private val repoName: String = "Tarslauncher"
+) {
+    private val gson = Gson()
+
+    suspend fun checkForUpdate(currentVersion: String): Result<UpdateInfo> = withContext(Dispatchers.IO) {
+        try {
+            val apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+            val url = URL(apiUrl)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 15000
+                setRequestProperty("Accept", "application/vnd.github.v3+json")
+                setRequestProperty("User-Agent", "TarsLauncher-Android")
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode == 404) {
+                return@withContext Result.failure(Exception("Henüz yayınlanmış bir sürüm bulunamadı."))
+            }
+            if (responseCode !in 200..299) {
+                return@withContext Result.failure(Exception("GitHub API hatası: HTTP $responseCode"))
+            }
+
+            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+            val release = gson.fromJson(responseBody, GitHubRelease::class.java)
+                ?: return@withContext Result.failure(Exception("Sürüm bilgisi ayrıştırılamadı."))
+
+            val tagName = release.tagName.orEmpty().removePrefix("v").removePrefix("V").trim()
+            if (tagName.isEmpty()) {
+                return@withContext Result.failure(Exception("Geçersiz sürüm numarası."))
+            }
+
+            // Find APK asset
+            val apkAsset = release.assets?.firstOrNull { 
+                it.name.orEmpty().endsWith(".apk", ignoreCase = true) 
+            } ?: return@withContext Result.failure(Exception("Sürüm içinde APK dosyası bulunamadı."))
+
+            val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
+            val updateInfo = UpdateInfo(
+                versionName = tagName,
+                releaseNotes = release.body.orEmpty(),
+                downloadUrl = apkAsset.downloadUrl.orEmpty(),
+                apkSize = apkAsset.size,
+                hasUpdate = isNewer
+            )
+
+            Result.success(updateInfo)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun downloadApk(
+        downloadUrl: String,
+        versionName: String,
+        onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val updatesDir = File(context.cacheDir, "updates").apply {
+                if (!exists()) mkdirs()
+            }
+
+            // Clean up any old downloaded APK files
+            updatesDir.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".apk")) {
+                    file.delete()
+                }
+            }
+
+            val targetFile = File(updatesDir, "TarsLauncher-v$versionName.apk")
+
+            // Download supporting redirects (GitHub redirects releases to S3/CDN)
+            var currentUrl = downloadUrl
+            var connection: HttpURLConnection
+            var redirects = 0
+            val maxRedirects = 6
+
+            while (true) {
+                val url = URL(currentUrl)
+                connection = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "TarsLauncher-Android")
+                }
+
+                val code = connection.responseCode
+                if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
+                    val location = connection.getHeaderField("Location")
+                        ?: return@withContext Result.failure(Exception("İndirme yönlendirme adresi bulunamadı."))
+                    currentUrl = location
+                    redirects++
+                    if (redirects > maxRedirects) {
+                        return@withContext Result.failure(Exception("Çok fazla yönlendirme hatası."))
+                    }
+                } else if (code in 200..299) {
+                    break
+                } else {
+                    return@withContext Result.failure(Exception("APK indirme hatası: HTTP $code"))
+                }
+            }
+
+            val totalLength = connection.contentLengthLong
+            var downloaded = 0L
+
+            val inputStream: InputStream = connection.inputStream
+            val outputStream = FileOutputStream(targetFile)
+
+            val buffer = ByteArray(8 * 1024)
+            var bytesRead: Int
+
+            inputStream.use { input ->
+                outputStream.use { output ->
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        downloaded += bytesRead
+                        val progress = if (totalLength > 0) downloaded.toFloat() / totalLength else 0f
+                        onProgress(progress, downloaded, totalLength)
+                    }
+                    output.flush()
+                }
+            }
+
+            Result.success(targetFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun canInstallPackages(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true
+        }
+    }
+
+    fun openInstallPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    fun installApk(apkFile: File): Result<Unit> {
+        return try {
+            if (!apkFile.exists()) {
+                return Result.failure(Exception("Yüklenecek APK dosyası bulunamadı."))
+            }
+
+            val contentUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(installIntent)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    companion object {
+        fun isNewerVersion(remoteVersion: String, currentVersion: String): Boolean {
+            val cleanRemote = remoteVersion.removePrefix("v").removePrefix("V").substringBefore("-").trim()
+            val cleanCurrent = currentVersion.removePrefix("v").removePrefix("V").substringBefore("-").trim()
+
+            val remoteParts = cleanRemote.split(".").mapNotNull { it.toIntOrNull() }
+            val currentParts = cleanCurrent.split(".").mapNotNull { it.toIntOrNull() }
+
+            val maxLen = maxOf(remoteParts.size, currentParts.size)
+            for (i in 0 until maxLen) {
+                val r = remoteParts.getOrElse(i) { 0 }
+                val c = currentParts.getOrElse(i) { 0 }
+                if (r > c) return true
+                if (r < c) return false
+            }
+            return false
+        }
+    }
+}

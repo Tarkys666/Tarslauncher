@@ -259,6 +259,54 @@ class LauncherViewModel(
     fun setShowOnboarding(show: Boolean) {
         _uiState.update { it.copy(showOnboarding = show) }
     }
+
+    val updateManager get() = appRepository.updateManager
+
+    fun checkForUpdates(currentVersion: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Checking) }
+            val result = appRepository.updateManager.checkForUpdate(currentVersion)
+            result.onSuccess { updateInfo ->
+                if (updateInfo.hasUpdate) {
+                    _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Available(updateInfo)) }
+                } else {
+                    _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.UpToDate) }
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "Güncelleme kontrolü başarısız oldu."))
+                }
+            }
+        }
+    }
+
+    fun startUpdateDownload(info: com.tarslauncher.app.data.updater.UpdateInfo) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Downloading(progress = 0f, bytesDownloaded = 0L, totalBytes = info.apkSize))
+            }
+            val result = appRepository.updateManager.downloadApk(
+                downloadUrl = info.downloadUrl,
+                versionName = info.versionName,
+                onProgress = { progress, downloaded, total ->
+                    _uiState.update {
+                        it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Downloading(progress, downloaded, total))
+                    }
+                }
+            )
+            result.onSuccess { file ->
+                _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.ReadyToInstall(file)) }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "İndirme başarısız oldu."))
+                }
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Idle) }
+    }
 }
 
 class LauncherViewModelFactory(

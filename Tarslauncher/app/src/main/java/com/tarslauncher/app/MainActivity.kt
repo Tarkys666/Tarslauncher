@@ -23,6 +23,7 @@ import com.tarslauncher.app.onboarding.OnboardingManager
 import com.tarslauncher.app.onboarding.OnboardingScreen
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
+import com.tarslauncher.app.ui.screens.UpdateDialog
 import com.tarslauncher.app.ui.theme.TarslauncherTheme
 import com.tarslauncher.app.utils.*
 
@@ -194,6 +195,9 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                         viewModel.restoreFromCloud { _, msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
+                    },
+                    onCheckForUpdates = {
+                        viewModel.checkForUpdates(BuildConfig.VERSION_NAME)
                     }
                 )
             }
@@ -207,6 +211,26 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     }
                 )
             }
+
+            // In-App System Update Dialog
+            UpdateDialog(
+                updateState = uiState.updateState,
+                currentVersion = BuildConfig.VERSION_NAME,
+                onDismiss = { viewModel.dismissUpdateDialog() },
+                onStartDownload = { info -> viewModel.startUpdateDownload(info) },
+                onInstall = { file ->
+                    if (!viewModel.updateManager.canInstallPackages()) {
+                        Toast.makeText(context, "Lütfen harici kaynaklardan uygulama yükleme iznini açın.", Toast.LENGTH_LONG).show()
+                        viewModel.updateManager.openInstallPermissionSettings()
+                    } else {
+                        val result = viewModel.updateManager.installApk(file)
+                        if (result.isFailure) {
+                            Toast.makeText(context, "Yükleme başlatılamadı: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                onRetry = { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
+            )
         }
     }
 }
