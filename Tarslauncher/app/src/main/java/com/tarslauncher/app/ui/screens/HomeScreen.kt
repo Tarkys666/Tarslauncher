@@ -1,6 +1,11 @@
 package com.tarslauncher.app.ui.screens
 
+import android.app.Application
 import android.content.Intent
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import com.tarslauncher.app.agent.ui.AgentBottomSheet
+import com.tarslauncher.app.agent.ui.AgentViewModel
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
@@ -75,6 +80,7 @@ fun HomeScreen(
     var showFolderSelectDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
+    var showAgentSheet by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
     
@@ -169,6 +175,32 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = "SETTINGS",
+                        color = Color.White,
+                        fontSize = buttonFontSize,
+                        fontWeight = FontWeight.ExtraLight,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .padding(bottom = (screenHeight * 0.01f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
+                        .height(buttonHeight)
+                        .background(buttonColor, RoundedCornerShape(4.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            showAgentSheet = true
+                        }
+                        .padding(
+                            horizontal = (screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp),
+                            vertical = (screenHeight * 0.005f).coerceAtLeast(3.dp).coerceAtMost(6.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "AGENT",
                         color = Color.White,
                         fontSize = buttonFontSize,
                         fontWeight = FontWeight.ExtraLight,
@@ -339,6 +371,21 @@ fun HomeScreen(
             presets = pwaPresets,
             onDismiss = { showAddPwaDialog = false },
             onAddPwa = onAddPwa
+        )
+    }
+
+    if (showAgentSheet) {
+        val agentViewModel = remember(context) {
+            val owner = context as? ViewModelStoreOwner
+            if (owner != null) {
+                ViewModelProvider(owner, AgentViewModel.Factory(context.applicationContext as Application))[AgentViewModel::class.java]
+            } else {
+                AgentViewModel(context.applicationContext as Application)
+            }
+        }
+        AgentBottomSheet(
+            viewModel = agentViewModel,
+            onDismissRequest = { showAgentSheet = false }
         )
     }
 

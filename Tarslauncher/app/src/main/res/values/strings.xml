@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Tarslauncher</string>
+    <string name="agent_service_description">TARS Ajan, ekranı analiz ederek verdiğiniz görevleri otomatik olarak yürütür.</string>
 </resources>

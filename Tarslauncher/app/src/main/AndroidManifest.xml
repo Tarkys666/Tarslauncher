@@ -78,6 +78,20 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- TARS AI Phone Agent Accessibility Service -->
+        <service
+            android:name=".agent.service.TarsAccessibilityService"
+            android:exported="false"
+            android:label="TARS Agent"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
     </application>
 
 </manifest>
