@@ -3,8 +3,12 @@ package com.tarslauncher.app.agent.ui
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,30 +22,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,9 +42,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -76,85 +66,160 @@ fun AgentBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = Color(0xFF141419),
-        contentColor = Color.White
+        containerColor = Color.Black,
+        contentColor = Color.White,
+        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(36.dp)
+                    .height(2.dp)
+                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(1.dp))
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
         ) {
-            // Header
+            // Header: TARS Monologue Title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.SmartToy,
-                        contentDescription = "TARS Agent",
-                        tint = Color(0xFF7C4DFF),
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
+                Column {
                     Text(
-                        text = "TARS Asistan",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        text = "TARS // SYSTEM AGENT",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 2.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "AUTONOMOUS SUB-ROUTINE EXECUTION",
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = 9.sp,
+                        letterSpacing = 1.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
 
-                IconButton(onClick = { showKeyEditor = !showKeyEditor }) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = "API Anahtarı",
-                        tint = if (uiState.apiKey.isNotBlank()) Color(0xFF81C784) else Color(0xFFFFB74D)
+                // Minimalist Key Toggle Box
+                Box(
+                    modifier = Modifier
+                        .border(
+                            BorderStroke(
+                                0.8.dp,
+                                if (uiState.apiKey.isNotBlank()) Color.White.copy(alpha = 0.4f) else Color.White
+                            ),
+                            RoundedCornerShape(3.dp)
+                        )
+                        .clickable { showKeyEditor = !showKeyEditor }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = if (uiState.apiKey.isNotBlank()) "[KEY: SET]" else "[KEY: EMPTY]",
+                        color = if (uiState.apiKey.isNotBlank()) Color.White.copy(alpha = 0.8f) else Color.White,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Service status banner
-            ServiceStatusChip(
-                isActive = uiState.isServiceActive,
-                onClick = {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Service Status Monochromatic Banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(
+                            0.8.dp,
+                            if (uiState.isServiceActive) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.6f)
+                        ),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .background(Color(0xFF080808))
+                    .clickable {
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
                     }
-                    context.startActivity(intent)
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (uiState.isServiceActive) "ACCESSIBILITY // ACTIVE" else "ACCESSIBILITY // OFFLINE",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = if (uiState.isServiceActive) "[LINKED]" else "[TAP TO ENGAGE]",
+                        color = if (uiState.isServiceActive) Color.White.copy(alpha = 0.5f) else Color.White,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = if (uiState.isServiceActive) FontWeight.Normal else FontWeight.Bold
+                    )
                 }
-            )
+            }
 
-            // API key editor section
+            // Key Editor (Expandable Monochrome Card)
             AnimatedVisibility(visible = showKeyEditor) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E28)),
-                    shape = RoundedCornerShape(12.dp)
+                        .padding(top = 10.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A)),
+                    border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.25f))
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "Google AI Studio API Anahtarı (Gemini 2.0 Flash - Ücretsiz)",
-                            fontSize = 12.sp,
-                            color = Color(0xFFB0B0C0)
+                            text = "GEMINI 2.0 FLASH API KEY",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = tempApiKey,
                             onValueChange = { tempApiKey = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("AIzaSy...", color = Color.Gray, fontSize = 13.sp) },
+                            placeholder = {
+                                Text(
+                                    "AIzaSy...",
+                                    color = Color.White.copy(alpha = 0.3f),
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            },
                             singleLine = true,
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp
+                            ),
+                            shape = RoundedCornerShape(3.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF7C4DFF),
-                                unfocusedBorderColor = Color(0xFF333344),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                focusedContainerColor = Color.Black,
+                                unfocusedContainerColor = Color.Black
                             )
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -162,36 +227,44 @@ fun AgentBottomSheet(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            Button(
-                                onClick = {
-                                    viewModel.onSaveApiKey(tempApiKey)
-                                    showKeyEditor = false
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF)),
-                                shape = RoundedCornerShape(8.dp)
+                            Box(
+                                modifier = Modifier
+                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        viewModel.onSaveApiKey(tempApiKey)
+                                        showKeyEditor = false
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
                             ) {
-                                Text("Kaydet", fontSize = 12.sp)
+                                Text(
+                                    text = "SAVE KEY",
+                                    color = Color.Black,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 1.sp
+                                )
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Quick suggestion chips
+            // Quick Directives
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                QuickChip("Ayarları Aç") { viewModel.onTaskInputChanged("Ayarlar uygulamasını aç") }
-                QuickChip("Alarm Kur") { viewModel.onTaskInputChanged("Saat uygulamasında 07:30 alarmı kur") }
-                QuickChip("YouTube Aç") { viewModel.onTaskInputChanged("YouTube'u aç") }
+                TarsDirectiveChip("[SETTINGS]") { viewModel.onTaskInputChanged("Ayarlar uygulamasını aç") }
+                TarsDirectiveChip("[SET ALARM]") { viewModel.onTaskInputChanged("Saat uygulamasında 07:30 alarmı kur") }
+                TarsDirectiveChip("[YOUTUBE]") { viewModel.onTaskInputChanged("YouTube'u aç") }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Task input and action buttons
+            // Command Input + Execute / Abort Box
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -200,50 +273,103 @@ fun AgentBottomSheet(
                     value = uiState.taskInput,
                     onValueChange = { viewModel.onTaskInputChanged(it) },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Telefonda ne yapmamı istersiniz?", color = Color.Gray, fontSize = 13.sp) },
+                    placeholder = {
+                        Text(
+                            "ENTER DIRECTIVE...",
+                            color = Color.White.copy(alpha = 0.3f),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    },
                     maxLines = 2,
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    ),
+                    shape = RoundedCornerShape(4.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF7C4DFF),
-                        unfocusedBorderColor = Color(0xFF333344),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        focusedBorderColor = Color.White,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+                        focusedContainerColor = Color.Black,
+                        unfocusedContainerColor = Color.Black
                     )
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                if (uiState.isRunning) {
-                    IconButton(
-                        onClick = { viewModel.stopTask() },
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFFE53935), RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(imageVector = Icons.Default.Stop, contentDescription = "Durdur", tint = Color.White)
-                    }
-                } else {
-                    IconButton(
-                        onClick = { viewModel.startTask() },
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFF7C4DFF), RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Başlat", tint = Color.White)
-                    }
+                Box(
+                    modifier = Modifier
+                        .height(52.dp)
+                        .background(
+                            if (uiState.isRunning) Color.Transparent else Color.White,
+                            RoundedCornerShape(4.dp)
+                        )
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                if (uiState.isRunning) Color(0xFFFF5252) else Color.White
+                            ),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            if (uiState.isRunning) viewModel.stopTask() else viewModel.startTask()
+                        }
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (uiState.isRunning) "ABORT" else "EXEC",
+                        color = if (uiState.isRunning) Color(0xFFFF5252) else Color.Black,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Live execution terminal log
-            Text(
-                text = "İşlem Günlüğü",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF9E9EAF)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+            // Terminal Output Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "LOG // STREAM_OUTPUT",
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    letterSpacing = 1.sp,
+                    fontFamily = FontFamily.Monospace
+                )
 
+                if (uiState.isRunning) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "PROCESSING",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Monochrome Terminal Window
             val listState = rememberLazyListState()
             LaunchedEffect(uiState.logs.size) {
                 if (uiState.logs.isNotEmpty()) {
@@ -254,119 +380,129 @@ fun AgentBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .background(Color(0xFF0C0C10), RoundedCornerShape(10.dp))
-                    .padding(8.dp)
+                    .height(170.dp)
+                    .background(Color.Black, RoundedCornerShape(4.dp))
+                    .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.2f)), RoundedCornerShape(4.dp))
+                    .padding(10.dp)
             ) {
                 if (uiState.logs.isEmpty()) {
                     Text(
-                        text = "Bir komut verin ve Başlat'a dokunun...",
-                        color = Color(0xFF555566),
-                        fontSize = 12.sp,
+                        text = "AWAITING USER INSTRUCTION...",
+                        color = Color.White.copy(alpha = 0.25f),
+                        fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp,
                         modifier = Modifier.align(Alignment.Center)
                     )
                 } else {
                     LazyColumn(state = listState) {
                         items(uiState.logs) { log ->
                             Text(
-                                text = "› $log",
-                                color = if (log.contains("Hata", ignoreCase = true) || log.contains("BAŞARISIZ")) {
-                                    Color(0xFFFF8A80)
-                                } else if (log.contains("Başarılı", ignoreCase = true) || log.contains("TAMAMLANDI")) {
-                                    Color(0xFFB9F6CA)
-                                } else {
-                                    Color(0xFFD1D1DF)
+                                text = "> $log",
+                                color = when {
+                                    log.contains("HATA", ignoreCase = true) || log.contains("BAŞARISIZ", ignoreCase = true) -> Color(0xFFFF5252)
+                                    log.contains("BAŞARILI", ignoreCase = true) || log.contains("TAMAMLANDI", ignoreCase = true) -> Color.White
+                                    else -> Color.White.copy(alpha = 0.75f)
                                 },
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 2.dp)
+                                lineHeight = 15.sp,
+                                modifier = Modifier.padding(vertical = 1.5.dp)
                             )
                         }
                     }
                 }
+            }
+        }
 
-                if (uiState.isRunning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.TopEnd),
-                        strokeWidth = 2.dp,
-                        color = Color(0xFF7C4DFF)
-                    )
+        // Monochromatic Security Clearance Dialog
+        uiState.pendingConfirmation?.let { confirmation ->
+            BasicAlertDialog(
+                onDismissRequest = { viewModel.onConfirmDecision(false) }
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Black),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "SECURITY // CLEARANCE REQUIRED",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = confirmation.prompt,
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
+                                    .clickable { viewModel.onConfirmDecision(false) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "DENY",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .clickable { viewModel.onConfirmDecision(true) }
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "CONFIRM",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Sensitive action confirmation dialog
-        uiState.pendingConfirmation?.let { confirmation ->
-            AlertDialog(
-                onDismissRequest = { viewModel.onConfirmDecision(false) },
-                title = { Text("Kullanıcı Onayı Gerekli", color = Color.White) },
-                text = { Text(confirmation.prompt, color = Color(0xFFD0D0E0)) },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.onConfirmDecision(true) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
-                    ) {
-                        Text("Onayla")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.onConfirmDecision(false) }) {
-                        Text("Reddet", color = Color.LightGray)
-                    }
-                },
-                containerColor = Color(0xFF1E1E28)
-            )
         }
     }
 }
 
 @Composable
-private fun ServiceStatusChip(
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isActive) Color(0xFF1B2E1E) else Color(0xFF332015))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Warning,
-            contentDescription = null,
-            tint = if (isActive) Color(0xFF81C784) else Color(0xFFFFB74D),
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = if (isActive) "Erişilebilirlik Servisi Aktif" else "Erişilebilirlik Kapalı — Açmak için dokunun",
-            color = if (isActive) Color(0xFFC8E6C9) else Color(0xFFFFE0B2),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun QuickChip(
+private fun TarsDirectiveChip(
     label: String,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        shape = CircleShape,
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB0B0C5)),
-        modifier = Modifier.height(30.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+    Box(
+        modifier = Modifier
+            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.25f)), RoundedCornerShape(3.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {
-        Text(text = label, fontSize = 11.sp)
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.5.sp
+        )
     }
 }
