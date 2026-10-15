@@ -28,12 +28,22 @@ class UpdateManager(
     suspend fun checkForUpdate(currentVersion: String): Result<UpdateInfo> = withContext(Dispatchers.IO) {
         // 1. Try static version.json first (Immune to GitHub 60 req/hr API rate limits and 403)
         val staticResult = checkViaStaticVersion(currentVersion)
+        if (staticResult.isSuccess && staticResult.getOrNull()?.hasUpdate == true) {
+            return@withContext staticResult
+        }
+
+        // 2. Fallback to GitHub Releases API if static version does not show an update or failed
+        val apiResult = checkViaGitHubApi(currentVersion)
+        if (apiResult.isSuccess) {
+            return@withContext apiResult
+        }
+
+        // 3. If GitHub API failed (e.g. rate limit), return static result if available
         if (staticResult.isSuccess) {
             return@withContext staticResult
         }
 
-        // 2. Fallback to GitHub Releases API
-        checkViaGitHubApi(currentVersion)
+        apiResult
     }
 
     private fun checkViaStaticVersion(currentVersion: String): Result<UpdateInfo> {

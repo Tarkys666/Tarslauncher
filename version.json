@@ -1,7 +1,7 @@
 {
-  "versionCode": 18,
-  "versionName": "1.3.5",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.3.5/TarsLauncher-release.apk",
-  "apkSize": 11034888,
-  "releaseNotes": "En güncel dinamik 'gemini-flash-latest' modeli ve otomatik çoklu model geçiş zinciri eklendi."
+  "versionCode": 23,
+  "versionName": "1.5.1",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.5.1/TarsLauncher-release.apk",
+  "apkSize": 11067700,
+  "releaseNotes": "TARS Agent: Mini-planlama ve canlı checklist, gelişmiş timer/bekleme (30s+), oturumlar arası hafıza, Markdown skill kütüphanesi ve Firebase Firestore otomatik telemetrisi."
 }
