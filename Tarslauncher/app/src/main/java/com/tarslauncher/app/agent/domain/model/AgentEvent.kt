@@ -18,4 +18,8 @@ sealed interface AgentEvent {
     data class Success(val summary: String) : AgentEvent
     
     data class Failure(val errorReason: String) : AgentEvent
+
+    data class PlanCreated(val plan: AgentPlan) : AgentEvent
+
+    data class PlanStepUpdated(val plan: AgentPlan) : AgentEvent
 }

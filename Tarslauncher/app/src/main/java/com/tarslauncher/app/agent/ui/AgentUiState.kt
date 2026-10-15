@@ -2,6 +2,7 @@ package com.tarslauncher.app.agent.ui
 
 import com.tarslauncher.app.agent.data.AgentProvider
 import com.tarslauncher.app.agent.domain.model.AgentEvent
+import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 data class AgentUiState(
     val isServiceActive: Boolean = false,
@@ -10,7 +11,10 @@ data class AgentUiState(
     val geminiApiKey: String = "",
     val groqApiKey: String = "",
     val groqModel: String = "qwen/qwen3.8-27b",
+    val supabaseUrl: String = "",
+    val supabaseAnonKey: String = "",
     val taskInput: String = "",
+    val currentPlan: AgentPlan? = null,
     val logs: List<String> = emptyList(),
     val datasetCount: Int = 0,
     val pendingConfirmation: AgentEvent.AwaitingConfirmation? = null,

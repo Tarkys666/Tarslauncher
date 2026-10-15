@@ -58,19 +58,27 @@ class GestureDispatcher(
         return service.dispatchGesture(gesture, null, null)
     }
 
-    fun typeText(node: AccessibilityNodeInfo?, text: String): Boolean {
+    fun typeText(node: AccessibilityNodeInfo?, text: String, pressEnter: Boolean = true): Boolean {
         if (node == null) return false
 
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        val succeeded = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-        if (succeeded) return true
+        var succeeded = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        if (!succeeded) {
+            // Fallback: Click first to engage software keyboard focus, then retry set text
+            performClick(node)
+            succeeded = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        }
 
-        // Fallback: Click first to engage software keyboard focus, then retry set text
-        performClick(node)
-        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        if (succeeded && pressEnter) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            }
+        }
+
+        return succeeded
     }
 
     fun performScroll(scrollDown: Boolean): Boolean {

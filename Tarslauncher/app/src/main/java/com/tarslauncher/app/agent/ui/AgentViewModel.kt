@@ -38,6 +38,8 @@ class AgentViewModel(
             geminiApiKey = preferences.getGeminiApiKey(),
             groqApiKey = preferences.getGroqApiKey(),
             groqModel = preferences.getGroqModel(),
+            supabaseUrl = preferences.getSupabaseUrl(),
+            supabaseAnonKey = preferences.getSupabaseAnonKey(),
             isServiceActive = TarsAccessibilityService.isConnected()
         )
     )
@@ -90,6 +92,14 @@ class AgentViewModel(
         _uiState.update { it.copy(groqModel = trimmed) }
     }
 
+    fun onSaveSupabaseConfig(url: String, key: String) {
+        val trimmedUrl = url.trim()
+        val trimmedKey = key.trim()
+        preferences.setSupabaseUrl(trimmedUrl)
+        preferences.setSupabaseAnonKey(trimmedKey)
+        _uiState.update { it.copy(supabaseUrl = trimmedUrl, supabaseAnonKey = trimmedKey) }
+    }
+
     fun startTask(userTask: String = _uiState.value.taskInput) {
         val trimmedTask = userTask.trim()
         if (trimmedTask.isBlank()) return
@@ -128,6 +138,7 @@ class AgentViewModel(
                 isRunning = true,
                 isFailure = false,
                 finalMessage = null,
+                currentPlan = null,
                 pendingQuestion = null,
                 pendingConfirmation = null,
                 logs = listOf("Başlatılıyor [${state.provider.name}]...")
@@ -217,6 +228,12 @@ class AgentViewModel(
                     )
                 }
                 refreshDatasetCount()
+            }
+            is AgentEvent.PlanCreated -> {
+                _uiState.update { it.copy(currentPlan = event.plan) }
+            }
+            is AgentEvent.PlanStepUpdated -> {
+                _uiState.update { it.copy(currentPlan = event.plan) }
             }
             is AgentEvent.Success -> {
                 _uiState.update {

@@ -46,11 +46,29 @@ class AgentPreferences(context: Context) {
         prefs.edit().putString(KEY_GROQ_MODEL, model.trim()).apply()
     }
 
+    fun getSupabaseUrl(): String {
+        return prefs.getString(KEY_SUPABASE_URL, "").orEmpty()
+    }
+
+    fun setSupabaseUrl(url: String) {
+        prefs.edit().putString(KEY_SUPABASE_URL, url.trim()).apply()
+    }
+
+    fun getSupabaseAnonKey(): String {
+        return prefs.getString(KEY_SUPABASE_ANON_KEY, "").orEmpty()
+    }
+
+    fun setSupabaseAnonKey(key: String) {
+        prefs.edit().putString(KEY_SUPABASE_ANON_KEY, key.trim()).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "tars_agent_prefs"
         private const val KEY_PROVIDER = "agent_provider"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_GROQ_API_KEY = "groq_api_key"
         private const val KEY_GROQ_MODEL = "groq_model"
+        private const val KEY_SUPABASE_URL = "supabase_url"
+        private const val KEY_SUPABASE_ANON_KEY = "supabase_anon_key"
     }
 }

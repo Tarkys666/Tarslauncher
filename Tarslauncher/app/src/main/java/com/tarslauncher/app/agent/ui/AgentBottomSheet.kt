@@ -71,6 +71,8 @@ fun AgentBottomSheet(
     var showKeyEditor by remember { mutableStateOf(uiState.activeApiKey.isBlank()) }
     var tempApiKey by remember(uiState.activeApiKey, uiState.provider) { mutableStateOf(uiState.activeApiKey) }
     var tempGroqModel by remember(uiState.groqModel) { mutableStateOf(uiState.groqModel) }
+    var tempSupabaseUrl by remember(uiState.supabaseUrl) { mutableStateOf(uiState.supabaseUrl) }
+    var tempSupabaseKey by remember(uiState.supabaseAnonKey) { mutableStateOf(uiState.supabaseAnonKey) }
 
     val mainScrollState = rememberScrollState()
 
@@ -402,6 +404,98 @@ fun AgentBottomSheet(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // Firebase Firestore Status Badge
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(3.dp))
+                                .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.2f)), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "CLOUD TELEMETRY",
+                                fontSize = 9.sp,
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "[FIREBASE FIRESTORE: ACTIVE]",
+                                fontSize = 9.sp,
+                                color = Color(0xFF69F0AE),
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "SUPABASE TELEMETRY & CLOUD SYNC (OPSİYONEL)",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = tempSupabaseUrl,
+                            onValueChange = { tempSupabaseUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text(
+                                    "https://xxxx.supabase.co",
+                                    color = Color.White.copy(alpha = 0.3f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp
+                            ),
+                            shape = RoundedCornerShape(3.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                focusedContainerColor = Color.Black,
+                                unfocusedContainerColor = Color.Black
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = tempSupabaseKey,
+                            onValueChange = { tempSupabaseKey = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text(
+                                    "Supabase Anon / Public Key...",
+                                    color = Color.White.copy(alpha = 0.3f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp
+                            ),
+                            shape = RoundedCornerShape(3.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                focusedContainerColor = Color.Black,
+                                unfocusedContainerColor = Color.Black
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -436,6 +530,7 @@ fun AgentBottomSheet(
                                         if (uiState.provider == AgentProvider.GROQ) {
                                             viewModel.onSaveGroqModel(tempGroqModel)
                                         }
+                                        viewModel.onSaveSupabaseConfig(tempSupabaseUrl, tempSupabaseKey)
                                         showKeyEditor = false
                                         Toast.makeText(context, "Yapılandırma Kaydedildi", Toast.LENGTH_SHORT).show()
                                     }
@@ -564,6 +659,76 @@ fun AgentBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Mini-Plan Checklist UI
+            uiState.currentPlan?.let { plan ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(4.dp))
+                        .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.2f)), RoundedCornerShape(4.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "PLAN // HIERARCHICAL STAGES",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.6f),
+                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "${plan.steps.count { it.isCompleted }}/${plan.steps.size} COMPLETED",
+                            fontSize = 9.sp,
+                            color = if (plan.steps.all { it.isCompleted }) Color(0xFF69F0AE) else Color.White.copy(alpha = 0.5f),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    plan.steps.forEach { step ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    step.isCompleted -> "[✓]"
+                                    step.isInProgress -> "[►]"
+                                    else -> "[ ]"
+                                },
+                                color = when {
+                                    step.isCompleted -> Color(0xFF69F0AE)
+                                    step.isInProgress -> Color.White
+                                    else -> Color.White.copy(alpha = 0.35f)
+                                },
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = if (step.isInProgress) FontWeight.Bold else FontWeight.Normal
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${step.index}. ${step.title}",
+                                color = when {
+                                    step.isCompleted -> Color.White.copy(alpha = 0.5f)
+                                    step.isInProgress -> Color.White
+                                    else -> Color.White.copy(alpha = 0.4f)
+                                },
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                textDecoration = if (step.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                            )
+                        }
+                    }
+                }
+            }
 
             // Terminal Output Header with 1-Tap Copy & Dataset Actions
             Row(

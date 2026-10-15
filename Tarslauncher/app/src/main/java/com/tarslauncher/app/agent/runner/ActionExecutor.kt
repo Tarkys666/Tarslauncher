@@ -32,7 +32,7 @@ class ActionExecutor(
                 val node = service.treeParser.getNode(action.targetId)
                 if (node == null) {
                     "BAŞARISIZ: [${action.targetId}] numaralı metin alanı bulunamadı."
-                } else if (service.gestureDispatcher.typeText(node, action.text)) {
+                } else if (service.gestureDispatcher.typeText(node, action.text, action.pressEnter)) {
                     "BAŞARILI: [${action.targetId}] alanına '${action.text}' yazıldı."
                 } else {
                     "BAŞARISIZ: [${action.targetId}] alanına yazılamadı."
@@ -65,8 +65,13 @@ class ActionExecutor(
             }
 
             is AgentAction.Wait -> {
+                val sec = action.durationMs / 1000L
                 delay(action.durationMs)
-                "BAŞARILI: ${action.durationMs}ms beklendi."
+                if (sec > 1) {
+                    "BAŞARILI: $sec saniye beklendi."
+                } else {
+                    "BAŞARILI: ${action.durationMs}ms beklendi."
+                }
             }
 
             is AgentAction.AskUser,
