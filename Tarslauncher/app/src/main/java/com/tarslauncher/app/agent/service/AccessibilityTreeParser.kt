@@ -35,14 +35,14 @@ class AccessibilityTreeParser {
         var elementCounter = 0
 
         fun traverse(node: AccessibilityNodeInfo?, depth: Int): Boolean {
-            if (node == null || depth > 20 || elementCounter >= 130) return false
+            if (node == null || depth > 18 || elementCounter >= 90) return false
 
             val isVisible = node.isVisibleToUser
             val isPassword = node.isPassword
-            val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(80).orEmpty()
+            val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(60).orEmpty()
             val text = scrubSensitiveTokens(rawText)
-            val contentDesc = if (isPassword) "" else scrubSensitiveTokens(node.contentDescription?.toString()?.trim()?.take(80).orEmpty())
-            val hintText = if (isPassword) "" else node.hintText?.toString()?.trim()?.take(60).orEmpty()
+            val contentDesc = if (isPassword) "" else scrubSensitiveTokens(node.contentDescription?.toString()?.trim()?.take(60).orEmpty())
+            val hintText = if (isPassword) "" else node.hintText?.toString()?.trim()?.take(45).orEmpty()
             val isClickable = node.isClickable
             val isLongClickable = node.isLongClickable
             val isEditable = node.isEditable

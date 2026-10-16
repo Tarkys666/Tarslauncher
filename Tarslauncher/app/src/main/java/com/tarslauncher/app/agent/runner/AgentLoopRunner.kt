@@ -68,42 +68,14 @@ class AgentLoopRunner(
             emit(AgentEvent.StatusLog("Öğrenilmiş ilgili beceri (skill) yüklendi."))
         }
 
-        // 3. Mini-Planlama Aşaması (Plan-and-Solve) — agentBrain.generatePlan ile doğrudan ayrıştırma
-        emit(AgentEvent.StatusLog("Hedef analiz ediliyor ve mini-plan oluşturuluyor..."))
-        val planInputText = buildString {
-            append("GÖREV: $userGoal")
-            if (!memoryContext.isNullOrBlank()) {
-                append("\nÖNCEKİ BAĞLAM: $memoryContext")
-            }
-        }
-        val planPrompt = listOf(ChatMessage(ChatMessage.Role.USER, planInputText))
-        val planResult = agentBrain.generatePlan(
-            systemPrompt = AgentPromptProvider.PLAN_SYSTEM_PROMPT,
-            history = planPrompt
-        )
-
-        var currentPlan: AgentPlan? = null
-        if (planResult.isSuccess) {
-            val stepsList = planResult.getOrNull()
-            if (!stepsList.isNullOrEmpty()) {
-                val planSteps = stepsList.mapIndexed { idx, title ->
-                    PlanStep(index = idx + 1, title = title, isCompleted = false, isInProgress = idx == 0)
-                }
-                currentPlan = AgentPlan(goal = userGoal, steps = planSteps)
-                emit(AgentEvent.PlanCreated(currentPlan))
-                emit(AgentEvent.StatusLog("Mini-Plan hazırlandı (${planSteps.size} aşama)."))
-            }
-        }
-
-        if (currentPlan == null) {
-            val fallbackSteps = listOf(PlanStep(index = 1, title = userGoal, isCompleted = false, isInProgress = true))
-            currentPlan = AgentPlan(goal = userGoal, steps = fallbackSteps)
-            emit(AgentEvent.PlanCreated(currentPlan))
-        }
+        // 3. Başlangıç Planı (Tek Geçişli / Single-Pass Planlama ile ekstra API çağrısı ve Rate Limit önlenir)
+        val initialSteps = listOf(PlanStep(index = 1, title = userGoal, isCompleted = false, isInProgress = true))
+        var currentPlan: AgentPlan? = AgentPlan(goal = userGoal, steps = initialSteps)
+        emit(AgentEvent.PlanCreated(currentPlan!!))
 
         // Supabase & Firebase Oturum Kaydı Başlatma
         val planJsonArray = JsonArray().apply {
-            currentPlan.steps.forEach { s ->
+            currentPlan?.steps?.forEach { s ->
                 add(JsonObject().apply {
                     addProperty("step", s.index)
                     addProperty("title", s.title)
@@ -133,8 +105,7 @@ class AgentLoopRunner(
         )
 
         val history = mutableListOf<ChatMessage>()
-        val planSummary = currentPlan.steps.joinToString("\n") { "${it.index}. ${it.title}" }
-        history.add(ChatMessage(ChatMessage.Role.USER, "GÖREV: $userGoal\nPLAN:\n$planSummary"))
+        history.add(ChatMessage(ChatMessage.Role.USER, "HEDEF GÖREV: $userGoal"))
 
         var previousActionSignature = ""
         var identicalActionRepeatCount = 0
@@ -158,26 +129,34 @@ class AgentLoopRunner(
                 .replace("</untrusted_screen_state>", "[FILTERED_TAG]")
                 .replace("<untrusted_screen_state>", "[FILTERED_TAG]")
             val unchangedWarning = if (screenUnchanged) {
-                "[SİSTEM UYARISI: Bir önceki eylemden sonra ekran içeriği DEĞİŞMEDİ! Aynı öğeye tekrar dokunmak yerine alternatif bir öğe deneyin, kaydırın (scroll) veya geri (back) gidin.]\n"
+                "[SİSTEM UYARISI: Önceki eylemden sonra ekran DEĞİŞMEDİ! Aynı öğeye tekrar dokunmak yerine farklı bir öğe seçin, scroll yapın veya back kullanın.]\n"
             } else {
                 ""
             }
-            val sanitizedScreenContent = "$unchangedWarning<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
-            history.add(ChatMessage(ChatMessage.Role.USER, "EKRAN (Adım $step):\n$sanitizedScreenContent"))
+            val firstStepPlanHint = if (step == 1) {
+                "[İLK ADIM NOTU: Hedefi 2-4 kısa aşamaya bölerek JSON yanıtına \"replan\": [\"1. aşama\", \"2. aşama\", ...] dizisini ekle ve ilk eylemini (action) üret.]\n"
+            } else {
+                ""
+            }
+            val sanitizedScreenContent = "$firstStepPlanHint$unchangedWarning<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
 
-            // Bağlam boyutunu koru (ilk görev/plan mesajı + son 24 mesaj)
-            val boundedHistory = if (history.size > 25) {
-                listOf(history.first()) + history.takeLast(24)
+            // Token Tasarrufu (Rate Limit Koruması):
+            // Geçmiş adımların tam ekran ağaçları yerine sadece kompakt özetleri history'de tutulur;
+            // tam ekran ağacı YALNIZCA mevcut adım (currentScreenMsg) için gönderilir!
+            val boundedHistory = if (history.size > 13) {
+                listOf(history.first()) + history.takeLast(12)
             } else {
                 history
             }
+            val currentScreenMsg = ChatMessage(ChatMessage.Role.USER, "AKTİF EKRAN (Adım $step):\n$sanitizedScreenContent")
+            val requestHistory = boundedHistory + currentScreenMsg
 
             emit(AgentEvent.StatusLog("Adım $step/$maxSteps: Ekran inceleniyor ve karar alınıyor..."))
 
             // 2. Karar al
             val decisionResult = agentBrain.decideNextAction(
                 systemPrompt = systemPrompt,
-                history = boundedHistory
+                history = requestHistory
             )
 
             if (decisionResult.isFailure) {
@@ -209,14 +188,21 @@ class AgentLoopRunner(
             }
             emit(AgentEvent.StatusLog("Adım $step: ${action.thought}"))
 
-            // Dinamik Yeniden Planlama (Re-Plan) kontrolü
+            // Dinamik Planlama & Yeniden Planlama (Re-Plan) kontrolü
             if (!decision.replan.isNullOrEmpty()) {
-                currentPlan = currentPlan?.replaceRemainingSteps(decision.replan)
-                currentPlan?.let { updated ->
-                    emit(AgentEvent.PlanStepUpdated(updated))
-                    val updatedSummary = updated.steps.joinToString("\n") { "${it.index}. ${it.title}" }
-                    history.add(ChatMessage(ChatMessage.Role.USER, "GÜNCELLENEN PLAN:\n$updatedSummary"))
-                    emit(AgentEvent.StatusLog("Plan dinamik olarak güncellendi (${decision.replan.size} kalan aşama)."))
+                if (step == 1) {
+                    val planSteps = decision.replan.mapIndexed { idx, title ->
+                        PlanStep(index = idx + 1, title = title, isCompleted = false, isInProgress = idx == 0)
+                    }
+                    currentPlan = AgentPlan(goal = userGoal, steps = planSteps)
+                    emit(AgentEvent.PlanCreated(currentPlan!!))
+                    emit(AgentEvent.StatusLog("Mini-Plan hazırlandı (${planSteps.size} aşama)."))
+                } else {
+                    currentPlan = currentPlan?.replaceRemainingSteps(decision.replan)
+                    currentPlan?.let { updated ->
+                        emit(AgentEvent.PlanStepUpdated(updated))
+                        emit(AgentEvent.StatusLog("Plan güncellendi (${decision.replan.size} kalan aşama)."))
+                    }
                 }
             } else if (action.stepIndex > 0) {
                 currentPlan = currentPlan?.markStepInProgress(action.stepIndex)
@@ -356,7 +342,13 @@ class AgentLoopRunner(
             }
             lastActionWasWait = action is AgentAction.Wait
 
-            // Model hafızasına eylem ve sonucunu ekle
+            // Model hafızasına kompakt ekran özeti, eylem ve sonucunu ekle (Token şişmesini önler)
+            history.add(
+                ChatMessage(
+                    ChatMessage.Role.USER,
+                    "ADIM $step ÖZETİ [Paket: ${screenDump.packageName}, ${screenDump.elementCount} öğe]"
+                )
+            )
             history.add(
                 ChatMessage(
                     ChatMessage.Role.MODEL,
@@ -406,12 +398,12 @@ class AgentLoopRunner(
                 screenDumpSnippet = screenDump.formattedContent.take(500)
             )
 
-            // Dinamik bekleme payı
+            // Dinamik bekleme payı (Ekran yüklenmesi ve RPM/TPM koruması)
             val dynamicDelay = when (action) {
-                is AgentAction.OpenApp, is AgentAction.OpenUrl -> 1600L
-                is AgentAction.Scroll -> 700L
-                is AgentAction.Wait -> 200L
-                else -> 900L
+                is AgentAction.OpenApp, is AgentAction.OpenUrl -> 1800L
+                is AgentAction.Scroll -> 1000L
+                is AgentAction.Wait -> 300L
+                else -> 1200L
             }
             delay(dynamicDelay)
         }

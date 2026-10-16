@@ -1,7 +1,7 @@
 {
-  "versionCode": 25,
-  "versionName": "1.7.0",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.0/TarsLauncher-release.apk",
+  "versionCode": 26,
+  "versionName": "1.7.1",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.1/TarsLauncher-release.apk",
   "apkSize": 11067700,
-  "releaseNotes": "TARS v1.7.0: Codex/Hermes Seviyesi Ajan Mimarisi, Groq Qwen 3.8-27B Tek Motor & Ultra Sade Arayüz, 15 Gelişmiş Android Aracı, Otomatik Şifre/API Maskeleme ve Kilitli Firestore Telemetrisi."
+  "releaseNotes": "TARS v1.7.1: Groq Rate-Limit (TPM/RPM) Optimizasyonu (%85 daha az token tüketimi, geçmiş ekran ağacı budama, tek geçişli planlama ve otomatik Retry-After bekleme sistemi)."
 }
