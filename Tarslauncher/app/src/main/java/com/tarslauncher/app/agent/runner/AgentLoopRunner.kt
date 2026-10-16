@@ -76,7 +76,7 @@ class AgentLoopRunner(
         service.overlayNotch.showOrUpdate(
             stepNumber = 1,
             plan = currentPlan,
-            liveDetail = "Hedef analiz ediliyor...",
+            liveDetail = "Planlıyor",
             state = AgentOverlayNotchManager.NotchState.THINKING
         )
 
@@ -162,7 +162,7 @@ class AgentLoopRunner(
             service.overlayNotch.showOrUpdate(
                 stepNumber = step,
                 plan = currentPlan,
-                liveDetail = "Ekran inceleniyor...",
+                liveDetail = "İnceliyor",
                 state = AgentOverlayNotchManager.NotchState.THINKING
             )
 
@@ -228,10 +228,26 @@ class AgentLoopRunner(
                 currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
             }
 
+            val actionWord = when (action) {
+                is AgentAction.Tap, is AgentAction.LongPress -> "Tıklıyor"
+                is AgentAction.TypeText -> "Yazıyor"
+                is AgentAction.Scroll -> "Kaydırıyor"
+                is AgentAction.OpenApp, is AgentAction.OpenUrl -> "Açıyor"
+                is AgentAction.Wait -> "Bekliyor"
+                is AgentAction.Back -> "Geri"
+                is AgentAction.Home -> "Ana Ekran"
+                is AgentAction.Recents -> "Son Görevler"
+                is AgentAction.Notifications, is AgentAction.QuickSettings -> "Bildirimler"
+                is AgentAction.ClipboardSet -> "Kopyalıyor"
+                is AgentAction.Done -> "Tamamlandı"
+                is AgentAction.AskUser -> "Soru"
+                else -> "İşliyor"
+            }
+
             service.overlayNotch.showOrUpdate(
                 stepNumber = step,
                 plan = currentPlan,
-                liveDetail = action.thought,
+                liveDetail = actionWord,
                 state = AgentOverlayNotchManager.NotchState.ACTIVE
             )
 

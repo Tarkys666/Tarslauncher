@@ -9,20 +9,20 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
-import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 /**
- * Floating Edge Notch / HUD powered by TYPE_ACCESSIBILITY_OVERLAY.
- * Stays visible on the screen edge while TARS operates across external apps,
- * displaying the active plan steps and live reasoning status one by one.
+ * Apple Dynamic Island style minimal pill HUD powered by TYPE_ACCESSIBILITY_OVERLAY.
+ * Placed top-center, compact, jet-black stadium capsule with single-word status
+ * and micro stage progression indicator.
  */
 class AgentOverlayNotchManager(private val context: Context) {
 
@@ -33,10 +33,8 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private var rootContainer: LinearLayout? = null
     private var statusDotView: View? = null
-    private var headerTextView: TextView? = null
-    private var stepPillsTextView: TextView? = null
-    private var stageTitleTextView: TextView? = null
-    private var detailTextView: TextView? = null
+    private var statusWordView: TextView? = null
+    private var stageBadgeView: TextView? = null
     private var stopButtonView: TextView? = null
     private var pulseAnimator: ObjectAnimator? = null
     private var autoHideRunnable: Runnable? = null
@@ -46,6 +44,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private var currentPlan: AgentPlan? = null
     private var currentStepNum: Int = 1
+    private var lastRenderedWord: String = ""
 
     fun showOrUpdate(
         stepNumber: Int = currentStepNum,
@@ -69,7 +68,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
                 val hideTask = Runnable { hide() }
                 autoHideRunnable = hideTask
-                mainHandler.postDelayed(hideTask, 3500L)
+                mainHandler.postDelayed(hideTask, 2800L)
             }
         }
     }
@@ -83,87 +82,99 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             val view = rootContainer ?: return@post
             rootContainer = null
-            runCatching {
-                windowManager?.removeViewImmediate(view)
-            }
+
+            // Smooth shrink & fade exit
+            view.animate()
+                .scaleX(0.7f)
+                .scaleY(0.7f)
+                .alpha(0f)
+                .setDuration(160L)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    runCatching {
+                        windowManager?.removeViewImmediate(view)
+                    }
+                }
+                .start()
         }
     }
 
     private fun createAndAttachOverlay() {
         val wm = windowManager ?: return
 
+        // Apple Dynamic Island Capsule: jet-black, stadium radius, subtle glow border
         val container = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-            setPadding(dp(12), dp(9), dp(12), dp(9))
+            setPadding(dp(13), dp(7), dp(10), dp(7))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                // Sleek asymmetric pill: sharper on the right screen edge, rounded 16dp on the inner left side
-                cornerRadii = floatArrayOf(
-                    dpF(16), dpF(16), // top-left
-                    dpF(6), dpF(6),   // top-right
-                    dpF(6), dpF(6),   // bottom-right
-                    dpF(16), dpF(16)  // bottom-left
-                )
-                setColor(Color.parseColor("#EB09090B"))
-                setStroke(dp(1), Color.parseColor("#4DFFFFFF"))
+                cornerRadius = dpF(19) // Full capsule pill
+                setColor(Color.parseColor("#FF000000")) // True Apple OLED black
+                setStroke(dp(1), Color.parseColor("#26FFFFFF")) // Subtle glass border
             }
             elevation = dpF(10)
         }
 
-        // Top row: Pulsing Dot + Step Header + Plan Dots + Stop Button
-        val topRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        }
-
+        // 1. Glowing Status Indicator Dot
         val dot = View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(7), dp(7)).apply {
-                marginEnd = dp(6)
-            }
+            layoutParams = LinearLayout.LayoutParams(dp(8), dp(8))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#69F0AE"))
+                setColor(Color.parseColor("#30D158")) // Apple bright green default
             }
         }
         statusDotView = dot
-        topRow.addView(dot)
+        container.addView(dot)
 
-        val headerText = TextView(context).apply {
-            text = "TARS // ADIM 1"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            letterSpacing = 0.06f
-        }
-        headerTextView = headerText
-        topRow.addView(headerText)
-
-        val pillsText = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        // 2. Single-Word Status Label (Apple typography)
+        val wordText = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
                 marginStart = dp(8)
-                marginEnd = dp(6)
             }
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setTextColor(Color.parseColor("#99FFFFFF"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
-            typeface = Typeface.MONOSPACE
+            text = "Başlatılıyor"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            letterSpacing = 0.02f
             maxLines = 1
         }
-        stepPillsTextView = pillsText
-        topRow.addView(pillsText)
+        statusWordView = wordText
+        container.addView(wordText)
 
-        val stopBtn = TextView(context).apply {
-            text = "✕"
-            setTextColor(Color.parseColor("#CCFF5252"))
+        // 3. Micro Stage Badge (e.g. "2/4" or "1/3")
+        val stageBadge = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = dp(7)
+                marginEnd = dp(6)
+            }
+            setTextColor(Color.parseColor("#73FFFFFF"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setPadding(dp(5), dp(1), dp(3), dp(1))
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            letterSpacing = 0.04f
+            maxLines = 1
+        }
+        stageBadgeView = stageBadge
+        container.addView(stageBadge)
+
+        // 4. Apple-style minimal circular Stop Button (✕)
+        val stopBtn = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
+            gravity = Gravity.CENTER
+            text = "✕"
+            setTextColor(Color.parseColor("#B3FFFFFF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
+            typeface = Typeface.DEFAULT_BOLD
             background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(6)
-                setColor(Color.parseColor("#26FF5252"))
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#26FFFFFF"))
             }
             setOnClickListener {
                 onStopRequested?.invoke()
@@ -171,46 +182,9 @@ class AgentOverlayNotchManager(private val context: Context) {
             }
         }
         stopButtonView = stopBtn
-        topRow.addView(stopBtn)
+        container.addView(stopBtn)
 
-        container.addView(topRow)
-
-        // Second row: Current Plan Stage Title
-        val stageTitle = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = dp(4)
-            }
-            maxWidth = dp(215)
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        }
-        stageTitleTextView = stageTitle
-        container.addView(stageTitle)
-
-        // Third row: Live Action / Thought Detail
-        val detailText = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = dp(2)
-            }
-            maxWidth = dp(215)
-            maxLines = 2
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.parseColor("#B8E4E4E7"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-            typeface = Typeface.MONOSPACE
-        }
-        detailTextView = detailText
-        container.addView(detailText)
-
+        // Top-Center Placement (Under Camera / Status bar notch area)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -220,28 +194,29 @@ class AgentOverlayNotchManager(private val context: Context) {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = dp(6)
-            y = dp(72)
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = dp(14)
         }
 
         runCatching {
             wm.addView(container, params)
             rootContainer = container
 
-            // Smooth slide-in animation from the right edge
-            container.translationX = dpF(120)
+            // Dynamic Island Pop Entrance Animation
+            container.scaleX = 0.6f
+            container.scaleY = 0.6f
             container.alpha = 0f
             container.animate()
-                .translationX(0f)
-                .alpha(1f)
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .alpha(1.0f)
                 .setDuration(240L)
-                .setInterpolator(DecelerateInterpolator())
+                .setInterpolator(OvershootInterpolator(1.2f))
                 .start()
 
-            // Subtle pulse animation on the status dot
-            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.25f).apply {
-                duration = 750L
+            // Soft breathing pulse animation on the indicator dot
+            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.35f).apply {
+                duration = 800L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.REVERSE
                 start()
@@ -255,48 +230,74 @@ class AgentOverlayNotchManager(private val context: Context) {
         liveDetail: String?,
         state: NotchState
     ) {
-        val dotColor = when (state) {
-            NotchState.ACTIVE -> Color.parseColor("#69F0AE")
-            NotchState.THINKING -> Color.parseColor("#FFD740")
-            NotchState.COMPLETED -> Color.parseColor("#00E676")
-            NotchState.FAILED -> Color.parseColor("#FF5252")
+        val (dotColor, defaultWord) = when (state) {
+            NotchState.THINKING -> Color.parseColor("#FF9F0A") to "Düşünüyor" // Apple Amber
+            NotchState.ACTIVE -> Color.parseColor("#30D158") to "İşliyor"     // Apple Green
+            NotchState.COMPLETED -> Color.parseColor("#30D158") to "Tamamlandı"
+            NotchState.FAILED -> Color.parseColor("#FF453A") to "Durduruldu"  // Apple Red
         }
         (statusDotView?.background as? GradientDrawable)?.setColor(dotColor)
 
-        val steps = plan?.steps.orEmpty()
-        val activeStage = steps.firstOrNull { it.isInProgress }
-            ?: steps.firstOrNull { !it.isCompleted }
-            ?: steps.lastOrNull()
+        // Resolve single-word status
+        val singleWord = extractSingleWord(state, liveDetail, defaultWord)
+        if (singleWord != lastRenderedWord) {
+            lastRenderedWord = singleWord
+            statusWordView?.text = singleWord
 
-        val stageIndex = activeStage?.index ?: 1
-        val totalStages = steps.size.coerceAtLeast(1)
-
-        headerTextView?.text = when (state) {
-            NotchState.COMPLETED -> "TARS // TAMAMLANDI"
-            NotchState.FAILED -> "TARS // DURDURULDU"
-            else -> "AŞAMA $stageIndex/$totalStages • ADIM $stepNumber"
-        }
-
-        if (steps.isNotEmpty()) {
-            val pills = steps.joinToString(" ") { step ->
-                when {
-                    step.isCompleted || state == NotchState.COMPLETED -> "●"
-                    step.isInProgress -> "◉"
-                    else -> "○"
-                }
+            // Tactile micro-bounce on text update
+            rootContainer?.let { view ->
+                view.animate()
+                    .scaleX(1.03f)
+                    .scaleY(1.03f)
+                    .setDuration(90L)
+                    .withEndAction {
+                        view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(110L).start()
+                    }
+                    .start()
             }
-            stepPillsTextView?.text = pills
-            stepPillsTextView?.visibility = View.VISIBLE
-        } else {
-            stepPillsTextView?.visibility = View.GONE
         }
 
-        val stageTitleStr = activeStage?.title ?: plan?.goal ?: "Görev yürütülüyor"
-        stageTitleTextView?.text = "▸ $stageTitleStr"
+        // Micro Stage Count (e.g. "2/4" or "1/3")
+        val steps = plan?.steps.orEmpty()
+        if (steps.size > 1 && state != NotchState.COMPLETED && state != NotchState.FAILED) {
+            val activeIndex = steps.firstOrNull { it.isInProgress }?.index
+                ?: steps.firstOrNull { !it.isCompleted }?.index
+                ?: steps.size
+            stageBadgeView?.text = "$activeIndex/${steps.size}"
+            stageBadgeView?.visibility = View.VISIBLE
+        } else {
+            stageBadgeView?.visibility = View.GONE
+        }
+    }
 
-        if (!liveDetail.isNullOrBlank()) {
-            detailTextView?.text = liveDetail
-            detailTextView?.visibility = View.VISIBLE
+    private fun extractSingleWord(state: NotchState, liveDetail: String?, defaultWord: String): String {
+        if (state == NotchState.COMPLETED) return "Tamamlandı"
+        if (state == NotchState.FAILED) return "Durduruldu"
+
+        val trimmed = liveDetail?.trim().orEmpty()
+        if (trimmed.isEmpty()) return defaultWord
+
+        // If it's already a single clean word, return capitalized
+        if (!trimmed.contains(" ") && trimmed.length in 3..14) {
+            return trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+
+        val lower = trimmed.lowercase()
+        return when {
+            lower.contains("tıklan") || lower.contains("dokun") || lower.contains("tap") || lower.contains("click") -> "Tıklıyor"
+            lower.contains("yazıl") || lower.contains("metin") || lower.contains("type") || lower.contains("input") -> "Yazıyor"
+            lower.contains("kaydır") || lower.contains("scroll") || lower.contains("swipe") -> "Kaydırıyor"
+            lower.contains("açıl") || lower.contains("launch") || lower.contains("open") -> "Açıyor"
+            lower.contains("bekle") || lower.contains("wait") -> "Bekliyor"
+            lower.contains("geri") || lower.contains("back") -> "Geri"
+            lower.contains("ana ekran") || lower.contains("home") -> "Ana Ekran"
+            lower.contains("soru") || lower.contains("?") -> "Soru"
+            lower.contains("onay") -> "Onay"
+            lower.contains("incele") || lower.contains("ekran") || lower.contains("karar") -> "İnceliyor"
+            lower.contains("plan") || lower.contains("hedef") || lower.contains("analiz") -> "Planlıyor"
+            state == NotchState.THINKING -> "Düşünüyor"
+            state == NotchState.ACTIVE -> "İşliyor"
+            else -> defaultWord
         }
     }
 

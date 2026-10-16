@@ -1,7 +1,7 @@
 {
-  "versionCode": 27,
-  "versionName": "1.7.2",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.2/TarsLauncher-release.apk",
-  "apkSize": 11067700,
-  "releaseNotes": "TARS v1.7.2: Ekran kenarında yuvarlatılmış canlı aşama çentiği (Edge Notch HUD) eklendi — ajan çalışırken diğer uygulamaların üzerinde aşamaları, adımları ve anlık eylemleri tek tek gösterir."
+  "versionCode": 28,
+  "versionName": "1.7.3",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.3/TarsLauncher-release.apk",
+  "apkSize": 11085864,
+  "releaseNotes": "TARS v1.7.3: Apple Dynamic Island stilinde üst-orta minimal çentik (pill HUD) — tek kelimelik anlık durum ('Düşünüyor', 'Tıklıyor', 'Yazıyor', 'Açıyor', 'Tamamlandı'), mikro aşama göstergesi (2/4) ve dokunsal yay animasyonları."
 }
