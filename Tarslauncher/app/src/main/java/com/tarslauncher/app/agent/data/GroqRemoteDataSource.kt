@@ -16,8 +16,15 @@ import kotlinx.coroutines.withContext
  */
 class GroqRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val preferredModelProvider: () -> String = { "qwen/qwen3.8-27b" }
+    private val preferredModelProvider: () -> String = { DEFAULT_GROQ_MODEL }
 ) {
+    companion object {
+        const val DEFAULT_GROQ_MODEL = "qwen/qwen3-32b"
+    }
+
+    @Volatile
+    var lastUsedModel: String = DEFAULT_GROQ_MODEL
+        private set
 
     suspend fun generateContent(
         systemInstruction: String,
@@ -30,10 +37,15 @@ class GroqRemoteDataSource(
             )
         }
 
-        val preferredModel = preferredModelProvider().trim().ifBlank { "qwen/qwen3.8-27b" }
+        val rawPreferred = preferredModelProvider().trim()
+        val preferredModel = if (rawPreferred.isBlank() || rawPreferred == "qwen/qwen3.8-27b") {
+            DEFAULT_GROQ_MODEL
+        } else {
+            rawPreferred
+        }
         val candidateModels = listOf(
             preferredModel,
-            "qwen/qwen3.8-27b",
+            DEFAULT_GROQ_MODEL,
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant"
         ).distinct()
@@ -76,6 +88,7 @@ class GroqRemoteDataSource(
             }
 
             if (callResult.isSuccess) {
+                lastUsedModel = model
                 return@withContext callResult
             }
 

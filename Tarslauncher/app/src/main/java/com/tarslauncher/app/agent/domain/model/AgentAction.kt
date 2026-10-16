@@ -10,11 +10,17 @@ sealed interface AgentAction {
 
     fun toOperationalSignature(): String = when (this) {
         is OpenApp -> "OpenApp($appName)"
+        is OpenUrl -> "OpenUrl($url)"
         is Tap -> "Tap($targetId)"
+        is LongPress -> "LongPress($targetId)"
         is TypeText -> "TypeText($targetId, $text, pressEnter=$pressEnter)"
         is Scroll -> "Scroll($direction)"
         is Back -> "Back"
         is Home -> "Home"
+        is Recents -> "Recents"
+        is Notifications -> "Notifications"
+        is QuickSettings -> "QuickSettings"
+        is ClipboardSet -> "ClipboardSet(${text.take(30)})"
         is Wait -> "Wait(${durationMs}ms)"
         is AskUser -> "AskUser($question)"
         is Done -> "Done"
@@ -27,7 +33,19 @@ sealed interface AgentAction {
         override val stepIndex: Int = -1
     ) : AgentAction
 
+    data class OpenUrl(
+        override val thought: String,
+        val url: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
     data class Tap(
+        override val thought: String,
+        val targetId: Int,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class LongPress(
         override val thought: String,
         val targetId: Int,
         override val stepIndex: Int = -1
@@ -64,6 +82,27 @@ sealed interface AgentAction {
 
     data class Home(
         override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class Recents(
+        override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class Notifications(
+        override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class QuickSettings(
+        override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class ClipboardSet(
+        override val thought: String,
+        val text: String,
         override val stepIndex: Int = -1
     ) : AgentAction
 

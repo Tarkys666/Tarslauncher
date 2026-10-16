@@ -58,6 +58,13 @@ class LauncherDataStore(private val context: Context) {
         }
         .distinctUntilChanged()
 
+    val pwasJsonFlow: Flow<String?> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) emit(emptyPreferences()) else throw exception
+        }
+        .map { preferences -> preferences[KEY_PWAS_JSON] }
+        .distinctUntilChanged()
+
     suspend fun updateShowAppDrawer(show: Boolean) {
         context.dataStore.edit { it[KEY_SHOW_APP_DRAWER] = show }
     }

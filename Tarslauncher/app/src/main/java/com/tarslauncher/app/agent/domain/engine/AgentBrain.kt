@@ -8,6 +8,11 @@ import com.tarslauncher.app.agent.domain.model.ChatMessage
  * Allows effortless substitution between Gemini Cloud API, Groq LPU, on-device models, or test fakes.
  */
 interface AgentBrain {
+    suspend fun generatePlan(
+        systemPrompt: String,
+        history: List<ChatMessage>
+    ): Result<List<String>>
+
     suspend fun decideNextAction(
         systemPrompt: String,
         history: List<ChatMessage>

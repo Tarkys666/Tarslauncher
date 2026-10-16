@@ -87,7 +87,7 @@ class AgentViewModel(
     }
 
     fun onSaveGroqModel(model: String) {
-        val trimmed = model.trim().ifBlank { "qwen/qwen3.8-27b" }
+        val trimmed = model.trim().ifBlank { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
         preferences.setGroqModel(trimmed)
         _uiState.update { it.copy(groqModel = trimmed) }
     }
@@ -145,6 +145,11 @@ class AgentViewModel(
             )
         }
 
+        val activeModelName = when (state.provider) {
+            AgentProvider.GEMINI -> "gemini-2.5-flash"
+            AgentProvider.GROQ -> state.groqModel
+        }
+
         val brain: AgentBrain = when (state.provider) {
             AgentProvider.GEMINI -> {
                 val remoteDataSource = GeminiRemoteDataSource(apiKeyProvider = { _uiState.value.geminiApiKey })
@@ -161,7 +166,9 @@ class AgentViewModel(
         val runner = AgentLoopRunner(
             context = getApplication(),
             agentBrain = brain,
-            datasetCollector = datasetCollector
+            datasetCollector = datasetCollector,
+            providerName = state.provider.name,
+            modelName = activeModelName
         )
 
         currentExecutionJob = viewModelScope.launch {
@@ -172,12 +179,15 @@ class AgentViewModel(
     }
 
     fun stopTask() {
+        _uiState.value.pendingConfirmation?.userDecision?.complete(false)
+        _uiState.value.pendingQuestion?.userAnswer?.complete(null)
         currentExecutionJob?.cancel()
         currentExecutionJob = null
         _uiState.update {
             it.copy(
                 isRunning = false,
                 pendingConfirmation = null,
+                pendingQuestion = null,
                 logs = it.logs + "[Durduruldu] Görev iptal edildi."
             )
         }
@@ -187,6 +197,12 @@ class AgentViewModel(
         val confirmation = _uiState.value.pendingConfirmation ?: return
         confirmation.userDecision.complete(approved)
         _uiState.update { it.copy(pendingConfirmation = null) }
+    }
+
+    fun onAnswerQuestion(answer: String?) {
+        val questionEvent = _uiState.value.pendingQuestion ?: return
+        questionEvent.userAnswer.complete(answer?.trim()?.takeIf { it.isNotBlank() })
+        _uiState.update { it.copy(pendingQuestion = null) }
     }
 
     fun exportDataset(context: Context) {
@@ -223,7 +239,7 @@ class AgentViewModel(
             is AgentEvent.QuestionToUser -> {
                 _uiState.update {
                     it.copy(
-                        pendingQuestion = event.question,
+                        pendingQuestion = event,
                         logs = it.logs + "> [Soru] ${event.question}"
                     )
                 }
@@ -239,6 +255,8 @@ class AgentViewModel(
                 _uiState.update {
                     it.copy(
                         isRunning = false,
+                        pendingQuestion = null,
+                        pendingConfirmation = null,
                         finalMessage = event.summary,
                         isFailure = false,
                         logs = it.logs + "> [Tamamlandı] ${event.summary}"
@@ -250,6 +268,8 @@ class AgentViewModel(
                 _uiState.update {
                     it.copy(
                         isRunning = false,
+                        pendingQuestion = null,
+                        pendingConfirmation = null,
                         finalMessage = event.errorReason,
                         isFailure = true,
                         logs = it.logs + "> [Hata] ${event.errorReason}"

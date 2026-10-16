@@ -401,9 +401,10 @@ fun FolderGrid(
     buttonColor: Color,
     onDeletePwa: (String) -> Unit = {}
 ) {
-    // Stable state variables with keys to prevent recomposition issues
+    // Track selected folder by ID so updates to folders list reflect immediately in the open dialog
     var showFolderAppsDialog by remember("folder_dialog_state") { mutableStateOf(false) }
-    var selectedFolder by remember("selected_folder_state") { mutableStateOf<FolderInfo?>(null) }
+    var selectedFolderId by remember("selected_folder_id_state") { mutableStateOf<String?>(null) }
+    val selectedFolder = folders.find { it.id == selectedFolderId }
     
     // Stable grid dimensions
     val cols = gridSize.columns
@@ -431,7 +432,7 @@ fun FolderGrid(
                         FolderItem(
                             folder = folder,
                             onClick = {
-                                selectedFolder = folder
+                                selectedFolderId = folder.id
                                 showFolderAppsDialog = true
                             },
                             iconPackLoader = iconPackLoader,
@@ -449,19 +450,19 @@ fun FolderGrid(
     // Folder uygulamaları dialog'u
     if (showFolderAppsDialog && selectedFolder != null) {
         FolderAppsDialog(
-            folder = selectedFolder!!,
+            folder = selectedFolder,
             onDismiss = {
                 showFolderAppsDialog = false
-                selectedFolder = null
+                selectedFolderId = null
             },
             onAppClick = { app ->
                 onAppClick(app)
                 showFolderAppsDialog = false
-                selectedFolder = null
+                selectedFolderId = null
             },
             onAppRemove = { app ->
-                val updatedFolder = selectedFolder!!.copy(
-                    apps = selectedFolder!!.apps.filter { it.packageName != app.packageName }.toMutableList()
+                val updatedFolder = selectedFolder.copy(
+                    apps = selectedFolder.apps.filter { it.packageName != app.packageName }
                 )
                 val updatedFolders = folders.map {
                     if (it.id == updatedFolder.id) updatedFolder else it
@@ -481,7 +482,7 @@ fun FolderItem(
     iconPackLoader: IconPackLoader?,
     buttonColor: Color
 ) {
-    val context = LocalContext.current
+    val isPackLoaded = iconPackLoader?.isLoaded == true
     Card(
         modifier = Modifier
             .size(45.dp)
@@ -514,7 +515,7 @@ fun FolderItem(
                         ) {
                             if (appIndex < folder.apps.size) {
                                 val app = folder.apps[appIndex]
-                                val appIcon = remember(app.packageName, iconPackLoader) {
+                                val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
                                     val activityName = app.activityName
                                     val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
                                     (themedIcon ?: app.icon)?.let {
@@ -547,14 +548,14 @@ fun AppIconWithoutName(
     iconPackLoader: IconPackLoader?,
     iconSize: Int = 32
 ) {
-    val context = LocalContext.current
+    val isPackLoaded = iconPackLoader?.isLoaded == true
     
     // Icon'u composable dışında hazırlıyoruz
-    val appIcon = remember(app.packageName, iconPackLoader) {
+    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
         val activityName = app.activityName
         val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
 
-        (themedIcon ?: app.icon)?.toBitmap()?.asImageBitmap()
+        (themedIcon ?: app.icon)?.let { drawableToBitmap(it).asImageBitmap() }
     }
     
     Card(
@@ -710,7 +711,8 @@ fun FolderSelectItem(
                         ) {
                             if (appIndex < folder.apps.size) {
                                 val app = folder.apps[appIndex]
-                                val appIcon = remember(app.packageName, iconPackLoader) {
+                                val isPackLoaded = iconPackLoader?.isLoaded == true
+                                val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
                                     val themedIcon = iconPackLoader?.getIconForApp(app.packageName, app.activityName)
                                     (themedIcon ?: app.icon)?.let {
                                         drawableToBitmap(it).asImageBitmap()
@@ -958,8 +960,8 @@ fun FolderAppItem(
     onLongClick: () -> Unit,
     iconPackLoader: IconPackLoader?
 ) {
-    val context = LocalContext.current
-    val appIcon = remember(app.packageName, iconPackLoader) {
+    val isPackLoaded = iconPackLoader?.isLoaded == true
+    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
         try {
             val activityName = app.activityName
             val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
@@ -1018,9 +1020,12 @@ fun ClockHeader(
 
     if (showClock) {
         DisposableEffect(context) {
-            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
             fun updateTime() {
-                currentTime = try { timeFormat.format(Date()) } catch (_: Exception) { "00:00" }
+                currentTime = try {
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                } catch (_: Exception) {
+                    "00:00"
+                }
             }
             updateTime()
             val receiver = object : android.content.BroadcastReceiver() {
@@ -1028,7 +1033,11 @@ fun ClockHeader(
                     updateTime()
                 }
             }
-            val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIME_TICK)
+            val filter = android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_TIME_TICK)
+                addAction(android.content.Intent.ACTION_TIME_CHANGED)
+                addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+            }
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {

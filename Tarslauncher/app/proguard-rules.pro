@@ -31,6 +31,8 @@
 # Keep data model classes and their fields for Gson serialization
 -keep class com.tarslauncher.app.data.model.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.model.** { *; }
+-keep class com.tarslauncher.app.agent.domain.model.** { *; }
+-keepclassmembers class com.tarslauncher.app.agent.domain.model.** { *; }
 -keep class com.tarslauncher.app.data.sync.** { *; }
 -keep class com.tarslauncher.app.data.updater.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.updater.** { *; }
@@ -39,8 +41,7 @@
 -keep class com.google.firebase.** { *; }
 
 # Security: Hide sensitive classes from reflection
--keepnames class com.tarslauncher.app.SecurityHelper
--keepnames class com.tarslauncher.app.SecurePreferences
+-keepnames class com.tarslauncher.app.utils.SecurityHelper
 
 # Gson serialization
 -keepattributes Signature

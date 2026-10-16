@@ -9,19 +9,32 @@ class GeminiAgentBrain(
     private val remoteDataSource: GeminiRemoteDataSource
 ) : AgentBrain {
 
+    override suspend fun generatePlan(
+        systemPrompt: String,
+        history: List<ChatMessage>
+    ): Result<List<String>> {
+        val rawResult = remoteDataSource.generateContent(systemPrompt, history)
+        return rawResult.mapCatching { rawJson ->
+            ActionParser.parsePlan(rawJson)
+                ?: throw IllegalStateException("Gemini plan çıktısı ayrıştırılamadı:\n$rawJson")
+        }
+    }
+
     override suspend fun decideNextAction(
         systemPrompt: String,
         history: List<ChatMessage>
     ): Result<AgentDecision> {
         val rawResult = remoteDataSource.generateContent(systemPrompt, history)
         return rawResult.mapCatching { rawJson ->
-            val parsedAction = ActionParser.parse(rawJson)
+            val payload = ActionParser.parsePayload(rawJson)
                 ?: throw IllegalStateException("Model çıktısı geçerli bir Agent eylemine dönüştürülemedi:\n$rawJson")
             AgentDecision(
-                action = parsedAction,
+                action = payload.action,
                 rawResponse = rawJson,
                 provider = "GEMINI",
-                model = "gemini-1.5-flash"
+                model = remoteDataSource.lastUsedModel,
+                reflection = payload.reflection,
+                replan = payload.replan
             )
         }
     }

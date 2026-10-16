@@ -4,32 +4,38 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
-import org.xmlpull.v1.XmlPullParser
-
 import androidx.collection.LruCache
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.res.ResourcesCompat
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 
 @Stable
 class IconPackLoader(private val context: Context, private val packPackageName: String) {
 
     private val iconMap = ConcurrentHashMap<String, String>()
+    private val packageFallbackMap = ConcurrentHashMap<String, String>()
     private val resIdCache = ConcurrentHashMap<String, Int>()
     private val drawableCache = LruCache<String, Drawable>(128)
 
-    @Volatile
-    private var loaded = false
+    var isLoaded by mutableStateOf(false)
+        private set
+
     @Volatile
     private var packResources: Resources? = null
 
     fun load() {
-        if (loaded) return
+        if (isLoaded) return
         try {
             val resources = context.packageManager.getResourcesForApplication(packPackageName)
             packResources = resources
             loadAppFilter(resources)
-            loaded = true
+            isLoaded = true
         } catch (_: PackageManager.NameNotFoundException) {
             // İkon paketi bulunamadı veya kaldırıldı
         }
@@ -37,32 +43,58 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
 
     private fun loadAppFilter(resources: Resources) {
         val appFilterId = resources.getIdentifier("appfilter", "xml", packPackageName)
-        if (appFilterId == 0) return
-
-        var xpp: android.content.res.XmlResourceParser? = null
-        try {
-            xpp = resources.getXml(appFilterId)
-            val tempMap = HashMap<String, String>(4096)
-            while (xpp.eventType != XmlPullParser.END_DOCUMENT) {
-                if (xpp.eventType == XmlPullParser.START_TAG && xpp.name == "item") {
-                    val component = xpp.getAttributeValue(null, "component")
-                    val drawable = xpp.getAttributeValue(null, "drawable")
-                    if (!component.isNullOrEmpty() && !drawable.isNullOrEmpty()) {
-                        tempMap[component] = drawable
-                    }
-                }
-                xpp.next()
+        if (appFilterId != 0) {
+            var xpp: android.content.res.XmlResourceParser? = null
+            try {
+                xpp = resources.getXml(appFilterId)
+                parseXmlIntoMaps(xpp)
+                return
+            } catch (_: Exception) {
+                // Fall through to assets/appfilter.xml
+            } finally {
+                xpp?.close()
             }
-            iconMap.putAll(tempMap)
+        }
+
+        // Fallback: Many icon packs place appfilter.xml inside assets/
+        var assetStream: InputStream? = null
+        try {
+            assetStream = resources.assets.open("appfilter.xml")
+            val parser = XmlPullParserFactory.newInstance().newPullParser()
+            parser.setInput(assetStream, "UTF-8")
+            parseXmlIntoMaps(parser)
         } catch (_: Exception) {
-            // appfilter.xml okunamadı veya hatalı
+            // appfilter.xml okunamadı
         } finally {
-            xpp?.close() // Prevent native asset parser leak
+            runCatching { assetStream?.close() }
         }
     }
 
+    private fun parseXmlIntoMaps(xpp: XmlPullParser) {
+        val tempComponentMap = HashMap<String, String>(4096)
+        val tempPackageMap = HashMap<String, String>(2048)
+        while (xpp.eventType != XmlPullParser.END_DOCUMENT) {
+            if (xpp.eventType == XmlPullParser.START_TAG && xpp.name == "item") {
+                val component = xpp.getAttributeValue(null, "component")
+                val drawable = xpp.getAttributeValue(null, "drawable")
+                if (!component.isNullOrEmpty() && !drawable.isNullOrEmpty()) {
+                    tempComponentMap[component] = drawable
+                    if (component.startsWith("ComponentInfo{")) {
+                        val pkg = component.removePrefix("ComponentInfo{").substringBefore("/")
+                        if (pkg.isNotEmpty() && !tempPackageMap.containsKey(pkg)) {
+                            tempPackageMap[pkg] = drawable
+                        }
+                    }
+                }
+            }
+            xpp.next()
+        }
+        iconMap.putAll(tempComponentMap)
+        packageFallbackMap.putAll(tempPackageMap)
+    }
+
     fun getIconForApp(appPackageName: String, appActivityName: String): Drawable? {
-        if (!loaded) return null
+        if (!isLoaded) return null
         val resources = packResources ?: return null
 
         val componentString = "ComponentInfo{$appPackageName/$appActivityName}"
@@ -72,7 +104,9 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
             return cached.constantState?.newDrawable() ?: cached
         }
 
-        val drawableName = iconMap[componentString] ?: return null
+        val drawableName = iconMap[componentString]
+            ?: packageFallbackMap[appPackageName]
+            ?: return null
 
         return try {
             // 2. Cache resource identifier to eliminate linear reflection lookups
@@ -93,4 +127,4 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
             null
         }
     }
-} 
+}

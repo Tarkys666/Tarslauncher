@@ -23,18 +23,18 @@ class AppRepository(
     val cloudSyncManager: com.tarslauncher.app.data.sync.CloudSyncManager = com.tarslauncher.app.data.sync.CloudSyncManager(context, dataStore)
     val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(context)
 
+    @Volatile
     private var cachedInstalledApps: List<AppInfo>? = null
 
     companion object {
         private const val TAG = "AppRepository"
-        const val REDGIFS_ICON_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAaVBMVEUAAADXAAPbAAMLAAGgAAMEAAGFAAI/AAHIAAPeAANrAAJ/AALUAAPCAAOqAANaAAE7AAEXAACyAANyAAKRAAK6AAMSAAFPAAEcAAFmAAEgAAGLAAKYAAIjAABEAAEuAAEzAAEqAAFgAAEVFxf1AAAECUlEQVR4nO2YbZuqIBCGV7KEBG1Fctu0zP//I49a6YAI7Fk/nOtcc3/MZnh4mRf4+EAQBEEQBEEQBEEQBEEQ5L/jq02q7nI8Hi95dbp//sh23x1WSaXMky+fh7u8FpRHhDDGSBRxmh2673ABu5iRVQZ3IrtWDnuZiWj440xvx0XdhQvQrBcMOhhNT1bj9hoxYrMfbOR9EwEvf+JgMS2Fw5YQlW4moHcXZeaEcmGdPJRQtJsJiCJW6Apq7jckIt9OQEQyEF9NzIJs+GU7ARGTk1WrgsYftu64nQAipvkXphEMXf0Dvf1IAAdEC29yZXzSZ5/42qeuOhPcsCLqHC6A1EM+fZNeY/2gkfhpUxpDRPHxMfnLa2p8LsMFMOPI7CoFnZFsnExlJL642mlWba0LEPYsZhWwODE7mGtIMeT4RhdF5dJpyqECZkliwQI+pCag6X85atOj1kKRakHCd7b/BAq4gcmQbPB01XbAXqjO2jFlrmrmE5BAAeMh1I7g2upe4CYwV1HwCaiAJz7ORAJFaq3wPxSIaFL/QkA9f35F4Wk+l8RyAF/ccsAvtkDOC8DUqxpd2NuEOxyHoguQ+8+Zpq3Kaa6E183bplPPJEmuWwsgKgMUakyEfXdDuNL6skbGdOiFvKXupwKiRU/YQ7M0P5mt6b65XUo1i9q7CRawhDvT2OSljJ04lsongLYhAs7U0Vv3e+iIQ29XXHQ3e3v7lVTTxpyp04srEXgbEhJRlZVmJH8f40KIJFRAvF4NQjqi8apRtvOC5xkff5xkeQX8YgXePthc9+JXfMxhuN0WmDEIP4nXWSjftXbudXwCHE2RLoCKCUrN7u7VWIBCN6VinwBHOdQzYdqe3tyq7kC1voKo0SAjS8d9GJpAS+64nziL0bfe3fEh7B5a6n41o3uZmlDwN+G447ur4TmDS8uHO3erLfZ6OdI6qfXxfeVYawDH/uehNZzR2uJKsAdsvW3wNyRwuGc0aS0Z4faXiEQ7la5XFp8ACkcb80kFf+oV2E74XYG/uCpBgAB45p4JrdRjgxS5McP2qFm5b4d/IeBsPIyQqEjnMb67g/5y4embfALEUsBHbqadZ8EayArzdkqUqx3xC4D3sCmlSz0SnjthT+E/u577BEzdkWTO1AtMXEkwSEBhFTC8UAWNT72PRD4BMBXCoqZf3NfGF64rSZiA2nIIRx6l75mMkDjgrdIn4ACCnmTagb4VLgmEKFcGhgJA97oUcIHdrWq1b+cqI6tPtUI+Fs6sAmoKWPbviQCfl++OTVoMj9XG5Yar2v9C+eaezNyWt+3dCX63Taodn+v5MxP0l3EVp7n7YWx7vu59A5XnXX8RT9rG9SCDIAiCIAiCIAiCIAiCIMi/wR8lHTsSEuIu+wAAAABJRU5ErkJggg=="
-
         private val PWA_LIST_TYPE = object : TypeToken<List<PwaInfo>>() {}.type
         private val USAGE_STATS_LIST_TYPE = object : TypeToken<List<AppUsageStats>>() {}.type
         private val PERSIST_FOLDER_LIST_TYPE = object : TypeToken<List<PersistFolder>>() {}.type
     }
 
     val settingsFlow: Flow<LauncherSettings> = dataStore.settingsFlow
+    val pwasJsonFlow: Flow<String?> = dataStore.pwasJsonFlow
 
     fun invalidateAppCache() {
         cachedInstalledApps = null
@@ -45,26 +45,6 @@ class AppRepository(
     suspend fun initialize() {
         withContext(Dispatchers.IO) {
             dataStore.migrateFromLegacyPrefsIfNeeded()
-            seedRedGifsPwaIfNeeded()
-        }
-    }
-
-    suspend fun seedRedGifsPwaIfNeeded() {
-        if (!dataStore.isPwasSeeded()) {
-            val currentPwas = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
-            if (currentPwas.none { it.url.contains("redgifs.com") }) {
-                currentPwas.add(
-                    PwaInfo(
-                        id = "redgifs",
-                        name = "RedGIFs",
-                        url = "https://www.redgifs.com",
-                        iconBase64 = REDGIFS_ICON_BASE64
-                    )
-                )
-                val json = gson.toJson(currentPwas)
-                dataStore.savePwasJson(json)
-            }
-            dataStore.setPwasSeeded(true)
         }
     }
 
@@ -276,7 +256,7 @@ class AppRepository(
     suspend fun savePwa(pwa: PwaInfo): RepositoryResult<Unit> = withContext(Dispatchers.IO) {
         try {
             val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
-            currentList.removeAll { it.id == pwa.id || it.url == pwa.url }
+            currentList.removeAll { it.id == pwa.id || (pwa.url.isNotBlank() && it.url == pwa.url) }
             currentList.add(pwa)
             val json = gson.toJson(currentList)
             dataStore.savePwasJson(json)
@@ -304,7 +284,6 @@ class AppRepository(
 
     private val staticPresets: List<PwaInfo> by lazy {
         listOf(
-            PwaInfo(id = "preset_redgifs", name = "RedGIFs", url = "https://www.redgifs.com", iconBase64 = REDGIFS_ICON_BASE64),
             PwaInfo(id = "preset_chatgpt", name = "ChatGPT", url = "https://chatgpt.com"),
             PwaInfo(id = "preset_x", name = "X", url = "https://x.com"),
             PwaInfo(id = "preset_youtube", name = "YouTube", url = "https://m.youtube.com"),

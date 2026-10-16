@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 
 class GestureDispatcher(
     private val serviceProvider: () -> AccessibilityService?
@@ -34,9 +35,7 @@ class GestureDispatcher(
                 current = parent
             }
         } finally {
-            if (parentsToRecycle != null) {
-                parentsToRecycle.forEach { runCatching { it.recycle() } }
-            }
+            parentsToRecycle?.forEach { runCatching { it.recycle() } }
         }
 
         // 2. Fallback to physical touch gesture at the node's center coordinate
@@ -49,16 +48,49 @@ class GestureDispatcher(
         return false
     }
 
-    fun clickCoordinate(x: Float, y: Float): Boolean {
+    @Suppress("DEPRECATION")
+    fun performLongClick(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+
+        var current: AccessibilityNodeInfo? = node
+        val parentsToRecycle = if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            mutableListOf<AccessibilityNodeInfo>()
+        } else null
+
+        try {
+            while (current != null) {
+                if (current.isLongClickable && current.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
+                    return true
+                }
+                val parent = current.parent
+                if (parent != null && parentsToRecycle != null) {
+                    parentsToRecycle.add(parent)
+                }
+                current = parent
+            }
+        } finally {
+            parentsToRecycle?.forEach { runCatching { it.recycle() } }
+        }
+
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (!bounds.isEmpty) {
+            return clickCoordinate(bounds.centerX().toFloat(), bounds.centerY().toFloat(), durationMs = 650L)
+        }
+
+        return false
+    }
+
+    fun clickCoordinate(x: Float, y: Float, durationMs: Long = 60L): Boolean {
         val service = serviceProvider() ?: return false
         val clickPath = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(clickPath, 0, 60))
+            .addStroke(GestureDescription.StrokeDescription(clickPath, 0, durationMs))
             .build()
         return service.dispatchGesture(gesture, null, null)
     }
 
-    fun typeText(node: AccessibilityNodeInfo?, text: String, pressEnter: Boolean = true): Boolean {
+    suspend fun typeText(node: AccessibilityNodeInfo?, text: String, pressEnter: Boolean = true): Boolean {
         if (node == null) return false
 
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
@@ -67,13 +99,16 @@ class GestureDispatcher(
         }
         var succeeded = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
         if (!succeeded) {
-            // Fallback: Click first to engage software keyboard focus, then retry set text
+            // Fallback: Click first to engage software keyboard focus, wait for stroke completion, then retry
             performClick(node)
+            delay(180L)
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
             succeeded = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
         }
 
         if (succeeded && pressEnter) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                delay(80L)
                 node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
             }
         }
@@ -120,4 +155,20 @@ class GestureDispatcher(
         val service = serviceProvider() ?: return false
         return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
     }
+
+    fun performRecents(): Boolean {
+        val service = serviceProvider() ?: return false
+        return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+    }
+
+    fun performNotifications(): Boolean {
+        val service = serviceProvider() ?: return false
+        return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
+    }
+
+    fun performQuickSettings(): Boolean {
+        val service = serviceProvider() ?: return false
+        return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
+    }
 }
+

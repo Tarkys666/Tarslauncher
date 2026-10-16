@@ -39,11 +39,16 @@ class AgentPreferences(context: Context) {
     }
 
     fun getGroqModel(): String {
-        return prefs.getString(KEY_GROQ_MODEL, "qwen/qwen3.8-27b").orEmpty().ifBlank { "qwen/qwen3.8-27b" }
+        val saved = prefs.getString(KEY_GROQ_MODEL, GroqRemoteDataSource.DEFAULT_GROQ_MODEL).orEmpty().trim()
+        return if (saved.isBlank() || saved == "qwen/qwen3.8-27b") {
+            GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+        } else {
+            saved
+        }
     }
 
     fun setGroqModel(model: String) {
-        prefs.edit().putString(KEY_GROQ_MODEL, model.trim()).apply()
+        prefs.edit().putString(KEY_GROQ_MODEL, model.trim().ifBlank { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }).apply()
     }
 
     fun getSupabaseUrl(): String {

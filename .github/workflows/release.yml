@@ -36,7 +36,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -83,8 +83,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.version_tag != ''
         with:
-          name: TARS Launcher ${{ github.ref_name || github.event.inputs.version_tag }}
-          tag_name: ${{ github.ref_name || github.event.inputs.version_tag }}
+          name: TARS Launcher ${{ github.event.inputs.version_tag || github.ref_name }}
+          tag_name: ${{ github.event.inputs.version_tag || github.ref_name }}
           files: ./Tarslauncher/TarsLauncher-release.apk
           draft: false
           prerelease: false

@@ -300,7 +300,7 @@ fun AgentBottomSheet(
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = {
                                     Text(
-                                        "qwen/qwen3.8-27b",
+                                        "qwen/qwen3-32b",
                                         color = Color.White.copy(alpha = 0.3f),
                                         fontSize = 12.sp,
                                         fontFamily = FontFamily.Monospace
@@ -903,6 +903,106 @@ fun AgentBottomSheet(
                             ) {
                                 Text(
                                     text = "CONFIRM",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Interactive Human-in-the-Loop Question Dialog (ask_user)
+        uiState.pendingQuestion?.let { questionEvent ->
+            var replyText by remember(questionEvent) { mutableStateOf("") }
+            BasicAlertDialog(
+                onDismissRequest = { viewModel.onAnswerQuestion(null) }
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Black),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "AGENT // USER INPUT REQUIRED",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = questionEvent.question,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = replyText,
+                            onValueChange = { replyText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text(
+                                    "Yanıtınızı yazın...",
+                                    color = Color.White.copy(alpha = 0.35f),
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+                                focusedContainerColor = Color.Black,
+                                unfocusedContainerColor = Color.Black
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
+                                    .clickable { viewModel.onAnswerQuestion(null) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "CANCEL",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        if (replyText.isNotBlank()) {
+                                            viewModel.onAnswerQuestion(replyText)
+                                        }
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "REPLY",
                                     color = Color.Black,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,

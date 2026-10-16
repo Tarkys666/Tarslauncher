@@ -1,6 +1,7 @@
 package com.tarslauncher.app.agent.domain.safety
 
 import com.tarslauncher.app.agent.domain.model.AgentAction
+import java.util.Locale
 
 /**
  * Evaluates whether a proposed agent action poses risks (financial, deletion, external communication)
@@ -8,11 +9,16 @@ import com.tarslauncher.app.agent.domain.model.AgentAction
  */
 class SafetyGate {
 
-    private val sensitiveTokens = setOf(
+    private val trLocale = Locale.forLanguageTag("tr-TR")
+
+    private val highRiskTokens = setOf(
         // Destructive
         "sil", "delete", "kaldır", "uninstall", "sıfırla", "reset", "wipe", "format",
         // Financial & transactions
-        "öde", "pay", "buy", "sipariş", "order", "transfer", "iban",
+        "öde", "pay", "buy", "sipariş", "order", "transfer", "iban"
+    )
+
+    private val sensitiveTokens = highRiskTokens + setOf(
         // Outgoing actions
         "gönder", "send", "paylaş", "share",
         // Permissions & admin
@@ -21,7 +27,9 @@ class SafetyGate {
 
     private val multiWordPhrases = listOf(
         "satın al",
-        "hesabı sil"
+        "hesabı sil",
+        "kalıcı olarak sil",
+        "delete account"
     )
 
     private val sensitiveAppKeywords = listOf(
@@ -30,7 +38,7 @@ class SafetyGate {
     )
 
     private val confirmationButtons = setOf(
-        "onayla", "devam", "tamam", "evet", "ileri", "öde", "sil", "kabul"
+        "onayla", "evet", "öde", "sil", "kabul", "confirm", "accept", "submit", "yes"
     )
 
     private val nonWordRegex = Regex("""[^\p{L}\p{Nd}]+""")
@@ -44,22 +52,18 @@ class SafetyGate {
     fun evaluate(action: AgentAction, screenContent: String): Pair<Boolean, String> {
         when (action) {
             is AgentAction.OpenApp -> {
-                val lower = action.appName.lowercase()
-                if (sensitiveAppKeywords.any { lower.contains(it) }) {
+                val lowerVariants = normalizeVariants(action.appName)
+                if (sensitiveAppKeywords.any { kw -> lowerVariants.any { it.contains(kw) } }) {
                     return true to "Güvenlik Uyarısı: '${action.appName}' hassas/sistem uygulaması. Açılması onaylanıyor mu?"
                 }
             }
 
             is AgentAction.Tap -> {
-                val matchedLine = findTargetLine(action.targetId, screenContent)
-                val lineIsSensitive = matchedLine != null && isSensitive(matchedLine)
-                val screenIsSensitive = isSensitive(screenContent)
-                val isConfirmButton = matchedLine != null && confirmationButtons.any { matchedLine.contains(it, ignoreCase = true) }
+                return evaluateTargetNode(action.targetId, screenContent)
+            }
 
-                if (lineIsSensitive || (screenIsSensitive && isConfirmButton)) {
-                    val desc = matchedLine?.trim() ?: "Hedef ID: ${action.targetId}"
-                    return true to "Güvenlik Uyarısı: '$desc' işlemine dokunulmak isteniyor. Devam edilsin mi?"
-                }
+            is AgentAction.LongPress -> {
+                return evaluateTargetNode(action.targetId, screenContent)
             }
 
             is AgentAction.TypeText -> {
@@ -75,17 +79,49 @@ class SafetyGate {
         return false to ""
     }
 
+    private fun evaluateTargetNode(targetId: Int, screenContent: String): Pair<Boolean, String> {
+        val matchedLine = findTargetLine(targetId, screenContent)
+        val lineIsSensitive = matchedLine != null && isSensitive(matchedLine)
+        val screenIsHighRisk = isHighRiskContext(screenContent)
+        val isConfirmButton = matchedLine != null && matchesAnyToken(matchedLine, confirmationButtons)
+
+        if (lineIsSensitive || (screenIsHighRisk && isConfirmButton)) {
+            val desc = matchedLine?.trim() ?: "Hedef ID: $targetId"
+            return true to "Güvenlik Uyarısı: '$desc' işlemine dokunulmak isteniyor. Devam edilsin mi?"
+        }
+        return false to ""
+    }
+
     private fun findTargetLine(targetId: Int, screenContent: String): String? {
         val targetPrefix = "[$targetId]"
         return screenContent.lineSequence()
             .firstOrNull { it.trimStart().startsWith(targetPrefix) }
     }
 
-    private fun isSensitive(text: String): Boolean {
-        val lower = text.lowercase()
-        if (multiWordPhrases.any { lower.contains(it) }) return true
+    private fun normalizeVariants(text: String): List<String> {
+        val trLower = text.lowercase(trLocale).replace("i\u0307", "i")
+        val rootLower = text.lowercase(Locale.ROOT).replace("i\u0307", "i")
+        return if (trLower == rootLower) listOf(trLower) else listOf(trLower, rootLower)
+    }
 
-        val words = lower.split(nonWordRegex).filter { it.isNotBlank() }
-        return words.any { sensitiveTokens.contains(it) }
+    private fun isSensitive(text: String): Boolean {
+        val variants = normalizeVariants(text)
+        if (multiWordPhrases.any { phrase -> variants.any { it.contains(phrase) } }) return true
+        return matchesAnyToken(text, sensitiveTokens)
+    }
+
+    private fun isHighRiskContext(text: String): Boolean {
+        val variants = normalizeVariants(text)
+        if (multiWordPhrases.any { phrase -> variants.any { it.contains(phrase) } }) return true
+        return matchesAnyToken(text, highRiskTokens)
+    }
+
+    private fun matchesAnyToken(text: String, tokenSet: Set<String>): Boolean {
+        for (variant in normalizeVariants(text)) {
+            val words = variant.split(nonWordRegex).filter { it.isNotBlank() }
+            if (words.any { tokenSet.contains(it) }) return true
+        }
+        return false
     }
 }
+

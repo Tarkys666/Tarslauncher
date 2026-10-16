@@ -25,6 +25,8 @@ class LauncherViewModel(
     private val _uiState = MutableStateFlow(LauncherUiState(isLoading = true))
     val uiState: StateFlow<LauncherUiState> = _uiState.asStateFlow()
 
+    private var refreshJob: kotlinx.coroutines.Job? = null
+
     init {
         viewModelScope.launch {
             appRepository.initialize()
@@ -36,6 +38,18 @@ class LauncherViewModel(
                     // If grid dimensions changed, refresh folder slots
                     if (oldGridSize != settings.gridSize && _uiState.value.installedApps.isNotEmpty()) {
                         reloadFolders(settings.gridSize, _uiState.value.installedApps)
+                    }
+                }
+            }
+            // Observe PWA/shortcut additions from external activities (e.g. PinShortcutActivity)
+            var isInitialPwaEmit = true
+            launch {
+                appRepository.pwasJsonFlow.collectLatest {
+                    if (isInitialPwaEmit) {
+                        isInitialPwaEmit = false
+                    } else {
+                        appRepository.invalidateAppCache()
+                        refreshAppList()
                     }
                 }
             }
@@ -52,7 +66,8 @@ class LauncherViewModel(
     }
 
     fun refreshAppList() {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             coroutineScope {
@@ -78,9 +93,10 @@ class LauncherViewModel(
 
                 val installedApps = baseApps.map { app ->
                     val stats = usageMap[app.packageName]
+                    val count = stats?.usageCount ?: 0
                     app.copy(
-                        usageCount = stats?.usageCount ?: 0,
-                        isFavorite = stats?.isFavorite ?: false
+                        usageCount = count,
+                        isFavorite = (stats?.isFavorite ?: false) || count >= 10
                     )
                 }.sortedWith(APP_COMPARATOR)
 
@@ -110,7 +126,10 @@ class LauncherViewModel(
         viewModelScope.launch {
             val sanitized = PwaLauncherHelper.sanitizeWebUrl(url) ?: return@launch
             val title = if (name.isNotBlank()) name.trim() else PwaFetcherHelper.extractDefaultTitle(sanitized)
-            val fetchedIcon = iconBase64 ?: PwaFetcherHelper.fetchIconBase64(sanitized)
+            val presetIcon = _uiState.value.pwaPresets
+                .firstOrNull { it.url.equals(sanitized, ignoreCase = true) }
+                ?.iconBase64
+            val fetchedIcon = iconBase64 ?: presetIcon ?: PwaFetcherHelper.fetchIconBase64(sanitized)
 
             val pwa = PwaInfo(
                 id = UUID.randomUUID().toString().take(8),
@@ -141,14 +160,6 @@ class LauncherViewModel(
         }
     }
 
-    fun addRedGifsPwa() {
-        addPwa(
-            name = "RedGIFs",
-            url = "https://www.redgifs.com",
-            iconBase64 = AppRepository.REDGIFS_ICON_BASE64
-        )
-    }
-
     private fun reloadFolders(gridSize: GridSize, apps: List<AppInfo>) {
         viewModelScope.launch {
             val foldersResult = appRepository.getFolders(gridSize.totalCells, apps)
@@ -162,7 +173,11 @@ class LauncherViewModel(
         val index = currentList.indexOfFirst { it.packageName == app.packageName }
         if (index == -1) return
 
-        val updatedApp = currentList[index].copy(usageCount = currentList[index].usageCount + 1)
+        val newCount = currentList[index].usageCount + 1
+        val updatedApp = currentList[index].copy(
+            usageCount = newCount,
+            isFavorite = currentList[index].isFavorite || newCount >= 10
+        )
         val updatedList = currentList.toMutableList().apply { set(index, updatedApp) }
             .sortedWith(APP_COMPARATOR)
 

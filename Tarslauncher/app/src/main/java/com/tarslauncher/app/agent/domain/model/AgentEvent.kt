@@ -13,7 +13,10 @@ sealed interface AgentEvent {
         val userDecision: CompletableDeferred<Boolean>
     ) : AgentEvent
 
-    data class QuestionToUser(val question: String) : AgentEvent
+    data class QuestionToUser(
+        val question: String,
+        val userAnswer: CompletableDeferred<String?> = CompletableDeferred()
+    ) : AgentEvent
     
     data class Success(val summary: String) : AgentEvent
     

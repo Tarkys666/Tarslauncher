@@ -10,7 +10,7 @@ data class AgentUiState(
     val provider: AgentProvider = AgentProvider.GEMINI,
     val geminiApiKey: String = "",
     val groqApiKey: String = "",
-    val groqModel: String = "qwen/qwen3.8-27b",
+    val groqModel: String = "qwen/qwen3-32b",
     val supabaseUrl: String = "",
     val supabaseAnonKey: String = "",
     val taskInput: String = "",
@@ -18,7 +18,7 @@ data class AgentUiState(
     val logs: List<String> = emptyList(),
     val datasetCount: Int = 0,
     val pendingConfirmation: AgentEvent.AwaitingConfirmation? = null,
-    val pendingQuestion: String? = null,
+    val pendingQuestion: AgentEvent.QuestionToUser? = null,
     val finalMessage: String? = null,
     val isFailure: Boolean = false
 ) {
@@ -27,7 +27,4 @@ data class AgentUiState(
             AgentProvider.GEMINI -> geminiApiKey
             AgentProvider.GROQ -> groqApiKey
         }
-
-    val apiKey: String
-        get() = activeApiKey
 }

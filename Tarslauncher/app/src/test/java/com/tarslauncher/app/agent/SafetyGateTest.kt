@@ -79,4 +79,32 @@ class SafetyGateTest {
         assertFalse(needsConfirm)
         assertTrue(prompt.isEmpty())
     }
+
+    @Test
+    fun `detects Turkish uppercase SIL and long press on delete`() {
+        val screenDump = """
+            PAKET: com.example.files
+            [8] "SİL" <tık,uzun-tık>
+        """.trimIndent()
+
+        val tapAction = AgentAction.Tap("Dosyayı siliyorum", 8)
+        assertTrue(safetyGate.evaluate(tapAction, screenDump).first)
+
+        val longPressAction = AgentAction.LongPress("Dosyaya uzun basıyorum", 8)
+        assertTrue(safetyGate.evaluate(longPressAction, screenDump).first)
+    }
+
+    @Test
+    fun `harmless Tamam or Onayla dialog button does not trigger false positive without risky context`() {
+        val screenDump = """
+            PAKET: com.android.deskclock
+            [10] "Alarm Kuruldu"
+            [11] "Tamam" <tık>
+        """.trimIndent()
+
+        val action = AgentAction.Tap("Tamam butonuna basıyorum", 11)
+        val (needsConfirm, _) = safetyGate.evaluate(action, screenDump)
+
+        assertFalse("Normal 'Tamam' butonu gereksiz güvenlik onayı istememeli", needsConfirm)
+    }
 }

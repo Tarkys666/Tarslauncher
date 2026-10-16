@@ -7,5 +7,7 @@ data class AgentDecision(
     val action: AgentAction,
     val rawResponse: String,
     val provider: String,
-    val model: String
+    val model: String,
+    val reflection: String = "",
+    val replan: List<String>? = null
 )

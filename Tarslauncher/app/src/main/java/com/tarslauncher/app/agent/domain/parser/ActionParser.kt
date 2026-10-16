@@ -1,64 +1,157 @@
 package com.tarslauncher.app.agent.domain.parser
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.tarslauncher.app.agent.domain.model.AgentAction
 
 object ActionParser {
 
+    data class ParsedPayload(
+        val action: AgentAction,
+        val reflection: String = "",
+        val replan: List<String>? = null
+    )
+
+    private val thinkBlockRegex = Regex("""<think>(.*?)</think>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+
     /**
      * Extracts and maps a JSON object from the model's raw string response into a strongly-typed [AgentAction].
-     * Resilient against surrounding markdown code fences, leading text, or minor parameter key variations.
+     * Resilient against `<think>` reasoning blocks, markdown code fences, conversational text, or key variations.
      */
-    fun parse(rawResponse: String): AgentAction? {
-        val trimmed = rawResponse.trim()
-        val startIndex = trimmed.indexOf('{')
-        val endIndex = trimmed.lastIndexOf('}')
+    fun parse(rawResponse: String): AgentAction? = parsePayload(rawResponse)?.action
 
-        if (startIndex == -1 || endIndex <= startIndex) {
-            return null
-        }
+    fun parsePayload(rawResponse: String): ParsedPayload? {
+        if (rawResponse.isBlank()) return null
 
-        val jsonSubstring = trimmed.substring(startIndex, endIndex + 1)
+        val thinkContent = thinkBlockRegex.find(rawResponse)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        val stripped = thinkBlockRegex.replace(rawResponse, "").trim()
+        val jsonSubstring = extractBalancedJsonObject(stripped) ?: return null
 
         return runCatching {
             val jsonElement = JsonParser.parseString(jsonSubstring)
             if (!jsonElement.isJsonObject) return null
 
             val rootObj = jsonElement.asJsonObject
-            val thought = rootObj.get("thought")?.asString.orEmpty()
-            val actionName = rootObj.get("action")?.asString?.lowercase() ?: return null
-            val args = rootObj.getAsJsonObject("args") ?: JsonObject()
+            val reflection = rootObj.get("reflection")?.asString?.trim().orEmpty()
+            val explicitThought = rootObj.get("thought")?.asString?.trim()
+                ?: rootObj.get("reasoning")?.asString?.trim()
+                ?: ""
+            val thought = explicitThought.ifBlank { thinkContent }
+
+            val actionName = (
+                rootObj.get("action")?.asString
+                    ?: rootObj.get("tool")?.asString
+                    ?: rootObj.get("name")?.asString
+            )?.trim()?.lowercase() ?: return null
+
+            val args = rootObj.getAsJsonObject("args")
+                ?: rootObj.getAsJsonObject("parameters")
+                ?: rootObj.getAsJsonObject("arguments")
+                ?: rootObj
+
             val stepIndex = rootObj.get("step")?.asInt
                 ?: rootObj.get("current_step")?.asInt
                 ?: rootObj.get("step_index")?.asInt
                 ?: -1
 
-            mapToAction(thought, actionName, args, stepIndex)
+            val replan = rootObj.get("replan")?.let { extractStringList(it) }?.takeIf { it.isNotEmpty() }
+
+            val action = mapToAction(thought, actionName, args, stepIndex)
+            ParsedPayload(
+                action = action,
+                reflection = reflection,
+                replan = replan
+            )
         }.getOrNull()
     }
 
     fun parsePlan(rawResponse: String): List<String>? {
-        val trimmed = rawResponse.trim()
-        val startIndex = trimmed.indexOf('{')
-        val endIndex = trimmed.lastIndexOf('}')
-        if (startIndex == -1 || endIndex <= startIndex) return null
+        if (rawResponse.isBlank()) return null
+        val stripped = thinkBlockRegex.replace(rawResponse, "").trim()
+        val jsonSubstring = extractBalancedJsonObject(stripped) ?: return null
 
         return runCatching {
-            val jsonElement = JsonParser.parseString(trimmed.substring(startIndex, endIndex + 1))
+            val jsonElement = JsonParser.parseString(jsonSubstring)
+            if (!jsonElement.isJsonObject) return null
             val root = jsonElement.asJsonObject
-            val planArray = root.getAsJsonArray("plan") ?: return null
-            planArray.mapNotNull { it.asString }
+            val planElement = root.get("plan") ?: root.get("steps") ?: return null
+            extractStringList(planElement).takeIf { it.isNotEmpty() }
         }.getOrNull()
+    }
+
+    private fun extractStringList(element: JsonElement): List<String> {
+        if (!element.isJsonArray) return emptyList()
+        return element.asJsonArray.mapNotNull { item ->
+            when {
+                item.isJsonPrimitive -> item.asString.trim().takeIf { it.isNotBlank() }
+                item.isJsonObject -> {
+                    val obj = item.asJsonObject
+                    (obj.get("title")?.asString ?: obj.get("step")?.asString ?: obj.get("description")?.asString)
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                }
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * Finds the first valid balanced `{ ... }` JSON object in [text], ignoring braces inside string literals.
+     */
+    internal fun extractBalancedJsonObject(text: String): String? {
+        var startIdx = text.indexOf('{')
+        while (startIdx != -1) {
+            var depth = 0
+            var inString = false
+            var escaped = false
+
+            for (i in startIdx until text.length) {
+                val ch = text[i]
+                if (inString) {
+                    if (escaped) {
+                        escaped = false
+                    } else if (ch == '\\') {
+                        escaped = true
+                    } else if (ch == '"') {
+                        inString = false
+                    }
+                } else {
+                    when (ch) {
+                        '"' -> inString = true
+                        '{' -> depth++
+                        '}' -> {
+                            depth--
+                            if (depth == 0) {
+                                val candidate = text.substring(startIdx, i + 1)
+                                if (runCatching { JsonParser.parseString(candidate).isJsonObject }.getOrDefault(false)) {
+                                    return candidate
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+            startIdx = text.indexOf('{', startIdx + 1)
+        }
+        return null
     }
 
     private fun mapToAction(thought: String, actionName: String, args: JsonObject, stepIndex: Int): AgentAction {
         return when (actionName) {
-            "open_app" -> {
+            "open_app", "launch_app" -> {
                 val appName = args.get("name")?.asString
                     ?: args.get("app")?.asString
                     ?: args.get("app_name")?.asString.orEmpty()
                 AgentAction.OpenApp(thought, appName, stepIndex)
+            }
+
+            "open_url", "browse", "url" -> {
+                val url = args.get("url")?.asString
+                    ?: args.get("link")?.asString
+                    ?: args.get("uri")?.asString.orEmpty()
+                AgentAction.OpenUrl(thought, url, stepIndex)
             }
 
             "tap", "click" -> {
@@ -68,11 +161,19 @@ object ActionParser {
                 AgentAction.Tap(thought, id, stepIndex)
             }
 
+            "long_press", "long_click", "hold" -> {
+                val id = args.get("id")?.asInt
+                    ?: args.get("target_id")?.asInt
+                    ?: -1
+                AgentAction.LongPress(thought, id, stepIndex)
+            }
+
             "type", "type_text", "input" -> {
                 val id = args.get("id")?.asInt
                     ?: args.get("target_id")?.asInt
                     ?: -1
-                val text = args.get("text")?.asString.orEmpty()
+                val text = args.get("text")?.asString
+                    ?: args.get("value")?.asString.orEmpty()
                 val pressEnter = args.get("enter")?.asBoolean
                     ?: args.get("press_enter")?.asBoolean
                     ?: true
@@ -84,11 +185,23 @@ object ActionParser {
                 AgentAction.Scroll(thought, AgentAction.Scroll.Direction.fromString(dirString), stepIndex)
             }
 
-            "back" -> AgentAction.Back(thought, stepIndex)
+            "back", "navigate_back" -> AgentAction.Back(thought, stepIndex)
 
-            "home" -> AgentAction.Home(thought, stepIndex)
+            "home", "go_home" -> AgentAction.Home(thought, stepIndex)
 
-            "wait" -> {
+            "recents", "recent_apps" -> AgentAction.Recents(thought, stepIndex)
+
+            "notifications", "open_notifications" -> AgentAction.Notifications(thought, stepIndex)
+
+            "quick_settings" -> AgentAction.QuickSettings(thought, stepIndex)
+
+            "clipboard_set", "copy" -> {
+                val text = args.get("text")?.asString
+                    ?: args.get("content")?.asString.orEmpty()
+                AgentAction.ClipboardSet(thought, text, stepIndex)
+            }
+
+            "wait", "sleep" -> {
                 val msFromSec = (args.get("seconds")?.asLong ?: args.get("sec")?.asLong)?.times(1000L)
                 val ms = msFromSec
                     ?: args.get("ms")?.asLong
@@ -103,7 +216,7 @@ object ActionParser {
                 AgentAction.AskUser(thought, question, stepIndex)
             }
 
-            "done", "finish" -> {
+            "done", "finish", "complete" -> {
                 val summary = args.get("message")?.asString
                     ?: args.get("summary")?.asString
                     ?: "Görev başarıyla tamamlandı."
@@ -114,3 +227,4 @@ object ActionParser {
         }
     }
 }
+

@@ -12,14 +12,19 @@ import kotlinx.coroutines.withContext
 
 class GeminiRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val preferredModel: String = "gemini-1.5-flash"
+    private val preferredModel: String = "gemini-2.5-flash"
 ) {
+
+    @Volatile
+    var lastUsedModel: String = preferredModel
+        private set
 
     private val candidateModels = listOf(
         preferredModel,
-        "gemini-1.5-flash",
         "gemini-2.5-flash",
         "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-1.5-flash-latest"
     ).distinct()
 
@@ -72,6 +77,7 @@ class GeminiRemoteDataSource(
             }
 
             if (callResult.isSuccess) {
+                lastUsedModel = model
                 return@withContext callResult
             }
 

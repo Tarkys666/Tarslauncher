@@ -1,7 +1,7 @@
 {
-  "versionCode": 23,
-  "versionName": "1.5.1",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.5.1/TarsLauncher-release.apk",
+  "versionCode": 24,
+  "versionName": "1.6.0",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.6.0/TarsLauncher-release.apk",
   "apkSize": 11067700,
-  "releaseNotes": "TARS Agent: Mini-planlama ve canlı checklist, gelişmiş timer/bekleme (30s+), oturumlar arası hafıza, Markdown skill kütüphanesi ve Firebase Firestore otomatik telemetrisi."
+  "releaseNotes": "TARS Codex/Hermes Mimari Yükseltmesi: 4 aşamalı ReAct + Öz-Doğrulama (Reflection) + Dinamik Yeniden Planlama (Replan), 15 gelişmiş Android aracı (open_url, long_press, recents, notifications, quick_settings, clipboard_set), interaktif ask_user devamlılığı, ekran farkı (anti-oscillation) tespiti, zenginleştirilmiş erişilebilirlik ağacı (130 node) ve başlatıcı hata düzeltmeleri."
 }

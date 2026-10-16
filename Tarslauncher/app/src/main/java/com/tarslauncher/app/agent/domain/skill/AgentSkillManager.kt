@@ -20,6 +20,8 @@ class AgentSkillManager(
     private val skillsDir = File(context.filesDir, "skills").apply { mkdirs() }
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
 
+    private val trLocale = Locale.forLanguageTag("tr-TR")
+
     suspend fun saveSkill(
         goal: String,
         targetPackage: String,
@@ -27,10 +29,10 @@ class AgentSkillManager(
     ): File? = withContext(Dispatchers.IO) {
         if (stepsSummary.isEmpty()) return@withContext null
 
-        val sanitizedGoalName = goal.lowercase()
+        val sanitizedGoalName = goal.lowercase(trLocale)
             .replace(Regex("""[^a-z0-9ğüşıöç]+"""), "_")
             .trim('_')
-            .take(30)
+            .take(40)
 
         val fileName = "skill_${sanitizedGoalName}.md"
         val skillFile = File(skillsDir, fileName)
@@ -73,22 +75,31 @@ class AgentSkillManager(
         val files = skillsDir.listFiles { _, name -> name.endsWith(".md") } ?: return@withContext null
         if (files.isEmpty()) return@withContext null
 
-        val goalTokens = goal.lowercase().split(Regex("""\s+""")).filter { it.length > 2 }
+        val goalTokens = goal.lowercase(trLocale)
+            .split(Regex("""[^\p{L}\p{Nd}]+"""))
+            .filter { it.length > 2 }
+        if (goalTokens.isEmpty()) return@withContext null
 
-        // Find best match by token overlap
-        var bestFile: File? = null
+        var bestContent: String? = null
         var maxScore = 0
 
         for (file in files) {
-            val nameTokens = file.nameWithoutExtension.lowercase().split("_")
-            val score = goalTokens.count { token -> nameTokens.any { it.contains(token) } }
+            val content = runCatching { file.readText(Charsets.UTF_8) }.getOrNull() ?: continue
+            val headerLine = content.lineSequence().firstOrNull().orEmpty().lowercase(trLocale)
+            val searchableTokens = (file.nameWithoutExtension.lowercase(trLocale) + " " + headerLine)
+                .split(Regex("""[^\p{L}\p{Nd}_]+"""))
+                .filter { it.length > 2 }
+
+            val score = goalTokens.count { token ->
+                searchableTokens.any { it.contains(token) || token.contains(it) }
+            }
             if (score > maxScore && score >= 1) {
                 maxScore = score
-                bestFile = file
+                bestContent = content
             }
         }
 
-        bestFile?.readText(Charsets.UTF_8)
+        bestContent
     }
 
     suspend fun getSkillsCount(): Int = withContext(Dispatchers.IO) {
