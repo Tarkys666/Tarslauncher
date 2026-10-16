@@ -68,28 +68,17 @@ class AgentViewModel(
     }
 
     fun onProviderChanged(newProvider: AgentProvider) {
-        preferences.setProvider(newProvider)
-        _uiState.update { it.copy(provider = newProvider) }
+        // Locked to GROQ
     }
 
     fun onSaveApiKey(newApiKey: String) {
         val trimmed = newApiKey.trim()
-        when (_uiState.value.provider) {
-            AgentProvider.GEMINI -> {
-                preferences.setGeminiApiKey(trimmed)
-                _uiState.update { it.copy(geminiApiKey = trimmed) }
-            }
-            AgentProvider.GROQ -> {
-                preferences.setGroqApiKey(trimmed)
-                _uiState.update { it.copy(groqApiKey = trimmed) }
-            }
-        }
+        preferences.setGroqApiKey(trimmed)
+        _uiState.update { it.copy(groqApiKey = trimmed) }
     }
 
     fun onSaveGroqModel(model: String) {
-        val trimmed = model.trim().ifBlank { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
-        preferences.setGroqModel(trimmed)
-        _uiState.update { it.copy(groqModel = trimmed) }
+        // Fixed to GroqRemoteDataSource.DEFAULT_GROQ_MODEL
     }
 
     fun onSaveSupabaseConfig(url: String, key: String) {
@@ -105,17 +94,12 @@ class AgentViewModel(
         if (trimmedTask.isBlank()) return
 
         val state = _uiState.value
-        val activeKey = state.activeApiKey.trim()
+        val activeKey = state.groqApiKey.trim()
         if (activeKey.isBlank()) {
-            val keyPrompt = if (state.provider == AgentProvider.GROQ) {
-                "Lütfen önce geçerli bir Groq API anahtarı (gsk_...) kaydedin."
-            } else {
-                "Lütfen önce geçerli bir Gemini API anahtarı kaydedin."
-            }
             _uiState.update {
                 it.copy(
                     isFailure = true,
-                    finalMessage = keyPrompt
+                    finalMessage = "Lütfen önce geçerli bir Groq API anahtarı (gsk_...) kaydedin."
                 )
             }
             return
@@ -141,34 +125,22 @@ class AgentViewModel(
                 currentPlan = null,
                 pendingQuestion = null,
                 pendingConfirmation = null,
-                logs = listOf("Başlatılıyor [${state.provider.name}]...")
+                logs = listOf("Başlatılıyor [Qwen 3.8-27B]...")
             )
         }
 
-        val activeModelName = when (state.provider) {
-            AgentProvider.GEMINI -> "gemini-2.5-flash"
-            AgentProvider.GROQ -> state.groqModel
-        }
+        val remoteDataSource = GroqRemoteDataSource(
+            apiKeyProvider = { _uiState.value.groqApiKey },
+            preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
+        )
+        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL)
 
-        val brain: AgentBrain = when (state.provider) {
-            AgentProvider.GEMINI -> {
-                val remoteDataSource = GeminiRemoteDataSource(apiKeyProvider = { _uiState.value.geminiApiKey })
-                GeminiAgentBrain(remoteDataSource)
-            }
-            AgentProvider.GROQ -> {
-                val remoteDataSource = GroqRemoteDataSource(
-                    apiKeyProvider = { _uiState.value.groqApiKey },
-                    preferredModelProvider = { _uiState.value.groqModel }
-                )
-                GroqAgentBrain(remoteDataSource, modelName = state.groqModel)
-            }
-        }
         val runner = AgentLoopRunner(
             context = getApplication(),
             agentBrain = brain,
             datasetCollector = datasetCollector,
-            providerName = state.provider.name,
-            modelName = activeModelName
+            providerName = "GROQ",
+            modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
         )
 
         currentExecutionJob = viewModelScope.launch {

@@ -7,10 +7,10 @@ import com.tarslauncher.app.agent.domain.model.AgentPlan
 data class AgentUiState(
     val isServiceActive: Boolean = false,
     val isRunning: Boolean = false,
-    val provider: AgentProvider = AgentProvider.GEMINI,
+    val provider: AgentProvider = AgentProvider.GROQ,
     val geminiApiKey: String = "",
     val groqApiKey: String = "",
-    val groqModel: String = "qwen/qwen3-32b",
+    val groqModel: String = "qwen/qwen3.8-27b",
     val supabaseUrl: String = "",
     val supabaseAnonKey: String = "",
     val taskInput: String = "",
@@ -23,8 +23,5 @@ data class AgentUiState(
     val isFailure: Boolean = false
 ) {
     val activeApiKey: String
-        get() = when (provider) {
-            AgentProvider.GEMINI -> geminiApiKey
-            AgentProvider.GROQ -> groqApiKey
-        }
+        get() = groqApiKey
 }

@@ -13,22 +13,13 @@ class AgentPreferences(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getProvider(): AgentProvider {
-        val name = prefs.getString(KEY_PROVIDER, AgentProvider.GEMINI.name) ?: AgentProvider.GEMINI.name
-        return runCatching { AgentProvider.valueOf(name) }.getOrDefault(AgentProvider.GEMINI)
-    }
-
+    fun getProvider(): AgentProvider = AgentProvider.GROQ
     fun setProvider(provider: AgentProvider) {
-        prefs.edit().putString(KEY_PROVIDER, provider.name).apply()
+        // Locked to Groq
     }
 
-    fun getGeminiApiKey(): String {
-        return prefs.getString(KEY_GEMINI_API_KEY, "").orEmpty()
-    }
-
-    fun setGeminiApiKey(key: String) {
-        prefs.edit().putString(KEY_GEMINI_API_KEY, key.trim()).apply()
-    }
+    fun getGeminiApiKey(): String = ""
+    fun setGeminiApiKey(key: String) {}
 
     fun getGroqApiKey(): String {
         return prefs.getString(KEY_GROQ_API_KEY, "").orEmpty()
@@ -38,18 +29,10 @@ class AgentPreferences(context: Context) {
         prefs.edit().putString(KEY_GROQ_API_KEY, key.trim()).apply()
     }
 
-    fun getGroqModel(): String {
-        val saved = prefs.getString(KEY_GROQ_MODEL, GroqRemoteDataSource.DEFAULT_GROQ_MODEL).orEmpty().trim()
-        val deprecated = setOf("qwen/qwen3.8-27b", "llama-3.1-8b-instant")
-        return if (saved.isBlank() || saved in deprecated) {
-            GroqRemoteDataSource.DEFAULT_GROQ_MODEL
-        } else {
-            saved
-        }
-    }
+    fun getGroqModel(): String = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
 
     fun setGroqModel(model: String) {
-        prefs.edit().putString(KEY_GROQ_MODEL, model.trim().ifBlank { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }).apply()
+        // Fixed to GroqRemoteDataSource.DEFAULT_GROQ_MODEL
     }
 
     fun getSupabaseUrl(): String {

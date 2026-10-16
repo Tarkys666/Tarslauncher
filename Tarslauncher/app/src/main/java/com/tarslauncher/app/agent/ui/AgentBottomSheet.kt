@@ -68,9 +68,8 @@ fun AgentBottomSheet(
     val clipboardManager = LocalClipboardManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var showKeyEditor by remember { mutableStateOf(uiState.activeApiKey.isBlank()) }
-    var tempApiKey by remember(uiState.activeApiKey, uiState.provider) { mutableStateOf(uiState.activeApiKey) }
-    var tempGroqModel by remember(uiState.groqModel) { mutableStateOf(uiState.groqModel) }
+    var showKeyEditor by remember { mutableStateOf(uiState.groqApiKey.isBlank()) }
+    var tempApiKey by remember(uiState.groqApiKey) { mutableStateOf(uiState.groqApiKey) }
     var tempSupabaseUrl by remember(uiState.supabaseUrl) { mutableStateOf(uiState.supabaseUrl) }
     var tempSupabaseKey by remember(uiState.supabaseAnonKey) { mutableStateOf(uiState.supabaseAnonKey) }
 
@@ -126,19 +125,15 @@ fun AgentBottomSheet(
                     )
                 }
 
-                // Minimalist Provider & Key Toggle Row
+                // Minimalist Engine & Key Toggle Row
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.5f)), RoundedCornerShape(3.dp))
-                            .clickable {
-                                val next = if (uiState.provider == AgentProvider.GEMINI) AgentProvider.GROQ else AgentProvider.GEMINI
-                                viewModel.onProviderChanged(next)
-                            }
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = "[${uiState.provider.name}]",
+                            text = "[QWEN 3.8-27B]",
                             color = Color.White,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
@@ -226,105 +221,32 @@ fun AgentBottomSheet(
                     border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.25f))
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "ENGINE PROVIDER",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Provider selector pills
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(
-                                        if (uiState.provider == AgentProvider.GEMINI) Color.White else Color.Transparent,
-                                        RoundedCornerShape(3.dp)
-                                    )
-                                    .border(BorderStroke(0.8.dp, Color.White), RoundedCornerShape(3.dp))
-                                    .clickable { viewModel.onProviderChanged(AgentProvider.GEMINI) }
-                                    .padding(vertical = 7.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "GEMINI FLASH",
-                                    color = if (uiState.provider == AgentProvider.GEMINI) Color.Black else Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(
-                                        if (uiState.provider == AgentProvider.GROQ) Color.White else Color.Transparent,
-                                        RoundedCornerShape(3.dp)
-                                    )
-                                    .border(BorderStroke(0.8.dp, Color.White), RoundedCornerShape(3.dp))
-                                    .clickable { viewModel.onProviderChanged(AgentProvider.GROQ) }
-                                    .padding(vertical = 7.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "GROQ CLOUD (LPU)",
-                                    color = if (uiState.provider == AgentProvider.GROQ) Color.Black else Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
+                            Text(
+                                text = "ENGINE // QWEN 3.8 (27B)",
+                                fontSize = 10.sp,
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "[GROQ LPU]",
+                                fontSize = 9.sp,
+                                color = Color(0xFF69F0AE),
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        if (uiState.provider == AgentProvider.GROQ) {
-                            Text(
-                                text = "GROQ MODEL (GPT-OSS / LLAMA)",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.sp
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            OutlinedTextField(
-                                value = tempGroqModel,
-                                onValueChange = { tempGroqModel = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = {
-                                    Text(
-                                        "openai/gpt-oss-20b",
-                                        color = Color.White.copy(alpha = 0.3f),
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                },
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    color = Color.White,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp
-                                ),
-                                shape = RoundedCornerShape(3.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.White,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-                                    focusedContainerColor = Color.Black,
-                                    unfocusedContainerColor = Color.Black
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-
                         Text(
-                            text = if (uiState.provider == AgentProvider.GROQ) "GROQ API KEY (gsk_...)" else "GEMINI API KEY",
+                            text = "GROQ API KEY (gsk_...)",
                             fontSize = 10.sp,
                             color = Color.White.copy(alpha = 0.6f),
                             fontFamily = FontFamily.Monospace,
@@ -342,7 +264,7 @@ fun AgentBottomSheet(
                                 modifier = Modifier.weight(1f),
                                 placeholder = {
                                     Text(
-                                        if (uiState.provider == AgentProvider.GROQ) "gsk_..." else "AIzaSy...",
+                                        "gsk_...",
                                         color = Color.White.copy(alpha = 0.3f),
                                         fontSize = 12.sp,
                                         fontFamily = FontFamily.Monospace
@@ -396,7 +318,7 @@ fun AgentBottomSheet(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = if (uiState.provider == AgentProvider.GROQ) "console.groq.com/keys adresinden ücretsiz alınabilir" else "aistudio.google.com adresinden ücretsiz alınabilir",
+                            text = "console.groq.com/keys adresinden ücretsiz alınabilir",
                             fontSize = 9.sp,
                             color = Color.White.copy(alpha = 0.4f),
                             fontFamily = FontFamily.Monospace
@@ -527,12 +449,9 @@ fun AgentBottomSheet(
                                     .background(Color.White, RoundedCornerShape(3.dp))
                                     .clickable {
                                         viewModel.onSaveApiKey(tempApiKey)
-                                        if (uiState.provider == AgentProvider.GROQ) {
-                                            viewModel.onSaveGroqModel(tempGroqModel)
-                                        }
                                         viewModel.onSaveSupabaseConfig(tempSupabaseUrl, tempSupabaseKey)
                                         showKeyEditor = false
-                                        Toast.makeText(context, "Yapılandırma Kaydedildi", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Groq API Anahtarı Kaydedildi", Toast.LENGTH_SHORT).show()
                                     }
                                     .padding(horizontal = 16.dp, vertical = 7.dp)
                             ) {
