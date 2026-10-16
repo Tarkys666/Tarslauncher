@@ -40,7 +40,8 @@ class AgentPreferences(context: Context) {
 
     fun getGroqModel(): String {
         val saved = prefs.getString(KEY_GROQ_MODEL, GroqRemoteDataSource.DEFAULT_GROQ_MODEL).orEmpty().trim()
-        return if (saved.isBlank() || saved == "qwen/qwen3.8-27b") {
+        val deprecated = setOf("qwen/qwen3.8-27b", "llama-3.1-8b-instant")
+        return if (saved.isBlank() || saved in deprecated) {
             GroqRemoteDataSource.DEFAULT_GROQ_MODEL
         } else {
             saved

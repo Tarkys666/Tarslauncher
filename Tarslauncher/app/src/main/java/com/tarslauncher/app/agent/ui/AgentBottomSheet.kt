@@ -287,7 +287,7 @@ fun AgentBottomSheet(
 
                         if (uiState.provider == AgentProvider.GROQ) {
                             Text(
-                                text = "GROQ MODEL (QWEN / LLAMA)",
+                                text = "GROQ MODEL (GPT-OSS / LLAMA)",
                                 fontSize = 10.sp,
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontFamily = FontFamily.Monospace,
@@ -300,7 +300,7 @@ fun AgentBottomSheet(
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = {
                                     Text(
-                                        "qwen/qwen3-32b",
+                                        "openai/gpt-oss-20b",
                                         color = Color.White.copy(alpha = 0.3f),
                                         fontSize = 12.sp,
                                         fontFamily = FontFamily.Monospace

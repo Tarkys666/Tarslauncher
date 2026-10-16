@@ -19,7 +19,7 @@ class GroqRemoteDataSource(
     private val preferredModelProvider: () -> String = { DEFAULT_GROQ_MODEL }
 ) {
     companion object {
-        const val DEFAULT_GROQ_MODEL = "qwen/qwen3-32b"
+        const val DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
     }
 
     @Volatile
@@ -37,8 +37,9 @@ class GroqRemoteDataSource(
             )
         }
 
+        val deprecatedModels = setOf("qwen/qwen3.8-27b", "llama-3.1-8b-instant")
         val rawPreferred = preferredModelProvider().trim()
-        val preferredModel = if (rawPreferred.isBlank() || rawPreferred == "qwen/qwen3.8-27b") {
+        val preferredModel = if (rawPreferred.isBlank() || rawPreferred in deprecatedModels) {
             DEFAULT_GROQ_MODEL
         } else {
             rawPreferred
@@ -46,9 +47,11 @@ class GroqRemoteDataSource(
         val candidateModels = listOf(
             preferredModel,
             DEFAULT_GROQ_MODEL,
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
             "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant"
-        ).distinct()
+            "qwen/qwen3-32b"
+        ).filterNot { it in deprecatedModels }.distinct()
 
         var lastError: Throwable? = null
 
