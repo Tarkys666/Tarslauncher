@@ -1,7 +1,7 @@
 {
-  "versionCode": 32,
-  "versionName": "1.7.7",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.7/TarsLauncher-release.apk",
+  "versionCode": 33,
+  "versionName": "1.7.8",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.8/TarsLauncher-release.apk",
   "apkSize": 11085864,
-  "releaseNotes": "TARS v1.7.7: Birebir Apple Dynamic Island UI — saf OLED siyahı (#000000), tıklandığında aşağı doğru pürüzsüz açılan iOS görev giriş alanı (EditText) ve doğrudan ada üzerinden görev başlatma/durdurma desteği."
+  "releaseNotes": "TARS v1.7.8: Güvenlik için Tam Kapatma Sistemi (Master Kill Switch) eklendi — Ayarlar ve Ajan panelinden tek anahtarla kapatıldığında Dynamic Island kaybolur, ekran okuma sıfırlanır ve ajanın tüm çalışması donanımsal olarak kilitlenir."
 }

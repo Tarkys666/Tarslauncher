@@ -163,6 +163,47 @@ fun AgentBottomSheet(
                             letterSpacing = 1.sp
                         )
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .border(
+                                BorderStroke(
+                                    0.8.dp,
+                                    if (uiState.isAgentEnabled) Color.White.copy(alpha = 0.4f) else Color(0xFFFF5252)
+                                ),
+                                RoundedCornerShape(3.dp)
+                            )
+                            .clickable { viewModel.onToggleAgentEnabled(!uiState.isAgentEnabled) }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = if (uiState.isAgentEnabled) "[AGENT: AÇIK]" else "[KİLİT: KAPALI]",
+                            color = if (uiState.isAgentEnabled) Color.White.copy(alpha = 0.8f) else Color(0xFFFF5252),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
+            if (!uiState.isAgentEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x26FF5252), RoundedCornerShape(4.dp))
+                        .border(BorderStroke(0.8.dp, Color(0xFFFF5252)), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "⚠ GÜVENLİK KİLİDİ AKTİF: TARS Ajanı tamamen kapatıldı. Hiçbir eylem veya ekran okuma çalışmaz.",
+                        color = Color(0xFFFF8A80),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
                 }
             }
 

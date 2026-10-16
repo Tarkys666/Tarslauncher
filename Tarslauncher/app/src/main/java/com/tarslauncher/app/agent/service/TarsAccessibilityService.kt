@@ -48,8 +48,12 @@ class TarsAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Show Apple Dynamic Island in idle state at top-center
-        overlayNotch.showIdle()
+        val prefs = AgentPreferences(this)
+        if (prefs.isAgentEnabled()) {
+            overlayNotch.showIdle()
+        } else {
+            overlayNotch.hide()
+        }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -80,12 +84,19 @@ class TarsAccessibilityService : AccessibilityService() {
     }
 
     fun captureScreenDump(): ScreenDump {
+        if (!AgentPreferences(this).isAgentEnabled()) {
+            return ScreenDump(packageName = "", formattedContent = "", elementCount = 0)
+        }
         val root = rootInActiveWindow
         return treeParser.parseScreenTree(root)
     }
 
     fun startAgentTaskFromOverlay(prompt: String) {
         val prefs = AgentPreferences(this)
+        if (!prefs.isAgentEnabled()) {
+            overlayNotch.hide()
+            return
+        }
         val apiKey = prefs.getGroqApiKey().trim()
         if (apiKey.isBlank()) {
             overlayNotch.showOrUpdate(
@@ -124,7 +135,11 @@ class TarsAccessibilityService : AccessibilityService() {
         activeOverlayJob?.cancel()
         activeOverlayJob = null
         AgentViewModel.getInstance()?.stopTask()
-        overlayNotch.showIdle()
+        if (AgentPreferences(this).isAgentEnabled()) {
+            overlayNotch.showIdle()
+        } else {
+            overlayNotch.hide()
+        }
     }
 
     companion object {

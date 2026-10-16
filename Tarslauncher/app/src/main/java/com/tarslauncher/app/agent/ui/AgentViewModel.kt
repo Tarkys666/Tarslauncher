@@ -40,7 +40,8 @@ class AgentViewModel(
             groqModel = preferences.getGroqModel(),
             supabaseUrl = preferences.getSupabaseUrl(),
             supabaseAnonKey = preferences.getSupabaseAnonKey(),
-            isServiceActive = TarsAccessibilityService.isConnected()
+            isServiceActive = TarsAccessibilityService.isConnected(),
+            isAgentEnabled = preferences.isAgentEnabled()
         )
     )
     val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()
@@ -90,9 +91,31 @@ class AgentViewModel(
         _uiState.update { it.copy(supabaseUrl = trimmedUrl, supabaseAnonKey = trimmedKey) }
     }
 
+    fun onToggleAgentEnabled(enabled: Boolean) {
+        preferences.setAgentEnabled(enabled)
+        _uiState.update { it.copy(isAgentEnabled = enabled) }
+        if (!enabled) {
+            stopTask()
+            TarsAccessibilityService.getInstance()?.stopAgentTask()
+            TarsAccessibilityService.getInstance()?.overlayNotch?.hide()
+        } else {
+            TarsAccessibilityService.getInstance()?.overlayNotch?.showIdle()
+        }
+    }
+
     fun startTask(userTask: String = _uiState.value.taskInput) {
         val trimmedTask = userTask.trim()
         if (trimmedTask.isBlank()) return
+
+        if (!preferences.isAgentEnabled()) {
+            _uiState.update {
+                it.copy(
+                    isFailure = true,
+                    finalMessage = "TARS Ajanı güvenlik ayarlarından tamamen kapatıldı. Çalıştırmak için ayarlardan açın."
+                )
+            }
+            return
+        }
 
         val state = _uiState.value
         val activeKey = state.groqApiKey.trim()

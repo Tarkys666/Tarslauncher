@@ -65,6 +65,10 @@ class AgentOverlayNotchManager(private val context: Context) {
     fun showIdle() {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
+                hide()
+                return@post
+            }
             currentState = NotchState.IDLE
             currentPlan = null
             currentStepNum = 1
@@ -87,6 +91,10 @@ class AgentOverlayNotchManager(private val context: Context) {
     ) {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
+                hide()
+                return@post
+            }
             currentStepNum = stepNumber
             currentState = state
             if (plan != null) {
@@ -423,6 +431,10 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private fun expandIsland() {
         if (isExpanded) return
+        if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
+            hide()
+            return
+        }
         isExpanded = true
 
         val wm = windowManager ?: return

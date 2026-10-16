@@ -6,6 +6,7 @@ import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 data class AgentUiState(
     val isServiceActive: Boolean = false,
+    val isAgentEnabled: Boolean = true,
     val isRunning: Boolean = false,
     val provider: AgentProvider = AgentProvider.GROQ,
     val geminiApiKey: String = "",

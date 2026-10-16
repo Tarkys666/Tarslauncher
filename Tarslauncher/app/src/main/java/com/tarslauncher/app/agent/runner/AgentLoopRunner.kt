@@ -51,6 +51,12 @@ class AgentLoopRunner(
             return@flow
         }
 
+        val prefs = com.tarslauncher.app.agent.data.AgentPreferences(context)
+        if (!prefs.isAgentEnabled()) {
+            emit(AgentEvent.Failure("Güvenlik Kilidi: TARS Ajanı ayarlardan tamamen kapatılmış durumda."))
+            return@flow
+        }
+
         val sessionId = "tars_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
         emit(AgentEvent.StatusLog("Hedef başlatılıyor: \"$userGoal\""))
 
@@ -122,7 +128,10 @@ class AgentLoopRunner(
         var lastPackageName = ""
 
         for (step in 1..maxSteps) {
-            if (!currentCoroutineContext().isActive) {
+            if (!currentCoroutineContext().isActive || !prefs.isAgentEnabled()) {
+                if (!prefs.isAgentEnabled()) {
+                    emit(AgentEvent.Failure("Ajan güvenlik kilidi devreye girdi ve işlem durduruldu."))
+                }
                 return@flow
             }
 

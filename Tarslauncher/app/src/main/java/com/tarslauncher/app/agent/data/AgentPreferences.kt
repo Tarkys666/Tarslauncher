@@ -51,8 +51,17 @@ class AgentPreferences(context: Context) {
         prefs.edit().putString(KEY_SUPABASE_ANON_KEY, key.trim()).apply()
     }
 
+    fun isAgentEnabled(): Boolean {
+        return prefs.getBoolean(KEY_AGENT_ENABLED, true)
+    }
+
+    fun setAgentEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AGENT_ENABLED, enabled).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "tars_agent_prefs"
+        private const val KEY_AGENT_ENABLED = "agent_master_enabled"
         private const val KEY_PROVIDER = "agent_provider"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_GROQ_API_KEY = "groq_api_key"

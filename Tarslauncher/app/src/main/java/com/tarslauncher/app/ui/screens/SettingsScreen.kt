@@ -109,6 +109,10 @@ fun SettingsScreen(
     
     // Default launcher state
     var isDefaultLauncherSet by remember { mutableStateOf(false) }
+
+    // TARS Agent Master Kill Switch state
+    val agentPrefs = remember { com.tarslauncher.app.agent.data.AgentPreferences(context) }
+    var isAgentEnabled by remember { mutableStateOf(agentPrefs.isAgentEnabled()) }
     
     // Refresh launcher status when screen becomes visible (user returns from settings)
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
@@ -116,11 +120,13 @@ fun SettingsScreen(
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isDefaultLauncherSet = isDefaultLauncher(context)
+                isAgentEnabled = agentPrefs.isAgentEnabled()
             }
         }
         
         lifecycleOwner.lifecycle.addObserver(observer)
         isDefaultLauncherSet = isDefaultLauncher(context)
+        isAgentEnabled = agentPrefs.isAgentEnabled()
         
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
@@ -145,6 +151,7 @@ fun SettingsScreen(
         buttonColorMode,
         selectedIconPack,
         isDefaultLauncherSet,
+        isAgentEnabled,
         installedPwas.size,
         appVersion,
         isSyncing,
@@ -213,6 +220,26 @@ fun SettingsScreen(
             title = "SECURITY",
             icon = "",
             children = listOf(
+                SettingsItem.Setting(
+                    title = "TARS Agent (Kill Switch)",
+                    description = if (isAgentEnabled) "Ajan ve Dynamic Island aktif" else "Ajan tamamen kapalı (devre dışı)",
+                    type = SettingType.TOGGLE,
+                    currentValue = isAgentEnabled,
+                    onValueChange = { newValue ->
+                        val enabled = newValue as Boolean
+                        isAgentEnabled = enabled
+                        agentPrefs.setAgentEnabled(enabled)
+                        com.tarslauncher.app.agent.ui.AgentViewModel.getInstance()?.onToggleAgentEnabled(enabled)
+                        if (!enabled) {
+                            com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.stopAgentTask()
+                            com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.overlayNotch?.hide()
+                        } else {
+                            if (com.tarslauncher.app.agent.service.TarsAccessibilityService.isConnected()) {
+                                com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.overlayNotch?.showIdle()
+                            }
+                        }
+                    }
+                ),
                 SettingsItem.Setting(
                     title = "Default Launcher",
                     description = if (isDefaultLauncherSet) "TARS is set as default" else "Set TARS as default home screen",
