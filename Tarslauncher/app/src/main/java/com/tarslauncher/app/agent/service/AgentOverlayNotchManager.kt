@@ -3,13 +3,23 @@ package com.tarslauncher.app.agent.service
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
+import android.text.InputType
+import android.text.TextUtils
+import android.text.TextWatcher
+import android.text.Editable
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -24,10 +34,8 @@ import android.widget.TextView
 import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 /**
- * Authentic Apple Dynamic Island Overlay powered by TYPE_ACCESSIBILITY_OVERLAY.
- * - Pure OLED Black (#000000) stadium pill at top-center.
- * - In compact mode: Displays single-word status, pulsing indicator dot, and micro stage badge.
- * - When tapped: Smoothly expands downwards into a rich Apple-style input sheet to give tasks.
+ * OLED-black task capsule powered by TYPE_ACCESSIBILITY_OVERLAY.
+ * Expands into a focused task composer with accessible native controls.
  */
 class AgentOverlayNotchManager(private val context: Context) {
 
@@ -49,6 +57,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var inputEditText: EditText? = null
     private var stopButtonView: TextView? = null
     private var startButtonView: TextView? = null
+    private var expandedStatusView: TextView? = null
 
     @Volatile
     var onStopRequested: (() -> Unit)? = null
@@ -80,6 +89,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             if (!isExpanded) {
                 renderCompactIdle()
             }
+            updateExpandedState()
         }
     }
 
@@ -106,6 +116,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             }
 
             updateUiContent(stepNumber, currentPlan, liveDetail, state)
+            updateExpandedState()
 
             // Update stop button state in expanded view if visible
             stopButtonView?.visibility = if (state == NotchState.ACTIVE || state == NotchState.THINKING) {
@@ -159,14 +170,14 @@ class AgentOverlayNotchManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(18) // Stadium capsule for compact 36dp height
+                cornerRadius = dpF(20)
                 setColor(Color.parseColor("#FF000000")) // Pure Apple Black
-                setStroke(dp(1), Color.parseColor("#1FFFFFFF")) // Ultra-subtle matte glass edge
+                setStroke(dp(1), Color.parseColor("#242426"))
             }
-            elevation = dpF(8)
+            elevation = 0f
         }
 
         // Tap compact pill to expand downwards
@@ -190,7 +201,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         val compactRow = LinearLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(36)
+                dp(40)
             )
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -219,9 +230,11 @@ class AgentOverlayNotchManager(private val context: Context) {
             }
             text = "TARS"
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            letterSpacing = 0.02f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = 0f
+            includeFontPadding = false
+            ellipsize = TextUtils.TruncateAt.END
             maxLines = 1
         }
         statusWordView = wordText
@@ -235,9 +248,11 @@ class AgentOverlayNotchManager(private val context: Context) {
             ).apply {
                 marginStart = dp(6)
             }
-            text = "⌄"
-            setTextColor(Color.parseColor("#73FFFFFF"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            text = ""
+            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("down", Color.parseColor("#98989D")), null)
+            setTextColor(Color.parseColor("#98989D"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            includeFontPadding = false
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             letterSpacing = 0.03f
             maxLines = 1
@@ -255,8 +270,8 @@ class AgentOverlayNotchManager(private val context: Context) {
 
         // Top-Center Placement LayoutParams
         val params = WindowManager.LayoutParams(
-            dp(154),
-            dp(36),
+            dp(176),
+            dp(40),
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -288,145 +303,177 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private fun buildExpandedView(): LinearLayout {
         val expanded = LinearLayout(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(14))
+            setPadding(dp(20), dp(12), dp(20), dp(20))
         }
-
-        // Top Title Row
-        val titleRow = LinearLayout(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+        val header = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-
-        val titleText = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            text = "✦ TARS Agent"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            letterSpacing = 0.03f
+        val titles = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
-        titleRow.addView(titleText)
-
-        // Collapse chevron
-        val collapseBtn = TextView(context).apply {
-            text = "⌃"
-            setTextColor(Color.parseColor("#80FFFFFF"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(8), dp(2), dp(4), dp(2))
-            setOnClickListener { collapseIsland() }
-        }
-        titleRow.addView(collapseBtn)
-        expanded.addView(titleRow)
-
-        // Apple-style Search / Prompt Input Field
-        val input = EditText(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = dp(9)
-                bottomMargin = dp(11)
-            }
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(12)
-                setColor(Color.parseColor("#1C1C1E")) // Apple secondary system fill
-            }
-            hint = "TARS'a bir görev verin..."
-            setHintTextColor(Color.parseColor("#66FFFFFF"))
+        titles.addView(TextView(context).apply {
+            text = "TARS"
             setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = -0.025f
+            includeFontPadding = false
+        })
+        expandedStatusView = TextView(context).apply {
+            text = "Bir sonraki adım, sende."
+            setTextColor(Color.parseColor("#98989D"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-            setPadding(dp(13), dp(9), dp(13), dp(9))
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setPadding(0, dp(5), 0, 0)
             maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        titles.addView(expandedStatusView)
+        header.addView(titles)
+        header.addView(TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setCompoundDrawablesRelativeWithIntrinsicBounds(IslandIcon("up", Color.parseColor("#C7C7CC")), null, null, null)
+            background = controlBackground(Color.parseColor("#161618"), 22)
+            contentDescription = "Adacığı küçült"
+            isFocusable = true
+            setOnClickListener { collapseIsland() }
+        })
+        expanded.addView(header)
+
+        val input = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(20)
+                bottomMargin = dp(16)
+            }
+            background = roundedSurface(Color.parseColor("#111113"), 18, Color.parseColor("#29292C"))
+            hint = "Ne yapmamı istersin?"
+            setHintTextColor(Color.parseColor("#8E8E93"))
+            setTextColor(Color.parseColor("#F5F5F7"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            minHeight = dp(88)
+            gravity = Gravity.TOP or Gravity.START
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            maxLines = 3
             imeOptions = EditorInfo.IME_ACTION_SEND
+            contentDescription = "TARS için görev"
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
                     submitTaskFromInput()
                     true
-                } else {
-                    false
-                }
+                } else false
             }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    startButtonView?.isEnabled = !s.isNullOrBlank()
+                    startButtonView?.alpha = if (s.isNullOrBlank()) 0.45f else 1f
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
         }
         inputEditText = input
         expanded.addView(input)
 
-        // Bottom Action Row (Stop + Start)
-        val actionRow = LinearLayout(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+        val actions = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-
-        // Durdur (Stop) Button
-        val stopBtn = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            text = "✕ Durdur"
-            setTextColor(Color.parseColor("#FF453A"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            setPadding(dp(11), dp(6), dp(11), dp(6))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(12)
-                setColor(Color.parseColor("#26FF453A"))
-            }
+        stopButtonView = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(-2, dp(48))
+            text = "Durdur"
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#FF6961"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(16), 0, dp(16), 0)
+            background = controlBackground(Color.parseColor("#211010"), 24)
             visibility = View.GONE
+            isFocusable = true
             setOnClickListener {
                 onStopRequested?.invoke()
                 collapseIsland()
             }
         }
-        stopButtonView = stopBtn
-        actionRow.addView(stopBtn)
-
-        val spacer = View(context).apply {
+        actions.addView(stopButtonView)
+        actions.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
+        })
+        startButtonView = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(-2, dp(48))
+            text = "Gönder"
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(20), 0, dp(16), 0)
+            compoundDrawablePadding = dp(10)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("send", Color.BLACK), null)
+            background = controlBackground(Color.parseColor("#F5F5F7"), 24, darkRipple = true)
+            isEnabled = false
+            alpha = 0.45f
+            isFocusable = true
+            setOnClickListener { submitTaskFromInput() }
         }
-        actionRow.addView(spacer)
-
-        // Başlat (Start) Button: Apple System Blue
-        val startBtn = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            text = "Başlat  ➔"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            setPadding(dp(14), dp(6), dp(14), dp(6))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(13)
-                setColor(Color.parseColor("#007AFF")) // Apple Blue
-            }
-            setOnClickListener {
-                submitTaskFromInput()
-            }
-        }
-        startButtonView = startBtn
-        actionRow.addView(startBtn)
-
-        expanded.addView(actionRow)
+        actions.addView(startButtonView)
+        expanded.addView(actions)
         return expanded
+    }
+
+    private fun roundedSurface(color: Int, radius: Int, border: Int? = null) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dpF(radius)
+        setColor(color)
+        border?.let { setStroke(dp(1), it) }
+    }
+
+    private fun controlBackground(color: Int, radius: Int, darkRipple: Boolean = false): RippleDrawable {
+        val ripple = if (darkRipple) 0x24000000 else 0x24FFFFFF
+        return RippleDrawable(ColorStateList.valueOf(ripple), roundedSurface(color, radius), roundedSurface(Color.WHITE, radius))
+    }
+
+    /** Density-independent line icons, avoiding font-dependent symbol glyphs. */
+    private inner class IslandIcon(private val kind: String, color: Int) : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        override fun getIntrinsicWidth() = dp(20)
+        override fun getIntrinsicHeight() = dp(20)
+        override fun draw(canvas: Canvas) {
+            val save = canvas.save()
+            canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
+            canvas.scale(bounds.width() / 20f, bounds.height() / 20f)
+            val path = Path()
+            when (kind) {
+                "send" -> {
+                    path.moveTo(10f, 15f); path.lineTo(10f, 5f)
+                    path.moveTo(5.5f, 9.5f); path.lineTo(10f, 5f); path.lineTo(14.5f, 9.5f)
+                }
+                "up" -> {
+                    path.moveTo(6f, 12f); path.lineTo(10f, 8f); path.lineTo(14f, 12f)
+                }
+                else -> {
+                    path.moveTo(6f, 8f); path.lineTo(10f, 12f); path.lineTo(14f, 8f)
+                }
+            }
+            canvas.drawPath(path, paint)
+            canvas.restoreToCount(save)
+        }
+        override fun setAlpha(alpha: Int) { paint.alpha = alpha; invalidateSelf() }
+        override fun setColorFilter(filter: android.graphics.ColorFilter?) { paint.colorFilter = filter; invalidateSelf() }
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity() = PixelFormat.TRANSLUCENT
     }
 
     private fun expandIsland() {
@@ -442,7 +489,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
 
         // 1. Expand WindowManager params and remove FLAG_NOT_FOCUSABLE so EditText can receive keyboard
-        lp.width = dp(330)
+        lp.width = minOf(dp(360), context.resources.displayMetrics.widthPixels - dp(24))
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT
         lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -452,11 +499,12 @@ class AgentOverlayNotchManager(private val context: Context) {
         wm.updateViewLayout(container, lp)
 
         // 2. Adjust background corner radius for expanded card
-        (container.background as? GradientDrawable)?.cornerRadius = dpF(24)
+        (container.background as? GradientDrawable)?.cornerRadius = dpF(32)
 
         // 3. Switch views: hide compact row, show expanded view
         compactRowView?.visibility = View.GONE
         expandedContainerView?.visibility = View.VISIBLE
+        updateExpandedState()
 
         // 4. Smooth spring expansion animation
         container.scaleX = 0.92f
@@ -492,8 +540,8 @@ class AgentOverlayNotchManager(private val context: Context) {
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
 
         // 2. Restore compact WindowManager params with FLAG_NOT_FOCUSABLE
-        lp.width = dp(154)
-        lp.height = dp(36)
+        lp.width = dp(176)
+        lp.height = dp(40)
         lp.flags = lp.flags or
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -502,7 +550,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         wm.updateViewLayout(container, lp)
 
         // 3. Restore stadium pill background
-        (container.background as? GradientDrawable)?.cornerRadius = dpF(18)
+        (container.background as? GradientDrawable)?.cornerRadius = dpF(20)
 
         // 4. Switch views
         expandedContainerView?.visibility = View.GONE
@@ -526,10 +574,25 @@ class AgentOverlayNotchManager(private val context: Context) {
     private fun renderCompactIdle() {
         (statusDotView?.background as? GradientDrawable)?.setColor(Color.WHITE)
         pulseAnimator?.cancel()
+        pulseAnimator = null
         statusDotView?.alpha = 0.8f
         statusWordView?.text = "TARS"
-        stageBadgeView?.text = "⌄"
+        lastRenderedWord = "TARS"
+        stageBadgeView?.text = ""
+        stageBadgeView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("down", Color.parseColor("#98989D")), null)
         stageBadgeView?.visibility = View.VISIBLE
+    }
+
+    private fun updateExpandedState() {
+        val isRunning = currentState == NotchState.ACTIVE || currentState == NotchState.THINKING
+        stopButtonView?.visibility = if (isRunning) View.VISIBLE else View.GONE
+        expandedStatusView?.text = when (currentState) {
+            NotchState.IDLE -> "Bir sonraki adım, sende."
+            NotchState.THINKING -> "Görevin üzerinde düşünüyorum…"
+            NotchState.ACTIVE -> "Görevin üzerinde çalışıyorum…"
+            NotchState.COMPLETED -> "Görev tamamlandı."
+            NotchState.FAILED -> "Görev durduruldu."
+        }
     }
 
     private fun updateUiContent(
@@ -577,10 +640,12 @@ class AgentOverlayNotchManager(private val context: Context) {
             val activeIndex = steps.firstOrNull { it.isInProgress }?.index
                 ?: steps.firstOrNull { !it.isCompleted }?.index
                 ?: steps.size
+            stageBadgeView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null)
             stageBadgeView?.text = "$activeIndex/${steps.size}"
             stageBadgeView?.visibility = View.VISIBLE
         } else if (state == NotchState.IDLE) {
-            stageBadgeView?.text = "⌄"
+            stageBadgeView?.text = ""
+            stageBadgeView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("down", Color.parseColor("#98989D")), null)
             stageBadgeView?.visibility = View.VISIBLE
         } else {
             stageBadgeView?.visibility = View.GONE
