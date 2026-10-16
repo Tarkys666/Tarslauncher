@@ -39,110 +39,99 @@ class GroqRemoteDataSource(
             )
         }
 
-        val candidateModels = listOf(
-            DEFAULT_GROQ_MODEL,
-            "qwen/qwen3-32b",
-            "openai/gpt-oss-20b",
-            "llama-3.3-70b-versatile"
-        ).distinct()
-
+        val model = DEFAULT_GROQ_MODEL
         var lastError: Throwable? = null
+        var attempt = 0
 
-        for (model in candidateModels) {
-            var attempt = 0
-            while (attempt < MAX_RETRIES_PER_MODEL) {
-                attempt++
-                var retryAfterMs = 0L
+        while (attempt < MAX_RETRIES_PER_MODEL) {
+            attempt++
+            var retryAfterMs = 0L
 
-                val callResult = runCatching {
-                    val requestBody = buildRequestBody(model, systemInstruction, messages)
-                    val endpoint = URL("https://api.groq.com/openai/v1/chat/completions")
+            val callResult = runCatching {
+                val requestBody = buildRequestBody(model, systemInstruction, messages)
+                val endpoint = URL("https://api.groq.com/openai/v1/chat/completions")
 
-                    val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        connectTimeout = 15_000
-                        readTimeout = 30_000
-                        doOutput = true
-                        setRequestProperty("Content-Type", "application/json")
-                        setRequestProperty("Accept", "application/json")
-                        setRequestProperty("Authorization", "Bearer $key")
-                    }
-
-                    connection.outputStream.use { output ->
-                        output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
-                    }
-
-                    val statusCode = connection.responseCode
-                    if (statusCode == 429) {
-                        val headerRetrySec = connection.getHeaderField("retry-after")?.trim()?.toDoubleOrNull()
-                        if (headerRetrySec != null && headerRetrySec > 0) {
-                            retryAfterMs = (headerRetrySec * 1000L).toLong().coerceIn(1500L, 12_000L)
-                        }
-                    }
-
-                    val inputStream: InputStream = if (statusCode in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
-                    }
-
-                    val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-
-                    if (statusCode !in 200..299) {
-                        if (statusCode == 429 && retryAfterMs == 0L) {
-                            retryAfterMs = parseRetryDelayMs(responseText, attempt)
-                        }
-                        throw RuntimeException("Groq API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
-                    }
-
-                    extractTextFromResponse(responseText)
+                val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Authorization", "Bearer $key")
                 }
 
-                if (callResult.isSuccess) {
-                    lastUsedModel = model
-                    return@withContext callResult
+                connection.outputStream.use { output ->
+                    output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
                 }
 
-                val error = callResult.exceptionOrNull()
-                val msg = error?.message.orEmpty()
-                val isRateLimit = msg.contains("429") || msg.contains("rate_limit", ignoreCase = true)
-
-                if (isRateLimit && attempt < MAX_RETRIES_PER_MODEL) {
-                    val waitMs = if (retryAfterMs > 0L) retryAfterMs else (2200L * attempt)
-                    delay(waitMs)
-                    continue
+                val statusCode = connection.responseCode
+                if (statusCode == 429) {
+                    val headerRetrySec = connection.getHeaderField("retry-after")?.trim()?.toDoubleOrNull()
+                    if (headerRetrySec != null && headerRetrySec > 0) {
+                        retryAfterMs = (headerRetrySec * 1000L).toLong().coerceIn(1500L, 12_000L)
+                    }
                 }
 
-                lastError = when {
-                    error is java.net.UnknownHostException -> {
-                        RuntimeException("İnternet / DNS Hatası: Groq sunucusuna bağlanılamadı. Lütfen internetinizi kontrol edin.")
-                    }
-                    error is java.net.SocketTimeoutException -> {
-                        RuntimeException("Zaman Aşımı: Groq sunucusuna bağlanırken süre aşıldı.")
-                    }
-                    msg.contains("401") || msg.contains("invalid_api_key", ignoreCase = true) -> {
-                        RuntimeException("Geçersiz Groq API Anahtarı: Lütfen console.groq.com adresinden aldığınız gsk_... anahtarınızı kontrol edin.")
-                    }
-                    isRateLimit -> {
-                        RuntimeException("Groq Hız Limiti (429 Rate Limit): Dakikalık token/istek sınırına ulaşıldı, lütfen birkaç saniye bekleyip tekrar deneyin.")
-                    }
-                    else -> error
+                val inputStream: InputStream = if (statusCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
                 }
 
-                val isFatal = error is java.net.UnknownHostException ||
-                    msg.contains("401") ||
-                    msg.contains("invalid_api_key", ignoreCase = true)
+                val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
 
-                if (isFatal) {
-                    return@withContext Result.failure(lastError!!)
+                if (statusCode !in 200..299) {
+                    if (statusCode == 429 && retryAfterMs == 0L) {
+                        retryAfterMs = parseRetryDelayMs(responseText, attempt)
+                    }
+                    throw RuntimeException("Groq API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
                 }
 
-                // Move to next fallback model if this model failed (404 or exhausted retries on 429)
-                break
+                extractTextFromResponse(responseText)
+            }
+
+            if (callResult.isSuccess) {
+                lastUsedModel = model
+                return@withContext callResult
+            }
+
+            val error = callResult.exceptionOrNull()
+            val msg = error?.message.orEmpty()
+            val isRateLimit = msg.contains("429") || msg.contains("rate_limit", ignoreCase = true)
+
+            if (isRateLimit && attempt < MAX_RETRIES_PER_MODEL) {
+                val waitMs = if (retryAfterMs > 0L) retryAfterMs else (2200L * attempt)
+                delay(waitMs)
+                continue
+            }
+
+            lastError = when {
+                error is java.net.UnknownHostException -> {
+                    RuntimeException("İnternet / DNS Hatası: Groq sunucusuna bağlanılamadı. Lütfen internetinizi kontrol edin.")
+                }
+                error is java.net.SocketTimeoutException -> {
+                    RuntimeException("Zaman Aşımı: Groq sunucusuna bağlanırken süre aşıldı.")
+                }
+                msg.contains("401") || msg.contains("invalid_api_key", ignoreCase = true) -> {
+                    RuntimeException("Geçersiz Groq API Anahtarı: Lütfen console.groq.com adresinden aldığınız gsk_... anahtarınızı kontrol edin.")
+                }
+                isRateLimit -> {
+                    RuntimeException("Groq Hız Limiti (429 Rate Limit): Dakikalık token/istek sınırına ulaşıldı, lütfen birkaç saniye bekleyip tekrar deneyin.")
+                }
+                else -> error
+            }
+
+            val isFatal = error is java.net.UnknownHostException ||
+                msg.contains("401") ||
+                msg.contains("invalid_api_key", ignoreCase = true)
+
+            if (isFatal) {
+                return@withContext Result.failure(lastError!!)
             }
         }
 
-        Result.failure(lastError ?: RuntimeException("Hiçbir Groq modeliyle yanıt alınamadı."))
+        Result.failure(lastError ?: RuntimeException("Groq modeli ($model) yanıt vermedi."))
     }
 
     private fun parseRetryDelayMs(errorText: String, attempt: Int): Long {
