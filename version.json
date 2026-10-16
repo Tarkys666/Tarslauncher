@@ -1,7 +1,7 @@
 {
-  "versionCode": 24,
-  "versionName": "1.6.0",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.6.0/TarsLauncher-release.apk",
+  "versionCode": 25,
+  "versionName": "1.7.0",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.0/TarsLauncher-release.apk",
   "apkSize": 11067700,
-  "releaseNotes": "TARS Codex/Hermes Mimari Yükseltmesi: 4 aşamalı ReAct + Öz-Doğrulama (Reflection) + Dinamik Yeniden Planlama (Replan), 15 gelişmiş Android aracı (open_url, long_press, recents, notifications, quick_settings, clipboard_set), interaktif ask_user devamlılığı, ekran farkı (anti-oscillation) tespiti, zenginleştirilmiş erişilebilirlik ağacı (130 node) ve başlatıcı hata düzeltmeleri."
+  "releaseNotes": "TARS v1.7.0: Codex/Hermes Seviyesi Ajan Mimarisi, Groq Qwen 3.8-27B Tek Motor & Ultra Sade Arayüz, 15 Gelişmiş Android Aracı, Otomatik Şifre/API Maskeleme ve Kilitli Firestore Telemetrisi."
 }
