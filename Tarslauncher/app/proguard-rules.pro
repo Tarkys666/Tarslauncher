@@ -23,11 +23,6 @@
     public *;
 }
 
-# Keep Compose classes
--keep class androidx.compose.** { *; }
--keep class kotlin.** { *; }
--keep class kotlinx.** { *; }
-
 # Keep data model classes and their fields for Gson serialization
 -keep class com.tarslauncher.app.data.model.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.model.** { *; }
@@ -36,9 +31,6 @@
 -keep class com.tarslauncher.app.data.sync.** { *; }
 -keep class com.tarslauncher.app.data.updater.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.updater.** { *; }
-
-# Firebase
--keep class com.google.firebase.** { *; }
 
 # Security: Hide sensitive classes from reflection
 -keepnames class com.tarslauncher.app.utils.SecurityHelper

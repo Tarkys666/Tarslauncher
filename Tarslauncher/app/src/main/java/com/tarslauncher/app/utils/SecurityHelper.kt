@@ -165,8 +165,12 @@ object SecureBroadcastHelper {
                 // Debounce instead of dropping: ensures batch updates (e.g. Play Store updates) trigger refresh reliably
                 pendingRefreshRunnable?.let { mainHandler.removeCallbacks(it) }
                 val runnable = Runnable {
-                    Log.d(TAG, "Executing package event ($action) for package: $packageName")
-                    onRefresh(packageName)
+                    try {
+                        Log.d(TAG, "Executing package event ($action) for package: $packageName")
+                        onRefresh(packageName)
+                    } finally {
+                        pendingRefreshRunnable = null
+                    }
                 }
                 pendingRefreshRunnable = runnable
                 mainHandler.postDelayed(runnable, DEBOUNCE_INTERVAL)

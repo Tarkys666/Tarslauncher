@@ -1,5 +1,6 @@
 package com.tarslauncher.app
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.LauncherApps
 import android.os.Build
@@ -45,13 +46,25 @@ class PinShortcutActivity : ComponentActivity() {
             return
         }
 
-        val pinItemRequest = launcherApps.getPinItemRequest(intent)
+        val pinItemRequest = try {
+            launcherApps.getPinItemRequest(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error obtaining pin item request (BadParcelableException or invalid intent)", e)
+            null
+        }
+
         if (pinItemRequest == null || pinItemRequest.requestType != LauncherApps.PinItemRequest.REQUEST_TYPE_SHORTCUT) {
             finish()
             return
         }
 
-        val shortcutInfo = pinItemRequest.shortcutInfo
+        val shortcutInfo = try {
+            pinItemRequest.shortcutInfo
+        } catch (e: Exception) {
+            Log.e(TAG, "Error accessing shortcutInfo", e)
+            null
+        }
+
         if (shortcutInfo == null) {
             finish()
             return
@@ -61,7 +74,11 @@ class PinShortcutActivity : ComponentActivity() {
             ?: shortcutInfo.longLabel?.toString()
             ?: "Web App"
 
-        val targetIntent = shortcutInfo.intent ?: shortcutInfo.intents?.firstOrNull()
+        val targetIntent = try {
+            shortcutInfo.intent ?: shortcutInfo.intents?.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
         val rawUrl = targetIntent?.dataString ?: targetIntent?.getStringExtra("url") ?: ""
         val sanitizedUrl = PwaLauncherHelper.sanitizeWebUrl(rawUrl)
 
@@ -76,15 +93,70 @@ class PinShortcutActivity : ComponentActivity() {
         }
 
         val densityDpi = resources.displayMetrics.densityDpi
+        val iconDrawable = try {
+            launcherApps.getShortcutIconDrawable(shortcutInfo, densityDpi)
+        } catch (e: Exception) {
+            null
+        }
+
+        val dialogMessage = if (!sanitizedUrl.isNullOrBlank()) {
+            "\"$label\" kısayolunu ana ekranınıza eklemek istiyor musunuz?\n\nHedef: $sanitizedUrl"
+        } else {
+            "\"$label\" kısayolunu ana ekranınıza eklemek istiyor musunuz?"
+        }
+
+        var isAccepted = false
+
+        val builder = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Kısayol Ekle")
+            .setMessage(dialogMessage)
+            .setPositiveButton("Ekle") { _, _ ->
+                isAccepted = true
+                saveAndAcceptShortcut(
+                    pinItemRequest = pinItemRequest,
+                    label = label,
+                    sanitizedUrl = sanitizedUrl,
+                    shortcutPackage = shortcutPackage,
+                    shortcutId = shortcutId,
+                    iconDrawable = iconDrawable
+                )
+            }
+            .setNegativeButton("İptal") { dialog, _ ->
+                dialog.dismiss()
+                finish()
+            }
+            .setOnCancelListener {
+                finish()
+            }
+            .setOnDismissListener {
+                if (!isAccepted) {
+                    finish()
+                }
+            }
+
+        if (iconDrawable != null) {
+            builder.setIcon(iconDrawable)
+        }
+
+        if (!isFinishing && !isDestroyed) {
+            builder.show()
+        } else {
+            finish()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun saveAndAcceptShortcut(
+        pinItemRequest: LauncherApps.PinItemRequest,
+        label: String,
+        sanitizedUrl: String?,
+        shortcutPackage: String?,
+        shortcutId: String?,
+        iconDrawable: android.graphics.drawable.Drawable?
+    ) {
         val repository = AppRepository(applicationContext)
 
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            val iconDrawable = try {
-                launcherApps.getShortcutIconDrawable(shortcutInfo, densityDpi)
-            } catch (e: Exception) {
-                null
-            }
-
             val iconBase64 = iconDrawable?.let { drawable ->
                 val bitmap = drawableToBitmap(drawable)
                 val base64 = bitmapToBase64(bitmap)

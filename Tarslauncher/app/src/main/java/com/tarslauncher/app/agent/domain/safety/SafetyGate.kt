@@ -37,6 +37,16 @@ class SafetyGate {
         "ayar", "setting", "installer", "packageinstaller", "play store", "google play"
     )
 
+    /**
+     * Checks if a package belongs to a sensitive application (banking, settings, installer, etc.)
+     * for pre-flight privacy gating.
+     */
+    fun isSensitiveAppPackage(packageName: String): Boolean {
+        if (packageName.isBlank() || packageName == "unknown") return false
+        val lowerPkg = packageName.lowercase(Locale.ROOT)
+        return sensitiveAppKeywords.any { kw -> lowerPkg.contains(kw) } || lowerPkg.contains("vending")
+    }
+
     private val confirmationButtons = setOf(
         "onayla", "evet", "öde", "sil", "kabul", "confirm", "accept", "submit", "yes"
     )

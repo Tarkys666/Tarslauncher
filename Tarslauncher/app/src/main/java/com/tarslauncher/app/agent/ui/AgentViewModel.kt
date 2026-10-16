@@ -283,9 +283,8 @@ class AgentViewModel(
     override fun onCleared() {
         super.onCleared()
         currentExecutionJob?.cancel()
-        if (activeInstance == this) {
-            activeInstance = null
-        }
+        TarsAccessibilityService.getInstance()?.overlayNotch?.onStopRequested = null
+        activeInstance = null
     }
 
     companion object {

@@ -303,6 +303,7 @@ class LauncherViewModel(
             val result = appRepository.updateManager.downloadApk(
                 downloadUrl = info.downloadUrl,
                 versionName = info.versionName,
+                expectedHash = info.expectedHash,
                 onProgress = { progress, downloaded, total ->
                     _uiState.update {
                         it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Downloading(progress, downloaded, total))

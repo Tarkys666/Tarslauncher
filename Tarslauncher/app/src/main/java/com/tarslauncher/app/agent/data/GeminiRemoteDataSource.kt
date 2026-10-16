@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class GeminiRemoteDataSource(
@@ -21,11 +22,7 @@ class GeminiRemoteDataSource(
 
     private val candidateModels = listOf(
         preferredModel,
-        "gemini-2.5-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest"
+        "gemini-2.0-flash"
     ).distinct()
 
     suspend fun generateContent(
@@ -41,75 +38,91 @@ class GeminiRemoteDataSource(
 
         val requestBody = buildRequestBody(systemInstruction, messages)
         var lastError: Throwable? = null
+        val maxRetries = 2
 
         for (model in candidateModels) {
-            val callResult = runCatching {
-                val endpoint = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            for (attempt in 0..maxRetries) {
+                val callResult = runCatching {
+                    val endpoint = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
 
-                val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 30_000
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Accept", "application/json")
-                    setRequestProperty("x-goog-api-key", key)
+                    val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 15_000
+                        readTimeout = 30_000
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("Accept", "application/json")
+                        setRequestProperty("x-goog-api-key", key)
+                    }
+
+                    connection.outputStream.use { output ->
+                        output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
+                    }
+
+                    val statusCode = connection.responseCode
+                    val inputStream: InputStream = if (statusCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
+                    }
+
+                    val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+
+                    if (statusCode !in 200..299) {
+                        throw RuntimeException("Gemini API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
+                    }
+
+                    extractTextFromResponse(responseText)
                 }
 
-                connection.outputStream.use { output ->
-                    output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
+                if (callResult.isSuccess) {
+                    lastUsedModel = model
+                    return@withContext callResult
                 }
 
-                val statusCode = connection.responseCode
-                val inputStream: InputStream = if (statusCode in 200..299) {
-                    connection.inputStream
+                val error = callResult.exceptionOrNull()
+                val msg = error?.message.orEmpty()
+
+                lastError = when {
+                    error is java.net.UnknownHostException -> {
+                        RuntimeException("İnternet / DNS Hatası: Google Gemini sunucusuna bağlanılamadı. Lütfen internetinizi veya WARP/VPN bağlantınızı kontrol edin.")
+                    }
+                    error is java.net.SocketTimeoutException -> {
+                        RuntimeException("Zaman Aşımı: Google sunucusuna bağlanırken süre aşıldı. Lütfen internet hızınızı kontrol edin.")
+                    }
+                    msg.contains("503") || msg.contains("high demand", ignoreCase = true) || msg.contains("UNAVAILABLE", ignoreCase = true) -> {
+                        RuntimeException("Google Gemini sunucuları yoğunluk yaşıyor (503 High Demand). Lütfen birkaç saniye sonra tekrar deneyin.")
+                    }
+                    msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) || msg.contains("rate limit", ignoreCase = true) -> {
+                        RuntimeException("Gemini API istek sınırı aşıldı (429 Rate Limit).")
+                    }
+                    else -> error
+                }
+
+                // Fatal unrecoverable errors: Device is offline or API key is strictly invalid
+                val isFatal = error is java.net.UnknownHostException ||
+                    msg.contains("API_KEY_INVALID", ignoreCase = true) ||
+                    msg.contains("API key not valid", ignoreCase = true) ||
+                    (msg.contains("400") && msg.contains("API_KEY", ignoreCase = true)) ||
+                    (msg.contains("401") || (msg.contains("403") && msg.contains("PERMISSION_DENIED", ignoreCase = true)))
+
+                if (isFatal) {
+                    return@withContext Result.failure(lastError ?: RuntimeException("Kritik API hatası."))
+                }
+
+                // 429 veya 503 durumlarında exponential backoff gecikmesi
+                val isTransientOverload = msg.contains("429") || msg.contains("503") ||
+                    msg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+                    msg.contains("UNAVAILABLE", ignoreCase = true) ||
+                    msg.contains("high demand", ignoreCase = true)
+
+                if (isTransientOverload && attempt < maxRetries) {
+                    val backoffDelayMs = 1000L * (1L shl attempt)
+                    delay(backoffDelayMs)
                 } else {
-                    connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
+                    break
                 }
-
-                val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-
-                if (statusCode !in 200..299) {
-                    throw RuntimeException("Gemini API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
-                }
-
-                extractTextFromResponse(responseText)
             }
-
-            if (callResult.isSuccess) {
-                lastUsedModel = model
-                return@withContext callResult
-            }
-
-            val error = callResult.exceptionOrNull()
-            val msg = error?.message.orEmpty()
-
-            lastError = when {
-                error is java.net.UnknownHostException -> {
-                    RuntimeException("İnternet / DNS Hatası: Google Gemini sunucusuna bağlanılamadı. Lütfen internetinizi veya WARP/VPN bağlantınızı kontrol edin.")
-                }
-                error is java.net.SocketTimeoutException -> {
-                    RuntimeException("Zaman Aşımı: Google sunucusuna bağlanırken süre aşıldı. Lütfen internet hızınızı kontrol edin.")
-                }
-                msg.contains("503") || msg.contains("high demand", ignoreCase = true) || msg.contains("UNAVAILABLE", ignoreCase = true) -> {
-                    RuntimeException("Google Gemini sunucuları yoğunluk yaşıyor (503 High Demand). Lütfen birkaç saniye sonra tekrar deneyin.")
-                }
-                else -> error
-            }
-
-            // Fatal unrecoverable errors: Device is offline or API key is strictly invalid
-            val isFatal = error is java.net.UnknownHostException ||
-                msg.contains("API_KEY_INVALID", ignoreCase = true) ||
-                msg.contains("API key not valid", ignoreCase = true) ||
-                (msg.contains("400") && msg.contains("API_KEY", ignoreCase = true)) ||
-                (msg.contains("401") || (msg.contains("403") && msg.contains("PERMISSION_DENIED", ignoreCase = true)))
-
-            if (isFatal) {
-                // If API key is invalid or device is offline, stop immediately
-                break
-            }
-            // For 503 (high demand), 404 (model not found), 429 (rate limit), 500 (server error),
-            // loop automatically continues to the next candidate model
         }
 
         Result.failure(lastError ?: RuntimeException("Hiçbir Gemini modeliyle bağlantı kurulamadı."))

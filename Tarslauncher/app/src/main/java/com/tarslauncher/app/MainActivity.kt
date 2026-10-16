@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
         
-        repository = AppRepository(this)
+        repository = AppRepository(applicationContext)
         val onboardingManager = OnboardingManager(this)
         
         viewModel = ViewModelProvider(
@@ -89,7 +89,7 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         }
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
         } else {
             context.registerReceiver(receiver, filter)
         }

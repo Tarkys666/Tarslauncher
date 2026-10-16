@@ -9,7 +9,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.res.ResourcesCompat
+import com.tarslauncher.app.utils.drawableToBitmap
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.InputStream
@@ -22,6 +25,7 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
     private val packageFallbackMap = ConcurrentHashMap<String, String>()
     private val resIdCache = ConcurrentHashMap<String, Int>()
     private val drawableCache = LruCache<String, Drawable>(128)
+    private val imageBitmapCache = LruCache<String, ImageBitmap>(256)
 
     var isLoaded by mutableStateOf(false)
         private set
@@ -123,6 +127,28 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
             } else {
                 null
             }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun getImageBitmapForApp(
+        appPackageName: String,
+        appActivityName: String,
+        fallbackIcon: Drawable? = null
+    ): ImageBitmap? {
+        val componentString = "ComponentInfo{$appPackageName/$appActivityName}"
+
+        // 1. Check in-memory ImageBitmap LRU cache first
+        imageBitmapCache.get(componentString)?.let { return it }
+
+        // 2. Resolve themed drawable or fallback
+        val drawable = getIconForApp(appPackageName, appActivityName) ?: fallbackIcon ?: return null
+
+        return try {
+            val bitmap = drawableToBitmap(drawable).asImageBitmap()
+            imageBitmapCache.put(componentString, bitmap)
+            bitmap
         } catch (_: Exception) {
             null
         }

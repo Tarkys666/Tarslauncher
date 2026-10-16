@@ -16,12 +16,14 @@ import com.tarslauncher.app.agent.domain.model.PlanStep
 import com.tarslauncher.app.agent.domain.prompt.AgentPromptProvider
 import com.tarslauncher.app.agent.domain.safety.SafetyGate
 import com.tarslauncher.app.agent.domain.skill.AgentSkillManager
+import android.os.PowerManager
 import com.tarslauncher.app.agent.service.AgentOverlayNotchManager
 import com.tarslauncher.app.agent.service.TarsAccessibilityService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -117,12 +119,15 @@ class AgentLoopRunner(
             sessionMemoryContext = memoryContext
         )
 
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val history = mutableListOf<ChatMessage>()
         history.add(ChatMessage(ChatMessage.Role.USER, "HEDEF GÖREV: $userGoal"))
 
         var previousActionSignature = ""
         var identicalActionRepeatCount = 0
+        val recentActionSignatures = mutableListOf<String>()
         var previousScreenContent = ""
+        var consecutiveUnchangedScreenCount = 0
         var lastActionWasWait = false
         val successfulActionSignatures = mutableListOf<String>()
         var lastPackageName = ""
@@ -135,11 +140,84 @@ class AgentLoopRunner(
                 return@flow
             }
 
+            if (powerManager?.isInteractive == false) {
+                val screenOffMsg = "Ekran kapandı veya cihaz kilitlendi, işlem güvenlik sebebiyle sonlandırıldı."
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = "Ekran Kapalı",
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
+                logSessionTermination(sessionId, userGoal, "SCREEN_OFF", screenOffMsg, step, lastPackageName)
+                emit(AgentEvent.Failure(screenOffMsg))
+                return@flow
+            }
+
             // 1. Ekranı dökümle ve değişim kontrolü yap (Screen State Diffing)
             val screenDump = service.captureScreenDump()
             lastPackageName = screenDump.packageName
+
+            // Pre-Flight Privacy Gate: Hassas uygulama ise LLM çağrılmadan önce iptal et
+            if (safetyGate.isSensitiveAppPackage(screenDump.packageName)) {
+                val privacyMsg = "Güvenlik Engeli: Hassas uygulama tespit edildi (${screenDump.packageName}). LLM gizlilik koruması nedeniyle işlem iptal edildi."
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = "Gizlilik Engeli",
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
+                datasetCollector.recordStep(
+                    sessionId = sessionId,
+                    step = step,
+                    goal = userGoal,
+                    systemPrompt = systemPrompt,
+                    screenDump = screenDump.formattedContent,
+                    rawModelResponse = "ENGEL: Pre-Flight Privacy Gate ($privacyMsg)",
+                    parsedAction = null,
+                    executionResult = privacyMsg,
+                    provider = providerName,
+                    model = modelName,
+                    status = "PRIVACY_BLOCKED"
+                )
+                logSessionTermination(sessionId, userGoal, "PRIVACY_BLOCKED", privacyMsg, step, lastPackageName)
+                emit(AgentEvent.Failure(privacyMsg))
+                return@flow
+            }
+
             val screenUnchanged = step > 1 && !lastActionWasWait && screenDump.formattedContent == previousScreenContent
             previousScreenContent = screenDump.formattedContent
+
+            if (screenUnchanged) {
+                consecutiveUnchangedScreenCount++
+            } else {
+                consecutiveUnchangedScreenCount = 0
+            }
+
+            if (consecutiveUnchangedScreenCount >= 3) {
+                val unchangedMsg = "Ekran ardışık 3 adım boyunca değişmedi. Batarya ve kota koruması için döngü sonlandırıldı."
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = "Ekran Değişmedi",
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
+                datasetCollector.recordStep(
+                    sessionId = sessionId,
+                    step = step,
+                    goal = userGoal,
+                    systemPrompt = systemPrompt,
+                    screenDump = screenDump.formattedContent,
+                    rawModelResponse = "ENGEL: Ekran 3 ardışık adım değişmedi",
+                    parsedAction = null,
+                    executionResult = unchangedMsg,
+                    provider = providerName,
+                    model = modelName,
+                    status = "FAILED_UNCHANGED_SCREEN"
+                )
+                logSessionTermination(sessionId, userGoal, "FAILED_UNCHANGED_SCREEN", unchangedMsg, step, lastPackageName)
+                emit(AgentEvent.Failure(unchangedMsg))
+                return@flow
+            }
 
             val sanitizedRawDump = screenDump.formattedContent
                 .replace("</untrusted_screen_state>", "[FILTERED_TAG]")
@@ -328,9 +406,11 @@ class AgentLoopRunner(
                     val answerDeferred = CompletableDeferred<String?>()
                     emit(AgentEvent.QuestionToUser(action.question, answerDeferred))
 
-                    val userReply = answerDeferred.await()?.trim()
+                    val userReply = withTimeoutOrNull(60_000L) {
+                        answerDeferred.await()
+                    }?.trim()
                     if (userReply.isNullOrBlank()) {
-                        val cancelMsg = "Kullanıcı soruyu yanıtlamadı (${action.question})."
+                        val cancelMsg = "Kullanıcı soruyu yanıtlamadı veya süre aşıldı (60 sn) (${action.question})."
                         service.overlayNotch.showOrUpdate(
                             stepNumber = step,
                             plan = currentPlan,
@@ -354,6 +434,8 @@ class AgentLoopRunner(
 
             // 4. Döngü kırıcı (Circuit Breaker)
             val currentSignature = action.toOperationalSignature()
+            recentActionSignatures.add(currentSignature)
+
             if (currentSignature == previousActionSignature) {
                 identicalActionRepeatCount++
             } else {
@@ -387,6 +469,39 @@ class AgentLoopRunner(
                 return@flow
             }
 
+            // A-B-A-B salınım tespiti (Oscillation Circuit Breaker)
+            val sigSize = recentActionSignatures.size
+            val isOscillating = sigSize >= 4 &&
+                recentActionSignatures[sigSize - 1] == recentActionSignatures[sigSize - 3] &&
+                recentActionSignatures[sigSize - 2] == recentActionSignatures[sigSize - 4] &&
+                recentActionSignatures[sigSize - 1] != recentActionSignatures[sigSize - 2]
+
+            if (isOscillating) {
+                val oscillateMsg = "Ajan iki eylem arasında kısır döngüye girdi (A-B-A-B salınımı: ${recentActionSignatures[sigSize - 2]} <-> ${recentActionSignatures[sigSize - 1]})"
+                datasetCollector.recordStep(
+                    sessionId = sessionId,
+                    step = step,
+                    goal = userGoal,
+                    systemPrompt = systemPrompt,
+                    screenDump = screenDump.formattedContent,
+                    rawModelResponse = decision.rawResponse,
+                    parsedAction = action,
+                    executionResult = oscillateMsg,
+                    provider = decision.provider,
+                    model = decision.model,
+                    status = "FAILED_OSCILLATION"
+                )
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = "Döngü Salınımı",
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
+                logSessionTermination(sessionId, userGoal, "FAILED_OSCILLATION", oscillateMsg, step, lastPackageName)
+                emit(AgentEvent.Failure("$oscillateMsg. Güvenlik sebebiyle durduruldu."))
+                return@flow
+            }
+
             // 5. Güvenlik Kapısı kontrolü
             val (needsConfirm, promptReason) = safetyGate.evaluate(action, screenDump.formattedContent)
             if (needsConfirm) {
@@ -399,9 +514,11 @@ class AgentLoopRunner(
                 val confirmationDeferred = CompletableDeferred<Boolean>()
                 emit(AgentEvent.AwaitingConfirmation(promptReason, confirmationDeferred))
 
-                val isApproved = confirmationDeferred.await()
+                val isApproved = withTimeoutOrNull(60_000L) {
+                    confirmationDeferred.await()
+                } ?: false
                 if (!isApproved) {
-                    val rejectMsg = "Hassas işlem kullanıcı tarafından reddedildi"
+                    val rejectMsg = "Hassas işlem kullanıcı tarafından onaylanmadı veya süre aşıldı (60 sn)"
                     datasetCollector.recordStep(
                         sessionId = sessionId,
                         step = step,
@@ -501,13 +618,15 @@ class AgentLoopRunner(
             )
 
             // Dinamik bekleme payı (Ekran yüklenmesi ve RPM/TPM koruması)
-            val dynamicDelay = when (action) {
-                is AgentAction.OpenApp, is AgentAction.OpenUrl -> 1800L
-                is AgentAction.Scroll -> 1000L
-                is AgentAction.Wait -> 300L
-                else -> 1200L
+            // AgentAction.Wait zaten ActionExecutor içinde kendi süresi kadar beklediğinden ekstra gecikme atlanır
+            if (action !is AgentAction.Wait) {
+                val dynamicDelay = when (action) {
+                    is AgentAction.OpenApp, is AgentAction.OpenUrl -> 1800L
+                    is AgentAction.Scroll -> 1000L
+                    else -> 1200L
+                }
+                delay(dynamicDelay)
             }
-            delay(dynamicDelay)
         }
 
         val maxStepsMsg = "Maksimum adım sınırına ($maxSteps) ulaşıldı."

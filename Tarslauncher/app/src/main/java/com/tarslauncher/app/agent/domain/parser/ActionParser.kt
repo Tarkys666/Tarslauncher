@@ -279,7 +279,7 @@ object ActionParser {
                     ?: args.get("ms")?.asLong
                     ?: args.get("duration")?.asLong
                     ?: 1000L
-                AgentAction.Wait(thought, ms.coerceIn(200L, 300_000L), stepIndex)
+                AgentAction.Wait(thought, ms.coerceIn(200L, 15_000L), stepIndex)
             }
 
             "ask_user", "ask" -> {

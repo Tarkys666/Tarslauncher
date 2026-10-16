@@ -2,7 +2,10 @@ package com.tarslauncher.app.agent.service
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
@@ -15,6 +18,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.util.TypedValue
 import android.text.InputType
 import android.text.TextUtils
@@ -51,6 +55,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var stageBadgeView: TextView? = null
     private var pulseAnimator: ObjectAnimator? = null
     private var autoIdleRunnable: Runnable? = null
+    private var screenStateReceiver: BroadcastReceiver? = null
 
     // Expanded view elements
     private var expandedContainerView: LinearLayout? = null
@@ -141,8 +146,8 @@ class AgentOverlayNotchManager(private val context: Context) {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
             autoIdleRunnable = null
-            pulseAnimator?.cancel()
-            pulseAnimator = null
+            unregisterScreenStateReceiver()
+            stopPulseAnimation()
 
             val view = rootContainer ?: return@post
             rootContainer = null
@@ -160,6 +165,33 @@ class AgentOverlayNotchManager(private val context: Context) {
                     }
                 }
                 .start()
+        }
+    }
+
+    fun destroyImmediately() {
+        val cleanup = {
+            mainHandler.removeCallbacksAndMessages(null)
+            autoIdleRunnable = null
+            unregisterScreenStateReceiver()
+            stopPulseAnimation()
+
+            val view = rootContainer
+            rootContainer = null
+            isExpanded = false
+
+            if (view != null) {
+                view.animate().cancel()
+                view.clearAnimation()
+                runCatching {
+                    windowManager?.removeViewImmediate(view)
+                }
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            cleanup()
+        } else {
+            mainHandler.post(cleanup)
         }
     }
 
@@ -275,8 +307,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -286,6 +317,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         runCatching {
             wm.addView(container, params)
             rootContainer = container
+            registerScreenStateReceiver()
 
             // Entrance Pop Animation
             container.scaleX = 0.7f
@@ -539,13 +571,12 @@ class AgentOverlayNotchManager(private val context: Context) {
         val container = rootContainer ?: return
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
 
-        // 2. Restore compact WindowManager params with FLAG_NOT_FOCUSABLE
+        // 2. Restore compact WindowManager params with FLAG_NOT_FOCUSABLE and remove FLAG_WATCH_OUTSIDE_TOUCH
         lp.width = dp(176)
         lp.height = dp(40)
-        lp.flags = lp.flags or
+        lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()) or
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
 
         wm.updateViewLayout(container, lp)
 
@@ -573,8 +604,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private fun renderCompactIdle() {
         (statusDotView?.background as? GradientDrawable)?.setColor(Color.WHITE)
-        pulseAnimator?.cancel()
-        pulseAnimator = null
+        stopPulseAnimation()
         statusDotView?.alpha = 0.8f
         statusWordView?.text = "TARS"
         lastRenderedWord = "TARS"
@@ -611,20 +641,9 @@ class AgentOverlayNotchManager(private val context: Context) {
         (statusDotView?.background as? GradientDrawable)?.setColor(dotColor)
 
         if (state == NotchState.ACTIVE || state == NotchState.THINKING) {
-            if (pulseAnimator == null) {
-                statusDotView?.let { dot ->
-                    pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.4f).apply {
-                        duration = 800L
-                        repeatCount = ValueAnimator.INFINITE
-                        repeatMode = ValueAnimator.REVERSE
-                        start()
-                    }
-                }
-            }
+            startPulseAnimation()
         } else {
-            pulseAnimator?.cancel()
-            pulseAnimator = null
-            statusDotView?.alpha = 1f
+            stopPulseAnimation()
         }
 
         // Resolve single-word status
@@ -706,6 +725,66 @@ class AgentOverlayNotchManager(private val context: Context) {
             value.toFloat(),
             context.resources.displayMetrics
         )
+    }
+
+    private fun isScreenInteractive(): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        return powerManager?.isInteractive ?: true
+    }
+
+    private fun startPulseAnimation() {
+        if (!isScreenInteractive()) {
+            stopPulseAnimation()
+            return
+        }
+        if (pulseAnimator != null) return
+        statusDotView?.let { dot ->
+            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.4f).apply {
+                duration = 800L
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.REVERSE
+                start()
+            }
+        }
+    }
+
+    private fun stopPulseAnimation() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        statusDotView?.alpha = 1f
+    }
+
+    private fun registerScreenStateReceiver() {
+        if (screenStateReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> {
+                        stopPulseAnimation()
+                    }
+                    Intent.ACTION_SCREEN_ON -> {
+                        if (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING) {
+                            startPulseAnimation()
+                        }
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        runCatching {
+            context.registerReceiver(receiver, filter)
+            screenStateReceiver = receiver
+        }
+    }
+
+    private fun unregisterScreenStateReceiver() {
+        screenStateReceiver?.let {
+            runCatching { context.unregisterReceiver(it) }
+            screenStateReceiver = null
+        }
     }
 
     enum class NotchState {

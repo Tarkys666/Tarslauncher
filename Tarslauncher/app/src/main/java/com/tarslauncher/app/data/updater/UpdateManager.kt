@@ -17,6 +17,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 class UpdateManager(
     private val context: Context,
@@ -71,13 +72,15 @@ class UpdateManager(
             }
 
             val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
+            val expectedHash = staticInfo.sha256 ?: staticInfo.apkHash
             Result.success(
                 UpdateInfo(
                     versionName = tagName,
                     releaseNotes = staticInfo.releaseNotes.orEmpty(),
                     downloadUrl = staticInfo.downloadUrl,
                     apkSize = staticInfo.apkSize,
-                    hasUpdate = isNewer
+                    hasUpdate = isNewer,
+                    expectedHash = expectedHash
                 )
             )
         } catch (e: Exception) {
@@ -120,12 +123,16 @@ class UpdateManager(
             } ?: return Result.failure(Exception("Sürüm içinde APK dosyası bulunamadı."))
 
             val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
+            val hashInBody = Regex("(?i)(?:sha[-_]?256|hash)[\\s:=]+([a-fA-F0-9]{64})")
+                .find(release.body.orEmpty())?.groupValues?.get(1)
+
             val updateInfo = UpdateInfo(
                 versionName = tagName,
                 releaseNotes = release.body.orEmpty(),
                 downloadUrl = apkAsset.downloadUrl.orEmpty(),
                 apkSize = apkAsset.size,
-                hasUpdate = isNewer
+                hasUpdate = isNewer,
+                expectedHash = hashInBody
             )
 
             Result.success(updateInfo)
@@ -137,6 +144,7 @@ class UpdateManager(
     suspend fun downloadApk(
         downloadUrl: String,
         versionName: String,
+        expectedHash: String? = null,
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         var targetFile: File? = null
@@ -225,6 +233,17 @@ class UpdateManager(
                     onProgress(1f, totalLength, totalLength)
                 }
 
+                // Verify APK integrity if expectedHash is provided
+                if (!expectedHash.isNullOrBlank()) {
+                    val isValid = verifyApkHash(file, expectedHash)
+                    if (!isValid) {
+                        file.delete()
+                        return@withContext Result.failure(
+                            SecurityException("APK bütünlük doğrulaması başarısız oldu: İndirilen dosyanın hash değeri beklenen değer ile uyuşmuyor.")
+                        )
+                    }
+                }
+
                 Result.success(file)
             } finally {
                 activeConnection?.disconnect()
@@ -276,7 +295,46 @@ class UpdateManager(
         }
     }
 
+    fun verifyApkHash(apkFile: File, expectedHash: String): Boolean {
+        return Companion.verifyApkHash(apkFile, expectedHash)
+    }
+
     companion object {
+        fun verifyApkHash(apkFile: File, expectedHash: String): Boolean {
+            if (!apkFile.exists() || !apkFile.isFile || expectedHash.isBlank()) {
+                return false
+            }
+            val cleanExpected = expectedHash.trim()
+                .removePrefix("sha256:")
+                .removePrefix("SHA256:")
+                .removePrefix("sha-256:")
+                .removePrefix("SHA-256:")
+                .lowercase()
+
+            val algorithm = when (cleanExpected.length) {
+                32 -> "MD5"
+                40 -> "SHA-1"
+                64 -> "SHA-256"
+                128 -> "SHA-512"
+                else -> "SHA-256"
+            }
+
+            return try {
+                val digest = MessageDigest.getInstance(algorithm)
+                apkFile.inputStream().buffered().use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        digest.update(buffer, 0, bytesRead)
+                    }
+                }
+                val calculatedHash = digest.digest().joinToString("") { "%02x".format(it) }
+                calculatedHash.equals(cleanExpected, ignoreCase = true)
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         fun isNewerVersion(remoteVersion: String, currentVersion: String): Boolean {
             val cleanRemote = remoteVersion.removePrefix("v").removePrefix("V").substringBefore("-").trim()
             val cleanCurrent = currentVersion.removePrefix("v").removePrefix("V").substringBefore("-").trim()

@@ -40,6 +40,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -429,15 +432,17 @@ fun FolderGrid(
                     val folderIndex = rowIndex * cols + colIndex
                     if (folderIndex < folders.size) {
                         val folder = folders[folderIndex]
-                        FolderItem(
-                            folder = folder,
-                            onClick = {
-                                selectedFolderId = folder.id
-                                showFolderAppsDialog = true
-                            },
-                            iconPackLoader = iconPackLoader,
-                            buttonColor = buttonColor
-                        )
+                        key(folder.id) {
+                            FolderItem(
+                                folder = folder,
+                                onClick = {
+                                    selectedFolderId = folder.id
+                                    showFolderAppsDialog = true
+                                },
+                                iconPackLoader = iconPackLoader,
+                                buttonColor = buttonColor
+                            )
+                        }
                     } else {
                         // Boş alan için invisible placeholder
                         Spacer(modifier = Modifier.size(45.dp))
@@ -515,20 +520,20 @@ fun FolderItem(
                         ) {
                             if (appIndex < folder.apps.size) {
                                 val app = folder.apps[appIndex]
-                                val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-                                    val activityName = app.activityName
-                                    val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
-                                    (themedIcon ?: app.icon)?.let {
-                                        drawableToBitmap(it).asImageBitmap()
+                                key(app.packageName) {
+                                    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
+                                        val activityName = app.activityName
+                                        iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
+                                            ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
                                     }
-                                }
 
-                                if (appIcon != null) {
-                                    Image(
-                                        bitmap = appIcon,
-                                        contentDescription = app.name,
-                                        modifier = Modifier.size(12.dp)
-                                    )
+                                    if (appIcon != null) {
+                                        Image(
+                                            bitmap = appIcon,
+                                            contentDescription = app.name,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -553,9 +558,8 @@ fun AppIconWithoutName(
     // Icon'u composable dışında hazırlıyoruz
     val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
         val activityName = app.activityName
-        val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
-
-        (themedIcon ?: app.icon)?.let { drawableToBitmap(it).asImageBitmap() }
+        iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
+            ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
     }
     
     Card(
@@ -713,10 +717,8 @@ fun FolderSelectItem(
                                 val app = folder.apps[appIndex]
                                 val isPackLoaded = iconPackLoader?.isLoaded == true
                                 val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-                                    val themedIcon = iconPackLoader?.getIconForApp(app.packageName, app.activityName)
-                                    (themedIcon ?: app.icon)?.let {
-                                        drawableToBitmap(it).asImageBitmap()
-                                    }
+                                    iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
+                                        ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
                                 }
 
                                 if (appIcon != null) {
@@ -964,10 +966,8 @@ fun FolderAppItem(
     val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
         try {
             val activityName = app.activityName
-            val themedIcon = iconPackLoader?.getIconForApp(app.packageName, activityName)
-            (themedIcon ?: app.icon)?.let {
-                drawableToBitmap(it).asImageBitmap()
-            }
+            iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
+                ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
         } catch (e: Exception) {
             null
         }
@@ -1016,10 +1016,11 @@ fun ClockHeader(
     if (!showClock && !showTarsHeader) return
 
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var currentTime by remember { mutableStateOf("00:00") }
 
     if (showClock) {
-        DisposableEffect(context) {
+        DisposableEffect(context, lifecycleOwner) {
             fun updateTime() {
                 currentTime = try {
                     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -1027,7 +1028,7 @@ fun ClockHeader(
                     "00:00"
                 }
             }
-            updateTime()
+
             val receiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
                     updateTime()
@@ -1038,13 +1039,50 @@ fun ClockHeader(
                 addAction(android.content.Intent.ACTION_TIME_CHANGED)
                 addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
             }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                context.registerReceiver(receiver, filter)
+
+            var isRegistered = false
+
+            fun register() {
+                if (!isRegistered) {
+                    updateTime()
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+                        } else {
+                            context.registerReceiver(receiver, filter)
+                        }
+                        isRegistered = true
+                    } catch (_: Exception) {}
+                }
             }
+
+            fun unregister() {
+                if (isRegistered) {
+                    try {
+                        context.unregisterReceiver(receiver)
+                    } catch (_: Exception) {}
+                    isRegistered = false
+                }
+            }
+
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START,
+                    Lifecycle.Event.ON_RESUME -> register()
+                    Lifecycle.Event.ON_PAUSE,
+                    Lifecycle.Event.ON_STOP -> unregister()
+                    else -> {}
+                }
+            }
+
+            lifecycleOwner.lifecycle.addObserver(observer)
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                register()
+            }
+
             onDispose {
-                try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                unregister()
             }
         }
     }

@@ -10,7 +10,8 @@ data class UpdateInfo(
     val releaseNotes: String,
     val downloadUrl: String,
     val apkSize: Long,
-    val hasUpdate: Boolean
+    val hasUpdate: Boolean,
+    val expectedHash: String? = null
 )
 
 @Immutable
@@ -44,6 +45,8 @@ data class StaticVersionInfo(
     @SerializedName("versionName") val versionName: String? = null,
     @SerializedName("downloadUrl") val downloadUrl: String? = null,
     @SerializedName("apkSize") val apkSize: Long = 0L,
-    @SerializedName("releaseNotes") val releaseNotes: String? = null
+    @SerializedName("releaseNotes") val releaseNotes: String? = null,
+    @SerializedName("sha256") val sha256: String? = null,
+    @SerializedName("apkHash") val apkHash: String? = null
 )
 

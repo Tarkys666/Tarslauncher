@@ -15,13 +15,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
 class AppRepository(
-    private val context: Context,
-    private val dataStore: LauncherDataStore = LauncherDataStore(context)
+    context: Context,
+    private val dataStore: LauncherDataStore = LauncherDataStore(context.applicationContext)
 ) {
-    private val packageManager: PackageManager = context.packageManager
+    private val context: Context = context.applicationContext
+    private val packageManager: PackageManager = this.context.packageManager
     private val gson = Gson()
-    val cloudSyncManager: com.tarslauncher.app.data.sync.CloudSyncManager = com.tarslauncher.app.data.sync.CloudSyncManager(context, dataStore)
-    val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(context)
+    val cloudSyncManager: com.tarslauncher.app.data.sync.CloudSyncManager = com.tarslauncher.app.data.sync.CloudSyncManager(this.context, dataStore)
+    val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(this.context)
 
     @Volatile
     private var cachedInstalledApps: List<AppInfo>? = null
@@ -40,7 +41,9 @@ class AppRepository(
         cachedInstalledApps = null
     }
 
-    suspend fun getLastBackupTime(): Long = dataStore.getLastBackupTime()
+    suspend fun getLastBackupTime(): Long = withContext(Dispatchers.IO) {
+        dataStore.getLastBackupTime()
+    }
 
     suspend fun initialize() {
         withContext(Dispatchers.IO) {

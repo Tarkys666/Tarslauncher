@@ -3,6 +3,7 @@ package com.tarslauncher.app.agent.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
+import java.lang.ref.WeakReference
 import com.tarslauncher.app.agent.data.AgentPreferences
 import com.tarslauncher.app.agent.data.GroqAgentBrain
 import com.tarslauncher.app.agent.data.GroqRemoteDataSource
@@ -32,7 +33,7 @@ class TarsAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        currentInstance = this
+        currentInstance = WeakReference(this)
         _isServiceActive.value = true
 
         overlayNotch.onStopRequested = {
@@ -75,7 +76,7 @@ class TarsAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         stopAgentTask()
-        overlayNotch.hide()
+        overlayNotch.destroyImmediately()
         serviceScope.cancel()
         super.onDestroy()
         currentInstance = null
@@ -134,6 +135,7 @@ class TarsAccessibilityService : AccessibilityService() {
     fun stopAgentTask() {
         activeOverlayJob?.cancel()
         activeOverlayJob = null
+        treeParser.clear()
         AgentViewModel.getInstance()?.stopTask()
         if (AgentPreferences(this).isAgentEnabled()) {
             overlayNotch.showIdle()
@@ -144,13 +146,13 @@ class TarsAccessibilityService : AccessibilityService() {
 
     companion object {
         @Volatile
-        private var currentInstance: TarsAccessibilityService? = null
+        private var currentInstance: WeakReference<TarsAccessibilityService>? = null
 
         private val _isServiceActive = MutableStateFlow(false)
         val isServiceActive: StateFlow<Boolean> = _isServiceActive.asStateFlow()
 
-        fun getInstance(): TarsAccessibilityService? = currentInstance
+        fun getInstance(): TarsAccessibilityService? = currentInstance?.get()
 
-        fun isConnected(): Boolean = currentInstance != null
+        fun isConnected(): Boolean = currentInstance?.get() != null
     }
 }

@@ -42,7 +42,7 @@ class AccessibilityTreeParser {
             val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(60).orEmpty()
             val text = scrubSensitiveTokens(rawText)
             val contentDesc = if (isPassword) "" else scrubSensitiveTokens(node.contentDescription?.toString()?.trim()?.take(60).orEmpty())
-            val hintText = if (isPassword) "" else node.hintText?.toString()?.trim()?.take(45).orEmpty()
+            val hintText = if (isPassword) "" else scrubSensitiveTokens(node.hintText?.toString()?.trim()?.take(45).orEmpty())
             val isClickable = node.isClickable
             val isLongClickable = node.isLongClickable
             val isEditable = node.isEditable
@@ -132,9 +132,23 @@ class AccessibilityTreeParser {
     private fun scrubSensitiveTokens(input: String): String {
         if (input.isEmpty()) return input
         return input
-            .replace(Regex("gsk_[A-Za-z0-9_-]{8,}"), "gsk_***[GİZLİ]***")
-            .replace(Regex("AIza[A-Za-z0-9_-]{10,}"), "AIza***[GİZLİ]***")
-            .replace(Regex("eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}"), "***[JWT_GİZLİ]***")
+            .replace(REGEX_GROQ_KEY, "gsk_***[GİZLİ]***")
+            .replace(REGEX_AIZA_KEY, "AIza***[GİZLİ]***")
+            .replace(REGEX_JWT, "***[JWT_GİZLİ]***")
+            .replace(REGEX_IBAN, "***[IBAN_GİZLİ]***")
+            .replace(REGEX_CREDIT_CARD, "***[KART_GİZLİ]***")
+            .replace(REGEX_TCKN, "***[TCKN_GİZLİ]***")
+            .replace(REGEX_OTP, "***[OTP_GİZLİ]***")
+    }
+
+    companion object {
+        private val REGEX_GROQ_KEY = Regex("""gsk_[A-Za-z0-9_-]{8,}""")
+        private val REGEX_AIZA_KEY = Regex("""AIza[A-Za-z0-9_-]{10,}""")
+        private val REGEX_JWT = Regex("""eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}""")
+        private val REGEX_IBAN = Regex("""\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){12,30}\b""", RegexOption.IGNORE_CASE)
+        private val REGEX_CREDIT_CARD = Regex("""\b(?:\d{4}[ -]?){3}\d{4}\b|\b\d{15,19}\b""")
+        private val REGEX_TCKN = Regex("""\b[1-9]\d{10}\b""")
+        private val REGEX_OTP = Regex("""(?i)\b(?:otp|kod|code|doğrulama|şifre|onay|pin)[\s:=#-]*\d{4,8}\b|\b\d{4,8}\s*(?:kodu|kod|otp|pin)\b""")
     }
 }
 

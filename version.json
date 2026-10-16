@@ -1,7 +1,7 @@
 {
-  "versionCode": 34,
-  "versionName": "1.7.9",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.9/TarsLauncher-release.apk",
+  "versionCode": 35,
+  "versionName": "1.8.0",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.0/TarsLauncher-release.apk",
   "apkSize": 11085864,
-  "releaseNotes": "TARS v1.7.9: Apple Dynamic Island görsel ve etkileşim yenilemesi — Vektörel çizim ikonları, pürüzsüz açılır/kapanır kart yapısı ve tam güvenlik kilidi entegrasyonu."
+  "releaseNotes": "TARS v1.8.0: Kapsamlı Pil, Güvenlik ve Performans Güncellemesi — typeWindowContentChanged ve arka plan dokunma bayrakları kaldırılarak pil sömürüsü sonlandırıldı, Pre-Flight Privacy Gate ve finansal PII maskelemesi eklendi, Zero-Click kısayol phishing koruması getirildi, MainActivity ve ViewModel bellek sızıntıları giderildi, ImageBitmap LruCache ile liste kaydırma 60/120 FPS akıcılığına kavuşturuldu."
 }
