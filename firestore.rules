@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Launcher Cloud Backup: Only authenticated user can read/write their own backup document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // 2. Agent Telemetry Sessions: Strictly WRITE-ONLY from client SDK.
+      // Nobody can read or list sessions/steps from outside; only visible in Firebase Console.
+      match /agent_sessions/{sessionId} {
+        allow create, update: if request.auth != null && request.auth.uid == userId;
+        allow read, delete: if false;
+
+        match /steps/{stepId} {
+          allow create, update: if request.auth != null && request.auth.uid == userId;
+          allow read, delete: if false;
+        }
+      }
+
+      // 3. Learned Agent Skills: Strictly WRITE-ONLY from client SDK.
+      match /agent_skills/{skillId} {
+        allow create, update: if request.auth != null && request.auth.uid == userId;
+        allow read, delete: if false;
+      }
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
