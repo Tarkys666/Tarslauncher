@@ -14,15 +14,14 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
-import android.view.animation.OvershootInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 /**
  * Apple Dynamic Island style minimal pill HUD powered by TYPE_ACCESSIBILITY_OVERLAY.
- * Placed top-center, compact, jet-black stadium capsule with single-word status
- * and micro stage progression indicator.
+ * Placed top-center with fixed width (no jumping/resizing), matte graphite background,
+ * single-word status, micro stage progression, and tap-to-dismiss (no X button).
  */
 class AgentOverlayNotchManager(private val context: Context) {
 
@@ -35,7 +34,6 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var statusDotView: View? = null
     private var statusWordView: TextView? = null
     private var stageBadgeView: TextView? = null
-    private var stopButtonView: TextView? = null
     private var pulseAnimator: ObjectAnimator? = null
     private var autoHideRunnable: Runnable? = null
 
@@ -68,7 +66,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
                 val hideTask = Runnable { hide() }
                 autoHideRunnable = hideTask
-                mainHandler.postDelayed(hideTask, 2800L)
+                mainHandler.postDelayed(hideTask, 2600L)
             }
         }
     }
@@ -102,24 +100,29 @@ class AgentOverlayNotchManager(private val context: Context) {
     private fun createAndAttachOverlay() {
         val wm = windowManager ?: return
 
-        // Apple Dynamic Island Capsule: jet-black, stadium radius, subtle glow border
+        // Apple Dynamic Island: Matte graphite, fixed capsule size (no jumping/resizing), centered content
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-            setPadding(dp(13), dp(7), dp(10), dp(7))
+            setPadding(dp(14), 0, dp(14), 0)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpF(19) // Full capsule pill
-                setColor(Color.parseColor("#FF000000")) // True Apple OLED black
-                setStroke(dp(1), Color.parseColor("#26FFFFFF")) // Subtle glass border
+                cornerRadius = dpF(18) // Stadium capsule for 36dp height
+                setColor(Color.parseColor("#1C1C1E")) // Apple matte graphite/charcoal
+                setStroke(dp(1), Color.parseColor("#2C2C2E")) // Subtle matte border
             }
-            elevation = dpF(10)
+            elevation = dpF(4)
+            // Tap the pill to stop/dismiss without an intrusive 'X' button
+            setOnClickListener {
+                onStopRequested?.invoke()
+                hide()
+            }
         }
 
         // 1. Glowing Status Indicator Dot
         val dot = View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(8), dp(8))
+            layoutParams = LinearLayout.LayoutParams(dp(7), dp(7))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.parseColor("#30D158")) // Apple bright green default
@@ -128,19 +131,19 @@ class AgentOverlayNotchManager(private val context: Context) {
         statusDotView = dot
         container.addView(dot)
 
-        // 2. Single-Word Status Label (Apple typography)
+        // 2. Single-Word Status Label
         val wordText = TextView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                marginStart = dp(8)
+                marginStart = dp(7)
             }
             text = "Başlatılıyor"
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            letterSpacing = 0.02f
+            letterSpacing = 0.01f
             maxLines = 1
         }
         statusWordView = wordText
@@ -152,42 +155,21 @@ class AgentOverlayNotchManager(private val context: Context) {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                marginStart = dp(7)
-                marginEnd = dp(6)
+                marginStart = dp(6)
             }
             setTextColor(Color.parseColor("#73FFFFFF"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-            letterSpacing = 0.04f
+            letterSpacing = 0.03f
             maxLines = 1
         }
         stageBadgeView = stageBadge
         container.addView(stageBadge)
 
-        // 4. Apple-style minimal circular Stop Button (✕)
-        val stopBtn = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
-            gravity = Gravity.CENTER
-            text = "✕"
-            setTextColor(Color.parseColor("#B3FFFFFF"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-            typeface = Typeface.DEFAULT_BOLD
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#26FFFFFF"))
-            }
-            setOnClickListener {
-                onStopRequested?.invoke()
-                hide()
-            }
-        }
-        stopButtonView = stopBtn
-        container.addView(stopBtn)
-
-        // Top-Center Placement (Under Camera / Status bar notch area)
+        // Top-Center Placement with FIXED width and height: completely prevents resizing/jumping!
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(154),
+            dp(36),
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -203,19 +185,19 @@ class AgentOverlayNotchManager(private val context: Context) {
             rootContainer = container
 
             // Dynamic Island Pop Entrance Animation
-            container.scaleX = 0.6f
-            container.scaleY = 0.6f
+            container.scaleX = 0.7f
+            container.scaleY = 0.7f
             container.alpha = 0f
             container.animate()
                 .scaleX(1.0f)
                 .scaleY(1.0f)
                 .alpha(1.0f)
-                .setDuration(240L)
-                .setInterpolator(OvershootInterpolator(1.2f))
+                .setDuration(200L)
+                .setInterpolator(DecelerateInterpolator())
                 .start()
 
-            // Soft breathing pulse animation on the indicator dot
-            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.35f).apply {
+            // Breathing pulse animation on the indicator dot
+            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.4f).apply {
                 duration = 800L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.REVERSE
@@ -243,18 +225,6 @@ class AgentOverlayNotchManager(private val context: Context) {
         if (singleWord != lastRenderedWord) {
             lastRenderedWord = singleWord
             statusWordView?.text = singleWord
-
-            // Tactile micro-bounce on text update
-            rootContainer?.let { view ->
-                view.animate()
-                    .scaleX(1.03f)
-                    .scaleY(1.03f)
-                    .setDuration(90L)
-                    .withEndAction {
-                        view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(110L).start()
-                    }
-                    .start()
-            }
         }
 
         // Micro Stage Count (e.g. "2/4" or "1/3")

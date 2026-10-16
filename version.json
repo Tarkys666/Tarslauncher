@@ -1,7 +1,7 @@
 {
-  "versionCode": 28,
-  "versionName": "1.7.3",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.3/TarsLauncher-release.apk",
+  "versionCode": 29,
+  "versionName": "1.7.4",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.4/TarsLauncher-release.apk",
   "apkSize": 11085864,
-  "releaseNotes": "TARS v1.7.3: Apple Dynamic Island stilinde üst-orta minimal çentik (pill HUD) — tek kelimelik anlık durum ('Düşünüyor', 'Tıklıyor', 'Yazıyor', 'Açıyor', 'Tamamlandı'), mikro aşama göstergesi (2/4) ve dokunsal yay animasyonları."
+  "releaseNotes": "TARS v1.7.4: Sabit genişlikli (asla büyüyüp küçülmeyen/titremeyen), mat grafit zeminli ve X butonsuz ultra minimal Dynamic Island çentiği."
 }
