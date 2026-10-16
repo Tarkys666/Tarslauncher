@@ -154,6 +154,18 @@ object ActionParser {
                 AgentAction.OpenUrl(thought, url, stepIndex)
             }
 
+            "search", "web_search", "search_web", "youtube_search" -> {
+                val query = args.get("query")?.asString
+                    ?: args.get("q")?.asString
+                    ?: args.get("text")?.asString.orEmpty()
+                val platform = if (actionName == "youtube_search") {
+                    "youtube"
+                } else {
+                    (args.get("platform")?.asString ?: args.get("engine")?.asString ?: "google").lowercase()
+                }
+                AgentAction.SearchWeb(thought, query, platform, stepIndex)
+            }
+
             "tap", "click" -> {
                 val id = args.get("id")?.asInt
                     ?: args.get("target_id")?.asInt
@@ -194,6 +206,66 @@ object ActionParser {
             "notifications", "open_notifications" -> AgentAction.Notifications(thought, stepIndex)
 
             "quick_settings" -> AgentAction.QuickSettings(thought, stepIndex)
+
+            "set_volume", "volume" -> {
+                val level = args.get("level")?.asInt ?: args.get("percent")?.asInt ?: -1
+                val mode = (
+                    args.get("mode")?.asString
+                        ?: args.get("direction")?.asString
+                        ?: if (level >= 0) "set" else "down"
+                ).lowercase().trim()
+                AgentAction.SetVolume(thought, mode, level, stepIndex)
+            }
+
+            "media_control", "media" -> {
+                val cmd = (
+                    args.get("command")?.asString
+                        ?: args.get("mode")?.asString
+                        ?: args.get("action")?.asString
+                        ?: "toggle"
+                ).lowercase().trim()
+                AgentAction.MediaControl(thought, cmd, stepIndex)
+            }
+
+            "flashlight", "torch" -> {
+                val stateStr = (args.get("state")?.asString ?: args.get("mode")?.asString).orEmpty().lowercase()
+                val enabled = when {
+                    args.has("enabled") -> args.get("enabled").asBoolean
+                    args.has("on") -> args.get("on").asBoolean
+                    stateStr == "off" || stateStr == "false" || stateStr == "kapat" -> false
+                    else -> true
+                }
+                AgentAction.Flashlight(thought, enabled, stepIndex)
+            }
+
+            "screenshot", "take_screenshot" -> AgentAction.TakeScreenshot(thought, stepIndex)
+
+            "lock_screen", "lock" -> AgentAction.LockScreen(thought, stepIndex)
+
+            "open_settings", "settings" -> {
+                val section = (
+                    args.get("section")?.asString
+                        ?: args.get("page")?.asString
+                        ?: args.get("name")?.asString
+                        ?: "main"
+                ).lowercase().trim()
+                AgentAction.OpenSettings(thought, section, stepIndex)
+            }
+
+            "set_alarm", "alarm" -> {
+                val hour = args.get("hour")?.asInt ?: 8
+                val minute = args.get("minute")?.asInt ?: args.get("minutes")?.asInt ?: 0
+                val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
+                AgentAction.SetAlarm(thought, hour.coerceIn(0, 23), minute.coerceIn(0, 59), message, stepIndex)
+            }
+
+            "set_timer", "timer" -> {
+                val seconds = args.get("seconds")?.asInt
+                    ?: (args.get("minutes")?.asInt?.times(60))
+                    ?: 60
+                val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
+                AgentAction.SetTimer(thought, seconds.coerceIn(1, 86_400), message, stepIndex)
+            }
 
             "clipboard_set", "copy" -> {
                 val text = args.get("text")?.asString

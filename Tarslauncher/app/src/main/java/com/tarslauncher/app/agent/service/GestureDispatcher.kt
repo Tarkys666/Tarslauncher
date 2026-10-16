@@ -170,5 +170,23 @@ class GestureDispatcher(
         val service = serviceProvider() ?: return false
         return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
     }
+
+    fun performScreenshot(): Boolean {
+        val service = serviceProvider() ?: return false
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
+        } else {
+            false
+        }
+    }
+
+    fun performLockScreen(): Boolean {
+        val service = serviceProvider() ?: return false
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
+        } else {
+            false
+        }
+    }
 }
 

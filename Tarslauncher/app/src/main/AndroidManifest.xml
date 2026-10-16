@@ -17,6 +17,9 @@
     <!-- In-App Auto-Update permission -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Built-in Agent Alarm & Timer tool permission -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />

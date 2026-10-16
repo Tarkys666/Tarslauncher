@@ -1,7 +1,7 @@
 {
-  "versionCode": 30,
-  "versionName": "1.7.5",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.5/TarsLauncher-release.apk",
+  "versionCode": 31,
+  "versionName": "1.7.6",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.6/TarsLauncher-release.apk",
   "apkSize": 11085864,
-  "releaseNotes": "TARS v1.7.5: Model geçişi (fallback) tamamen kaldırıldı — sistem tavizsiz şekilde yalnızca tek bir model (qwen/qwen3.8-27b) ile çalışır."
+  "releaseNotes": "TARS v1.7.6: 9 Yeni Yerleşik Sistem Aracı (Built-in Tools) eklendi — Ses & Medya kontrolü (set_volume, media_control), El Feneri (flashlight), Ekran Görüntüsü & Kilitleme (screenshot, lock_screen), Doğrudan Alarm & Sayaç kurma (set_alarm, set_timer), Sistem Ayarları kısayolu (open_settings) ve YouTube/Google direkt arama (search)."
 }

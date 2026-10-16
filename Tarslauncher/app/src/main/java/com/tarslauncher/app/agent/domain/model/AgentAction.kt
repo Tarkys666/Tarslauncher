@@ -11,6 +11,7 @@ sealed interface AgentAction {
     fun toOperationalSignature(): String = when (this) {
         is OpenApp -> "OpenApp($appName)"
         is OpenUrl -> "OpenUrl($url)"
+        is SearchWeb -> "SearchWeb($platform, $query)"
         is Tap -> "Tap($targetId)"
         is LongPress -> "LongPress($targetId)"
         is TypeText -> "TypeText($targetId, $text, pressEnter=$pressEnter)"
@@ -20,6 +21,14 @@ sealed interface AgentAction {
         is Recents -> "Recents"
         is Notifications -> "Notifications"
         is QuickSettings -> "QuickSettings"
+        is SetVolume -> "SetVolume($mode, level=$level)"
+        is MediaControl -> "MediaControl($command)"
+        is Flashlight -> "Flashlight($enabled)"
+        is TakeScreenshot -> "TakeScreenshot"
+        is LockScreen -> "LockScreen"
+        is OpenSettings -> "OpenSettings($section)"
+        is SetAlarm -> "SetAlarm($hour:$minute, $message)"
+        is SetTimer -> "SetTimer(${seconds}s, $message)"
         is ClipboardSet -> "ClipboardSet(${text.take(30)})"
         is Wait -> "Wait(${durationMs}ms)"
         is AskUser -> "AskUser($question)"
@@ -36,6 +45,13 @@ sealed interface AgentAction {
     data class OpenUrl(
         override val thought: String,
         val url: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class SearchWeb(
+        override val thought: String,
+        val query: String,
+        val platform: String = "google",
         override val stepIndex: Int = -1
     ) : AgentAction
 
@@ -97,6 +113,56 @@ sealed interface AgentAction {
 
     data class QuickSettings(
         override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class SetVolume(
+        override val thought: String,
+        val mode: String,
+        val level: Int = -1,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class MediaControl(
+        override val thought: String,
+        val command: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class Flashlight(
+        override val thought: String,
+        val enabled: Boolean,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class TakeScreenshot(
+        override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class LockScreen(
+        override val thought: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class OpenSettings(
+        override val thought: String,
+        val section: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class SetAlarm(
+        override val thought: String,
+        val hour: Int,
+        val minute: Int,
+        val message: String = "",
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class SetTimer(
+        override val thought: String,
+        val seconds: Int,
+        val message: String = "",
         override val stepIndex: Int = -1
     ) : AgentAction
 

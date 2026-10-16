@@ -233,6 +233,15 @@ class AgentLoopRunner(
                 is AgentAction.TypeText -> "Yazıyor"
                 is AgentAction.Scroll -> "Kaydırıyor"
                 is AgentAction.OpenApp, is AgentAction.OpenUrl -> "Açıyor"
+                is AgentAction.SearchWeb -> "Arıyor"
+                is AgentAction.SetVolume -> "Ses"
+                is AgentAction.MediaControl -> "Medya"
+                is AgentAction.Flashlight -> "Fener"
+                is AgentAction.TakeScreenshot -> "Görüntü"
+                is AgentAction.LockScreen -> "Kilitliyor"
+                is AgentAction.OpenSettings -> "Ayarlar"
+                is AgentAction.SetAlarm -> "Alarm"
+                is AgentAction.SetTimer -> "Sayaç"
                 is AgentAction.Wait -> "Bekliyor"
                 is AgentAction.Back -> "Geri"
                 is AgentAction.Home -> "Ana Ekran"
@@ -416,7 +425,7 @@ class AgentLoopRunner(
             service.overlayNotch.showOrUpdate(
                 stepNumber = step,
                 plan = currentPlan,
-                liveDetail = executionSummary,
+                liveDetail = actionWord,
                 state = AgentOverlayNotchManager.NotchState.ACTIVE
             )
 

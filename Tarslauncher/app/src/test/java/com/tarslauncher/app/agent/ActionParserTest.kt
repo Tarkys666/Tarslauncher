@@ -144,4 +144,27 @@ class ActionParserTest {
         assertTrue(clipAction is AgentAction.ClipboardSet)
         assertEquals("Merhaba Dünya", (clipAction as AgentAction.ClipboardSet).text)
     }
+
+    @Test
+    fun `parse built-in system tools set_volume, flashlight, set_alarm, and search`() {
+        val volRaw = """{"thought": "Sesi %40 seviyesine ayarlıyorum", "action": "set_volume", "args": {"mode": "set", "level": 40}}"""
+        val volAction = ActionParser.parse(volRaw) as AgentAction.SetVolume
+        assertEquals("set", volAction.mode)
+        assertEquals(40, volAction.level)
+
+        val torchRaw = """{"thought": "El fenerini açıyorum", "action": "flashlight", "args": {"enabled": true}}"""
+        val torchAction = ActionParser.parse(torchRaw) as AgentAction.Flashlight
+        assertTrue(torchAction.enabled)
+
+        val alarmRaw = """{"thought": "Sabah 07:30 alarmını kuruyorum", "action": "set_alarm", "args": {"hour": 7, "minute": 30, "message": "Toplantı"}}"""
+        val alarmAction = ActionParser.parse(alarmRaw) as AgentAction.SetAlarm
+        assertEquals(7, alarmAction.hour)
+        assertEquals(30, alarmAction.minute)
+        assertEquals("Toplantı", alarmAction.message)
+
+        val searchRaw = """{"thought": "YouTube üzerinde arama yapıyorum", "action": "search", "args": {"query": "lofi hip hop", "platform": "youtube"}}"""
+        val searchAction = ActionParser.parse(searchRaw) as AgentAction.SearchWeb
+        assertEquals("lofi hip hop", searchAction.query)
+        assertEquals("youtube", searchAction.platform)
+    }
 }
