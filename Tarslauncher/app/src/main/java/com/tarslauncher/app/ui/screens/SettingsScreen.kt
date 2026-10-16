@@ -140,6 +140,10 @@ fun SettingsScreen(
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
+    var showNotesDialog by remember { mutableStateOf(false) }
+
+    val noteManager = remember { com.tarslauncher.app.data.notes.NoteManager(context) }
+    val savedNotes by noteManager.notesFlow.collectAsState(initial = emptyList())
     
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -155,7 +159,8 @@ fun SettingsScreen(
         installedPwas.size,
         appVersion,
         isSyncing,
-        lastBackupTime
+        lastBackupTime,
+        savedNotes.size
     ) {
         listOf(
             SettingsItem.Category(
@@ -287,6 +292,18 @@ fun SettingsScreen(
                     description = if (isSyncing) "Restoring..." else "Download and apply cloud backup",
                     type = SettingType.BUTTON,
                     onClick = onRestoreFromCloud
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "TARS NOTES (NOT DEFTERİ)",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Manage Notes",
+                    description = if (savedNotes.isEmpty()) "Henüz kayıtlı not yok" else "${savedNotes.size} not kayıtlı (Görüntüle / Ekle / Sil)",
+                    type = SettingType.BUTTON,
+                    onClick = { showNotesDialog = true }
                 )
             )
         ),
@@ -602,6 +619,12 @@ fun SettingsScreen(
                 showManagePwasDialog = false
                 showAddPwaDialog = true
             }
+        )
+    }
+
+    if (showNotesDialog) {
+        ManageNotesDialog(
+            onDismiss = { showNotesDialog = false }
         )
     }
 

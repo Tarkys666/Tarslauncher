@@ -273,6 +273,25 @@ object ActionParser {
                 AgentAction.ClipboardSet(thought, text, stepIndex)
             }
 
+            "note", "take_note", "save_note", "create_note", "not", "not_al" -> {
+                val act = (
+                    args.get("action")?.asString
+                        ?: args.get("mode")?.asString
+                        ?: args.get("command")?.asString
+                        ?: "add"
+                ).lowercase().trim()
+                val text = args.get("text")?.asString
+                    ?: args.get("content")?.asString
+                    ?: args.get("note")?.asString
+                    ?: args.get("message")?.asString.orEmpty()
+                val title = args.get("title")?.asString
+                    ?: args.get("baslik")?.asString
+                    ?: args.get("label")?.asString.orEmpty()
+                val noteId = args.get("id")?.asString
+                    ?: args.get("target")?.asString.orEmpty()
+                AgentAction.NoteAction(thought, act, text, title, noteId, stepIndex)
+            }
+
             "wait", "sleep" -> {
                 val msFromSec = (args.get("seconds")?.asLong ?: args.get("sec")?.asLong)?.times(1000L)
                 val ms = msFromSec

@@ -167,4 +167,21 @@ class ActionParserTest {
         assertEquals("lofi hip hop", searchAction.query)
         assertEquals("youtube", searchAction.platform)
     }
+
+    @Test
+    fun `parse built-in note action for adding and listing notes`() {
+        val addNoteRaw = """{"thought": "Toplantıyı not alıyorum", "action": "note", "args": {"action": "add", "title": "Toplantı", "text": "Saat 15:00 Proje toplantısı"}}"""
+        val addAction = ActionParser.parse(addNoteRaw)
+        assertTrue(addAction is AgentAction.NoteAction)
+        val noteAdd = addAction as AgentAction.NoteAction
+        assertEquals("add", noteAdd.action)
+        assertEquals("Toplantı", noteAdd.title)
+        assertEquals("Saat 15:00 Proje toplantısı", noteAdd.text)
+
+        val listNoteRaw = """{"thought": "Kayıtlı notları kontrol ediyorum", "action": "note", "args": {"action": "list"}}"""
+        val listAction = ActionParser.parse(listNoteRaw)
+        assertTrue(listAction is AgentAction.NoteAction)
+        val noteList = listAction as AgentAction.NoteAction
+        assertEquals("list", noteList.action)
+    }
 }

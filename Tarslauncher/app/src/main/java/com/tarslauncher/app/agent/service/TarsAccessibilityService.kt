@@ -2,7 +2,9 @@ package com.tarslauncher.app.agent.service
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
 import com.tarslauncher.app.agent.data.AgentPreferences
 import com.tarslauncher.app.agent.data.GroqAgentBrain
@@ -67,7 +69,37 @@ class TarsAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Passive monitoring; tree is polled on-demand during agent reasoning steps.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            checkFullscreenState()
+        }
+    }
+
+    private fun checkFullscreenState() {
+        val windowList = windows ?: return
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+        val screenWidth = displayMetrics.widthPixels
+
+        var hasVisibleStatusBar = false
+        var isAppFullScreen = false
+
+        for (window in windowList) {
+            val bounds = Rect()
+            window.getBoundsInScreen(bounds)
+
+            if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
+                if (bounds.top == 0 && bounds.height() in 1..(screenHeight / 4) && bounds.width() >= (screenWidth / 2)) {
+                    hasVisibleStatusBar = true
+                }
+            } else if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION && (window.isFocused || window.isActive)) {
+                if (bounds.top == 0 && bounds.height() >= (screenHeight * 0.92)) {
+                    isAppFullScreen = true
+                }
+            }
+        }
+
+        val isFullscreen = isAppFullScreen && !hasVisibleStatusBar
+        overlayNotch.setFullscreenSuppressed(isFullscreen)
     }
 
     override fun onInterrupt() {

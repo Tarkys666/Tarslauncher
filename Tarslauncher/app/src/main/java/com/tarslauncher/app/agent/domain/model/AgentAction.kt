@@ -30,6 +30,7 @@ sealed interface AgentAction {
         is SetAlarm -> "SetAlarm($hour:$minute, $message)"
         is SetTimer -> "SetTimer(${seconds}s, $message)"
         is ClipboardSet -> "ClipboardSet(${text.take(30)})"
+        is NoteAction -> "NoteAction($action, ${text.take(30)})"
         is Wait -> "Wait(${durationMs}ms)"
         is AskUser -> "AskUser($question)"
         is Done -> "Done"
@@ -169,6 +170,15 @@ sealed interface AgentAction {
     data class ClipboardSet(
         override val thought: String,
         val text: String,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class NoteAction(
+        override val thought: String,
+        val action: String, // "add", "list", "delete", "clear"
+        val text: String = "",
+        val title: String = "",
+        val noteId: String = "",
         override val stepIndex: Int = -1
     ) : AgentAction
 

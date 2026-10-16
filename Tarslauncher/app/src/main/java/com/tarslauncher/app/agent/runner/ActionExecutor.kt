@@ -158,6 +158,8 @@ class ActionExecutor(
                 }
             }
 
+            is AgentAction.NoteAction -> handleNoteAction(action)
+
             is AgentAction.Wait -> {
                 val sec = action.durationMs / 1000L
                 delay(action.durationMs)
@@ -372,5 +374,45 @@ class ActionExecutor(
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         context.startActivity(launchIntent)
         "BAŞARILI: '$trimmedQuery' uygulaması açıldı ($packageName)."
+    }
+
+    private suspend fun handleNoteAction(action: AgentAction.NoteAction): String = withContext(Dispatchers.IO) {
+        val noteManager = com.tarslauncher.app.data.notes.NoteManager(context)
+        when (action.action) {
+            "add", "create", "save" -> {
+                if (action.text.isBlank()) {
+                    "BAŞARISIZ: Not metni boş olamaz."
+                } else {
+                    val saved = noteManager.addNote(action.text, action.title)
+                    "BAŞARILI: Not kaydedildi [ID: ${saved.id}, Başlık: '${saved.title}']. İçerik: '${saved.content}'"
+                }
+            }
+            "list", "get", "show" -> {
+                val notes = noteManager.getNotes()
+                if (notes.isEmpty()) {
+                    "BİLGİ: Kayıtlı hiç not bulunmuyor."
+                } else {
+                    val formatted = notes.take(8).mapIndexed { i, n ->
+                        val date = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(n.createdAt))
+                        "${i + 1}. [${n.id}] '${n.title}' ($date): ${n.content}"
+                    }.joinToString("\n")
+                    "KAYITLI NOTLAR (${notes.size} adet):\n$formatted"
+                }
+            }
+            "delete", "remove" -> {
+                val target = action.noteId.ifBlank { action.text }
+                val success = noteManager.deleteNote(target)
+                if (success) {
+                    "BAŞARILI: '$target' referanslı not silindi."
+                } else {
+                    "BAŞARISIZ: Silinecek not bulunamadı: '$target'."
+                }
+            }
+            "clear" -> {
+                noteManager.clearNotes()
+                "BAŞARILI: Tüm notlar temizlendi."
+            }
+            else -> "BAŞARISIZ: Geçersiz not eylemi '${action.action}'."
+        }
     }
 }

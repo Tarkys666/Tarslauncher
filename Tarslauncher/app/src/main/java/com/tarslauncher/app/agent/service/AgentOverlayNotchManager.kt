@@ -75,6 +75,40 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var lastRenderedWord: String = ""
     private var currentState: NotchState = NotchState.IDLE
     private var isExpanded: Boolean = false
+    private var isFullscreenSuppressed: Boolean = false
+
+    fun setFullscreenSuppressed(suppressed: Boolean) {
+        if (isFullscreenSuppressed == suppressed) return
+        isFullscreenSuppressed = suppressed
+        mainHandler.post {
+            val container = rootContainer ?: return@post
+            if (suppressed) {
+                if (isExpanded) {
+                    collapseIsland()
+                }
+                container.animate()
+                    .alpha(0f)
+                    .scaleX(0.7f)
+                    .scaleY(0.7f)
+                    .setDuration(160L)
+                    .withEndAction {
+                        container.visibility = View.GONE
+                    }
+                    .start()
+            } else {
+                if (com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
+                    container.visibility = View.VISIBLE
+                    container.animate()
+                        .alpha(1f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(180L)
+                        .withEndAction(null)
+                        .start()
+                }
+            }
+        }
+    }
 
     fun showIdle() {
         mainHandler.post {
@@ -91,7 +125,9 @@ class AgentOverlayNotchManager(private val context: Context) {
                 createAndAttachOverlay()
             }
 
-            if (!isExpanded) {
+            if (isFullscreenSuppressed) {
+                rootContainer?.visibility = View.GONE
+            } else if (!isExpanded) {
                 renderCompactIdle()
             }
             updateExpandedState()
@@ -318,6 +354,11 @@ class AgentOverlayNotchManager(private val context: Context) {
             wm.addView(container, params)
             rootContainer = container
             registerScreenStateReceiver()
+
+            if (isFullscreenSuppressed) {
+                container.visibility = View.GONE
+                return@runCatching
+            }
 
             // Entrance Pop Animation
             container.scaleX = 0.7f
