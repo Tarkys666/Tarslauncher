@@ -39,8 +39,9 @@ class AccessibilityTreeParser {
 
             val isVisible = node.isVisibleToUser
             val isPassword = node.isPassword
-            val text = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(80).orEmpty()
-            val contentDesc = if (isPassword) "" else node.contentDescription?.toString()?.trim()?.take(80).orEmpty()
+            val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(80).orEmpty()
+            val text = scrubSensitiveTokens(rawText)
+            val contentDesc = if (isPassword) "" else scrubSensitiveTokens(node.contentDescription?.toString()?.trim()?.take(80).orEmpty())
             val hintText = if (isPassword) "" else node.hintText?.toString()?.trim()?.take(60).orEmpty()
             val isClickable = node.isClickable
             val isLongClickable = node.isLongClickable
@@ -126,6 +127,14 @@ class AccessibilityTreeParser {
         }
         activeNodeMap.clear()
         nodeSummaryMap.clear()
+    }
+
+    private fun scrubSensitiveTokens(input: String): String {
+        if (input.isEmpty()) return input
+        return input
+            .replace(Regex("gsk_[A-Za-z0-9_-]{8,}"), "gsk_***[GİZLİ]***")
+            .replace(Regex("AIza[A-Za-z0-9_-]{10,}"), "AIza***[GİZLİ]***")
+            .replace(Regex("eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}"), "***[JWT_GİZLİ]***")
     }
 }
 

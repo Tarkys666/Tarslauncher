@@ -103,15 +103,15 @@ class FirebaseAgentLogger(
 
             val stepData = hashMapOf(
                 "step" to step,
-                "thought" to thought,
-                "action_signature" to actionSignature,
-                "execution_result" to executionResult,
+                "thought" to redactSensitive(thought),
+                "action_signature" to redactSensitive(actionSignature),
+                "execution_result" to redactSensitive(executionResult),
                 "status" to status,
                 "timestamp" to now
             )
 
             if (!screenDumpSnippet.isNullOrBlank()) {
-                stepData["screen_snippet"] = screenDumpSnippet.take(1000)
+                stepData["screen_snippet"] = redactSensitive(screenDumpSnippet.take(1000))
             }
 
             firestore.collection(COLLECTION_USERS)
@@ -125,6 +125,15 @@ class FirebaseAgentLogger(
         }.onFailure { e ->
             Log.w(TAG, "Failed to log step $step to Firebase: ${e.message}")
         }
+    }
+
+    private fun redactSensitive(text: String): String {
+        if (text.isEmpty()) return text
+        return text
+            .replace(Regex("gsk_[A-Za-z0-9_-]{8,}"), "gsk_***REDACTED***")
+            .replace(Regex("AIza[A-Za-z0-9_-]{10,}"), "AIza***REDACTED***")
+            .replace(Regex("eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}"), "***JWT_REDACTED***")
+            .replace(Regex("(?i)TR\\d{2}\\s?(\\d{4}\\s?){5}\\d{2}"), "TR***IBAN_REDACTED***")
     }
 
     /**
