@@ -12,6 +12,7 @@ class TarsAccessibilityService : AccessibilityService() {
 
     val treeParser = AccessibilityTreeParser()
     val gestureDispatcher = GestureDispatcher { this }
+    val overlayNotch: AgentOverlayNotchManager by lazy { AgentOverlayNotchManager(this) }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -20,6 +21,7 @@ class TarsAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        overlayNotch.hide()
         currentInstance = null
         _isServiceActive.value = false
         treeParser.clear()
@@ -35,6 +37,7 @@ class TarsAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        overlayNotch.hide()
         super.onDestroy()
         currentInstance = null
         _isServiceActive.value = false

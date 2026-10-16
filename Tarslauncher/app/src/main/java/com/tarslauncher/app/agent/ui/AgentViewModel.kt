@@ -116,6 +116,9 @@ class AgentViewModel(
         }
 
         currentExecutionJob?.cancel()
+        TarsAccessibilityService.getInstance()?.overlayNotch?.onStopRequested = {
+            stopTask()
+        }
 
         _uiState.update {
             it.copy(
@@ -155,6 +158,7 @@ class AgentViewModel(
         _uiState.value.pendingQuestion?.userAnswer?.complete(null)
         currentExecutionJob?.cancel()
         currentExecutionJob = null
+        TarsAccessibilityService.getInstance()?.overlayNotch?.hide()
         _uiState.update {
             it.copy(
                 isRunning = false,

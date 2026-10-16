@@ -1,7 +1,7 @@
 {
-  "versionCode": 26,
-  "versionName": "1.7.1",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.1/TarsLauncher-release.apk",
+  "versionCode": 27,
+  "versionName": "1.7.2",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.7.2/TarsLauncher-release.apk",
   "apkSize": 11067700,
-  "releaseNotes": "TARS v1.7.1: Groq Rate-Limit (TPM/RPM) Optimizasyonu (%85 daha az token tüketimi, geçmiş ekran ağacı budama, tek geçişli planlama ve otomatik Retry-After bekleme sistemi)."
+  "releaseNotes": "TARS v1.7.2: Ekran kenarında yuvarlatılmış canlı aşama çentiği (Edge Notch HUD) eklendi — ajan çalışırken diğer uygulamaların üzerinde aşamaları, adımları ve anlık eylemleri tek tek gösterir."
 }

@@ -16,6 +16,7 @@ import com.tarslauncher.app.agent.domain.model.PlanStep
 import com.tarslauncher.app.agent.domain.prompt.AgentPromptProvider
 import com.tarslauncher.app.agent.domain.safety.SafetyGate
 import com.tarslauncher.app.agent.domain.skill.AgentSkillManager
+import com.tarslauncher.app.agent.service.AgentOverlayNotchManager
 import com.tarslauncher.app.agent.service.TarsAccessibilityService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,12 @@ class AgentLoopRunner(
         val initialSteps = listOf(PlanStep(index = 1, title = userGoal, isCompleted = false, isInProgress = true))
         var currentPlan: AgentPlan? = AgentPlan(goal = userGoal, steps = initialSteps)
         emit(AgentEvent.PlanCreated(currentPlan!!))
+        service.overlayNotch.showOrUpdate(
+            stepNumber = 1,
+            plan = currentPlan,
+            liveDetail = "Hedef analiz ediliyor...",
+            state = AgentOverlayNotchManager.NotchState.THINKING
+        )
 
         // Supabase & Firebase Oturum Kaydı Başlatma
         val planJsonArray = JsonArray().apply {
@@ -152,6 +159,12 @@ class AgentLoopRunner(
             val requestHistory = boundedHistory + currentScreenMsg
 
             emit(AgentEvent.StatusLog("Adım $step/$maxSteps: Ekran inceleniyor ve karar alınıyor..."))
+            service.overlayNotch.showOrUpdate(
+                stepNumber = step,
+                plan = currentPlan,
+                liveDetail = "Ekran inceleniyor...",
+                state = AgentOverlayNotchManager.NotchState.THINKING
+            )
 
             // 2. Karar al
             val decisionResult = agentBrain.decideNextAction(
@@ -161,6 +174,12 @@ class AgentLoopRunner(
 
             if (decisionResult.isFailure) {
                 val errorMsg = decisionResult.exceptionOrNull()?.message ?: "Bilinmeyen model hatası"
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = errorMsg,
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
                 datasetCollector.recordStep(
                     sessionId = sessionId,
                     step = step,
@@ -209,6 +228,13 @@ class AgentLoopRunner(
                 currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
             }
 
+            service.overlayNotch.showOrUpdate(
+                stepNumber = step,
+                plan = currentPlan,
+                liveDetail = action.thought,
+                state = AgentOverlayNotchManager.NotchState.ACTIVE
+            )
+
             // 3. Sonlandırma veya Kullanıcıya soru kontrolleri
             when (action) {
                 is AgentAction.Done -> {
@@ -228,6 +254,12 @@ class AgentLoopRunner(
 
                     currentPlan = currentPlan?.markAllCompleted()
                     currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
+                    service.overlayNotch.showOrUpdate(
+                        stepNumber = step,
+                        plan = currentPlan,
+                        liveDetail = "✓ ${action.summary}",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
 
                     if (successfulActionSignatures.isNotEmpty()) {
                         skillManager.saveSkill(userGoal, lastPackageName, successfulActionSignatures)
@@ -253,12 +285,24 @@ class AgentLoopRunner(
                         model = decision.model,
                         status = "ASK_USER"
                     )
+                    service.overlayNotch.showOrUpdate(
+                        stepNumber = step,
+                        plan = currentPlan,
+                        liveDetail = "? ${action.question}",
+                        state = AgentOverlayNotchManager.NotchState.THINKING
+                    )
                     val answerDeferred = CompletableDeferred<String?>()
                     emit(AgentEvent.QuestionToUser(action.question, answerDeferred))
 
                     val userReply = answerDeferred.await()?.trim()
                     if (userReply.isNullOrBlank()) {
                         val cancelMsg = "Kullanıcı soruyu yanıtlamadı (${action.question})."
+                        service.overlayNotch.showOrUpdate(
+                            stepNumber = step,
+                            plan = currentPlan,
+                            liveDetail = cancelMsg,
+                            state = AgentOverlayNotchManager.NotchState.FAILED
+                        )
                         logSessionTermination(sessionId, userGoal, "ASK_USER_CANCELLED", cancelMsg, step, lastPackageName)
                         emit(AgentEvent.Failure(cancelMsg))
                         return@flow
@@ -298,6 +342,12 @@ class AgentLoopRunner(
                     model = decision.model,
                     status = "FAILED_STUCK"
                 )
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = stuckMsg,
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
                 logSessionTermination(sessionId, userGoal, "FAILED_STUCK", stuckMsg, step, lastPackageName)
                 emit(AgentEvent.Failure("$stuckMsg. Güvenlik sebebiyle durduruldu."))
                 return@flow
@@ -306,6 +356,12 @@ class AgentLoopRunner(
             // 5. Güvenlik Kapısı kontrolü
             val (needsConfirm, promptReason) = safetyGate.evaluate(action, screenDump.formattedContent)
             if (needsConfirm) {
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = "⚠ Onay bekleniyor: $promptReason",
+                    state = AgentOverlayNotchManager.NotchState.THINKING
+                )
                 val confirmationDeferred = CompletableDeferred<Boolean>()
                 emit(AgentEvent.AwaitingConfirmation(promptReason, confirmationDeferred))
 
@@ -325,6 +381,12 @@ class AgentLoopRunner(
                         model = decision.model,
                         status = "REJECTED_BY_USER"
                     )
+                    service.overlayNotch.showOrUpdate(
+                        stepNumber = step,
+                        plan = currentPlan,
+                        liveDetail = rejectMsg,
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
                     logSessionTermination(sessionId, userGoal, "REJECTED_BY_USER", rejectMsg, step, lastPackageName)
                     emit(AgentEvent.Failure("$rejectMsg."))
                     return@flow
@@ -335,6 +397,12 @@ class AgentLoopRunner(
             val semanticSignature = buildSemanticSignature(action, service)
             val executionSummary = actionExecutor.execute(action)
             emit(AgentEvent.StatusLog("Sonuç: $executionSummary"))
+            service.overlayNotch.showOrUpdate(
+                stepNumber = step,
+                plan = currentPlan,
+                liveDetail = executionSummary,
+                state = AgentOverlayNotchManager.NotchState.ACTIVE
+            )
 
             // Sadece BAŞARILI eylemleri skill olarak kaydet
             if (executionSummary.startsWith("BAŞARILI")) {
@@ -409,6 +477,12 @@ class AgentLoopRunner(
         }
 
         val maxStepsMsg = "Maksimum adım sınırına ($maxSteps) ulaşıldı."
+        service.overlayNotch.showOrUpdate(
+            stepNumber = maxSteps,
+            plan = currentPlan,
+            liveDetail = maxStepsMsg,
+            state = AgentOverlayNotchManager.NotchState.FAILED
+        )
         logSessionTermination(sessionId, userGoal, "MAX_STEPS_REACHED", maxStepsMsg, maxSteps, lastPackageName)
         emit(AgentEvent.Failure(maxStepsMsg))
     }.flowOn(Dispatchers.Default)
