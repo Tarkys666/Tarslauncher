@@ -48,6 +48,7 @@ class AgentViewModel(
     private var currentExecutionJob: Job? = null
 
     init {
+        activeInstance = this
         viewModelScope.launch {
             TarsAccessibilityService.isServiceActive.collect { active ->
                 _uiState.update { it.copy(isServiceActive = active) }
@@ -259,6 +260,16 @@ class AgentViewModel(
     override fun onCleared() {
         super.onCleared()
         currentExecutionJob?.cancel()
+        if (activeInstance == this) {
+            activeInstance = null
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var activeInstance: AgentViewModel? = null
+
+        fun getInstance(): AgentViewModel? = activeInstance
     }
 
     class Factory(private val application: Application) : ViewModelProvider.Factory {

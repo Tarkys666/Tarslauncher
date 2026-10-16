@@ -3,10 +3,23 @@ package com.tarslauncher.app.agent.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
+import com.tarslauncher.app.agent.data.AgentPreferences
+import com.tarslauncher.app.agent.data.GroqAgentBrain
+import com.tarslauncher.app.agent.data.GroqRemoteDataSource
+import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
+import com.tarslauncher.app.agent.domain.engine.AgentBrain
 import com.tarslauncher.app.agent.domain.model.ScreenDump
+import com.tarslauncher.app.agent.runner.AgentLoopRunner
+import com.tarslauncher.app.agent.ui.AgentViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class TarsAccessibilityService : AccessibilityService() {
 
@@ -14,13 +27,33 @@ class TarsAccessibilityService : AccessibilityService() {
     val gestureDispatcher = GestureDispatcher { this }
     val overlayNotch: AgentOverlayNotchManager by lazy { AgentOverlayNotchManager(this) }
 
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var activeOverlayJob: Job? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         currentInstance = this
         _isServiceActive.value = true
+
+        overlayNotch.onStopRequested = {
+            stopAgentTask()
+        }
+
+        overlayNotch.onTaskSubmitted = { prompt ->
+            val vm = AgentViewModel.getInstance()
+            if (vm != null) {
+                vm.startTask(prompt)
+            } else {
+                startAgentTaskFromOverlay(prompt)
+            }
+        }
+
+        // Show Apple Dynamic Island in idle state at top-center
+        overlayNotch.showIdle()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        stopAgentTask()
         overlayNotch.hide()
         currentInstance = null
         _isServiceActive.value = false
@@ -37,7 +70,9 @@ class TarsAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        stopAgentTask()
         overlayNotch.hide()
+        serviceScope.cancel()
         super.onDestroy()
         currentInstance = null
         _isServiceActive.value = false
@@ -47,6 +82,49 @@ class TarsAccessibilityService : AccessibilityService() {
     fun captureScreenDump(): ScreenDump {
         val root = rootInActiveWindow
         return treeParser.parseScreenTree(root)
+    }
+
+    fun startAgentTaskFromOverlay(prompt: String) {
+        val prefs = AgentPreferences(this)
+        val apiKey = prefs.getGroqApiKey().trim()
+        if (apiKey.isBlank()) {
+            overlayNotch.showOrUpdate(
+                stepNumber = 1,
+                liveDetail = "API Anahtarı Yok",
+                state = AgentOverlayNotchManager.NotchState.FAILED
+            )
+            return
+        }
+
+        activeOverlayJob?.cancel()
+
+        val remoteDataSource = GroqRemoteDataSource(
+            apiKeyProvider = { apiKey },
+            preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
+        )
+        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL)
+        val collector = AgentDatasetCollector(applicationContext)
+
+        val runner = AgentLoopRunner(
+            context = applicationContext,
+            agentBrain = brain,
+            datasetCollector = collector,
+            providerName = "GROQ",
+            modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+        )
+
+        activeOverlayJob = serviceScope.launch {
+            runner.runAgent(prompt).collect {
+                // AgentLoopRunner updates overlayNotch automatically
+            }
+        }
+    }
+
+    fun stopAgentTask() {
+        activeOverlayJob?.cancel()
+        activeOverlayJob = null
+        AgentViewModel.getInstance()?.stopTask()
+        overlayNotch.showIdle()
     }
 
     companion object {
