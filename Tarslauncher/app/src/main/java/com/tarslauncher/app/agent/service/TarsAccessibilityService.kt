@@ -1,8 +1,11 @@
 package com.tarslauncher.app.agent.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.os.Build
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
@@ -19,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,61 +42,94 @@ class TarsAccessibilityService : AccessibilityService() {
         currentInstance = WeakReference(this)
         _isServiceActive.value = true
 
-        overlayNotch.onStopRequested = {
-            stopAgentTask()
+        try {
+            val info = serviceInfo ?: android.accessibilityservice.AccessibilityServiceInfo()
+            info.flags = info.flags or
+                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            serviceInfo = info
+        } catch (e: Exception) {
+            Log.w("TarsAccessibility", "Could not configure serviceInfo flags", e)
         }
 
-        overlayNotch.onTaskSubmitted = { prompt ->
-            val vm = AgentViewModel.getInstance()
-            if (vm != null) {
-                vm.startTask(prompt)
-            } else {
-                startAgentTaskFromOverlay(prompt)
+        try {
+            overlayNotch.onStopRequested = {
+                stopAgentTask()
             }
-        }
 
-        val prefs = AgentPreferences(this)
-        if (prefs.isAgentEnabled()) {
-            overlayNotch.showIdle()
-        } else {
-            overlayNotch.hide()
+            overlayNotch.onTaskSubmitted = { prompt ->
+                val vm = AgentViewModel.getInstance()
+                if (vm != null) {
+                    vm.startTask(prompt)
+                } else {
+                    startAgentTaskFromOverlay(prompt)
+                }
+            }
+
+            val prefs = AgentPreferences(this)
+            if (prefs.isAgentEnabled()) {
+                overlayNotch.showIdle()
+            } else {
+                overlayNotch.hide()
+            }
+        } catch (e: Exception) {
+            Log.e("TarsAccessibility", "Failed to initialize overlay in onServiceConnected", e)
         }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         stopAgentTask()
-        overlayNotch.hide()
+        overlayNotch.destroyImmediately()
         currentInstance = null
         _isServiceActive.value = false
         treeParser.clear()
         return super.onUnbind(intent)
     }
 
+    private var fullscreenCheckJob: kotlinx.coroutines.Job? = null
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            checkFullscreenState()
+        when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                scheduleFullscreenCheck()
+            }
+        }
+    }
+
+    private fun scheduleFullscreenCheck() {
+        fullscreenCheckJob?.cancel()
+        fullscreenCheckJob = serviceScope.launch {
+            delay(150L)
+            runCatching {
+                checkFullscreenState()
+            }.onFailure { e ->
+                Log.w("TarsAccessibility", "Fullscreen check error suppressed", e)
+            }
         }
     }
 
     private fun checkFullscreenState() {
-        val windowList = windows ?: return
-        val displayMetrics = resources.displayMetrics
-        val screenHeight = displayMetrics.heightPixels
-        val screenWidth = displayMetrics.widthPixels
+        val windowList = runCatching { windows }.getOrNull() ?: return
+        val (screenWidth, screenHeight) = getScreenDimensions()
 
         var hasVisibleStatusBar = false
         var isAppFullScreen = false
 
         for (window in windowList) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && window.isInPictureInPictureMode) {
+                continue
+            }
+
             val bounds = Rect()
-            window.getBoundsInScreen(bounds)
+            runCatching { window.getBoundsInScreen(bounds) }.getOrNull() ?: continue
 
             if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
                 if (bounds.top == 0 && bounds.height() in 1..(screenHeight / 4) && bounds.width() >= (screenWidth / 2)) {
                     hasVisibleStatusBar = true
                 }
             } else if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION && (window.isFocused || window.isActive)) {
-                if (bounds.top == 0 && bounds.height() >= (screenHeight * 0.92)) {
+                if (bounds.top == 0 && bounds.height() >= (screenHeight * 0.90)) {
                     isAppFullScreen = true
                 }
             }
@@ -100,6 +137,11 @@ class TarsAccessibilityService : AccessibilityService() {
 
         val isFullscreen = isAppFullScreen && !hasVisibleStatusBar
         overlayNotch.setFullscreenSuppressed(isFullscreen)
+    }
+
+    private fun getScreenDimensions(): Pair<Int, Int> {
+        val dm = resources.displayMetrics
+        return dm.widthPixels to dm.heightPixels
     }
 
     override fun onInterrupt() {

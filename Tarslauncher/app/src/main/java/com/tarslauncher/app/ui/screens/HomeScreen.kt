@@ -407,7 +407,9 @@ fun FolderGrid(
     // Track selected folder by ID so updates to folders list reflect immediately in the open dialog
     var showFolderAppsDialog by remember("folder_dialog_state") { mutableStateOf(false) }
     var selectedFolderId by remember("selected_folder_id_state") { mutableStateOf<String?>(null) }
-    val selectedFolder = folders.find { it.id == selectedFolderId }
+    val selectedFolder by remember(selectedFolderId, folders) {
+        derivedStateOf { folders.find { it.id == selectedFolderId } }
+    }
     
     // Stable grid dimensions
     val cols = gridSize.columns
@@ -453,9 +455,10 @@ fun FolderGrid(
     }
     
     // Folder uygulamaları dialog'u
-    if (showFolderAppsDialog && selectedFolder != null) {
+    val currentFolder = selectedFolder
+    if (showFolderAppsDialog && currentFolder != null) {
         FolderAppsDialog(
-            folder = selectedFolder,
+            folder = currentFolder,
             onDismiss = {
                 showFolderAppsDialog = false
                 selectedFolderId = null
@@ -466,8 +469,8 @@ fun FolderGrid(
                 selectedFolderId = null
             },
             onAppRemove = { app ->
-                val updatedFolder = selectedFolder.copy(
-                    apps = selectedFolder.apps.filter { it.packageName != app.packageName }
+                val updatedFolder = currentFolder.copy(
+                    apps = currentFolder.apps.filter { it.packageName != app.packageName }
                 )
                 val updatedFolders = folders.map {
                     if (it.id == updatedFolder.id) updatedFolder else it

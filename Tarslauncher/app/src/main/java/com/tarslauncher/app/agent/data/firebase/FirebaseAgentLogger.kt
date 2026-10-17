@@ -130,10 +130,13 @@ class FirebaseAgentLogger(
     private fun redactSensitive(text: String): String {
         if (text.isEmpty()) return text
         return text
-            .replace(Regex("gsk_[A-Za-z0-9_-]{8,}"), "gsk_***REDACTED***")
-            .replace(Regex("AIza[A-Za-z0-9_-]{10,}"), "AIza***REDACTED***")
-            .replace(Regex("eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}"), "***JWT_REDACTED***")
-            .replace(Regex("(?i)TR\\d{2}\\s?(\\d{4}\\s?){5}\\d{2}"), "TR***IBAN_REDACTED***")
+            .replace(Regex("""gsk_[A-Za-z0-9_-]{8,}"""), "gsk_***REDACTED***")
+            .replace(Regex("""AIza[A-Za-z0-9_-]{10,}"""), "AIza***REDACTED***")
+            .replace(Regex("""eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"""), "***JWT_REDACTED***")
+            .replace(Regex("""\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){12,30}\b""", RegexOption.IGNORE_CASE), "***IBAN_REDACTED***")
+            .replace(Regex("""\b(?:\d{4}[ -]?){3}\d{4}\b|\b\d{15,19}\b"""), "***KART_REDACTED***")
+            .replace(Regex("""\b[1-9]\d{10}\b"""), "***TCKN_REDACTED***")
+            .replace(Regex("""(?i)\b(?:otp|kod|code|doğrulama|şifre|onay|pin)[\s:=#-]*\d{4,8}\b|\b\d{4,8}\s*(?:kodu|kod|otp|pin)\b"""), "***OTP_REDACTED***")
     }
 
     /**

@@ -249,6 +249,7 @@ class UpdateManager(
                 activeConnection?.disconnect()
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             targetFile?.let { if (it.exists()) it.delete() }
             Result.failure(e)
         }
@@ -304,16 +305,13 @@ class UpdateManager(
             if (!apkFile.exists() || !apkFile.isFile || expectedHash.isBlank()) {
                 return false
             }
-            val cleanExpected = expectedHash.trim()
-                .removePrefix("sha256:")
-                .removePrefix("SHA256:")
-                .removePrefix("sha-256:")
-                .removePrefix("SHA-256:")
-                .lowercase()
+            val cleanExpected = if (expectedHash.contains(":")) {
+                expectedHash.substringAfter(":").trim().lowercase()
+            } else {
+                expectedHash.trim().lowercase()
+            }
 
             val algorithm = when (cleanExpected.length) {
-                32 -> "MD5"
-                40 -> "SHA-1"
                 64 -> "SHA-256"
                 128 -> "SHA-512"
                 else -> "SHA-256"

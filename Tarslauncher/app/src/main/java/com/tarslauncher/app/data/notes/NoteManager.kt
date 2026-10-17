@@ -8,6 +8,10 @@ import com.tarslauncher.app.data.model.NoteItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
+import java.util.Locale
+
 /**
  * Manages notes created by the user or TARS Agent.
  */
@@ -16,9 +20,9 @@ class NoteManager(context: Context) {
     private val gson = Gson()
     private val listType = object : TypeToken<List<NoteItem>>() {}.type
 
-    val notesFlow: Flow<List<NoteItem>> = dataStore.notesJsonFlow.map { json ->
-        parseNotes(json)
-    }
+    val notesFlow: Flow<List<NoteItem>> = dataStore.notesJsonFlow
+        .map { json -> parseNotes(json) }
+        .flowOn(Dispatchers.IO)
 
     suspend fun getNotes(): List<NoteItem> {
         val json = dataStore.getNotesJson()
@@ -40,24 +44,33 @@ class NoteManager(context: Context) {
     }
 
     suspend fun deleteNote(idOrQuery: String): Boolean {
+        val trimmed = idOrQuery.trim()
+        if (trimmed.isBlank()) return false
+
         val current = getNotes().toMutableList()
-        val query = idOrQuery.trim().lowercase()
-        val removed = if (query == "son" || query == "last" || query.isBlank()) {
-            if (current.isNotEmpty()) {
-                current.removeAt(0)
-                true
-            } else false
+        if (current.isEmpty()) return false
+
+        val query = trimmed.lowercase(Locale.ROOT)
+        val removed = if (query == "son" || query == "last" || query == "en son") {
+            current.removeAt(0)
+            true
         } else {
-            val byId = current.indexOfFirst { it.id.equals(query, ignoreCase = true) }
+            val byId = current.indexOfFirst { it.id.equals(trimmed, ignoreCase = true) }
             if (byId != -1) {
                 current.removeAt(byId)
                 true
             } else {
-                val byTitle = current.indexOfFirst { it.title.lowercase().contains(query) }
-                if (byTitle != -1) {
-                    current.removeAt(byTitle)
+                val byExactTitle = current.indexOfFirst { it.title.equals(trimmed, ignoreCase = true) }
+                if (byExactTitle != -1) {
+                    current.removeAt(byExactTitle)
                     true
-                } else false
+                } else {
+                    val byTitle = current.indexOfFirst { it.title.lowercase(Locale.ROOT).contains(query) }
+                    if (byTitle != -1) {
+                        current.removeAt(byTitle)
+                        true
+                    } else false
+                }
             }
         }
         if (removed) {

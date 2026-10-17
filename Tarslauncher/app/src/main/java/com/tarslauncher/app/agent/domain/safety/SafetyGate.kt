@@ -32,6 +32,54 @@ class SafetyGate {
         "delete account"
     )
 
+    companion object {
+        private val SENSITIVE_PACKAGES = setOf(
+            // TR Bankacılık & Fintek
+            "com.garanti.cepsubesi",
+            "com.ykb.android",
+            "com.isisortaklik.iscep",
+            "com.ziraat.ziraatmobil",
+            "com.halkbank.sube",
+            "com.vakifbank.mobile",
+            "com.intertech.mobilemoneytransfer.activity", // DenizBank
+            "com.teb",
+            "com.qnb.android",
+            "com.finansbank.enpara",
+            "com.mobile.papara",
+            "com.akbank.android.apps.akbank_direkt_tablet",
+            "com.akbank.softotp",
+            "com.akbank.tosla",
+            "com.getmidas.app",
+            "com.ininal",
+            "com.kuveytturk.mobil",
+            "com.albarakaturk.mobil",
+            "com.turkiyefinans.mobil",
+            "com.anadolubank.mobile",
+            "com.odeabank.android",
+            "com.fibabanka.mobile",
+            "com.burgan.mobile",
+            "com.sekerbank.android",
+            "tr.com.hsbc.hsbcturkey",
+            // Kripto & Borsa
+            "com.binance.dev",
+            "com.btcturk.pro",
+            "com.btcturk",
+            "com.paribu.app",
+            // Kamu & Kimlik
+            "tr.gov.turkiye.edevlet.kapisi",
+            "tr.gov.gib.gibmobile",
+            "tr.gov.mhrs.randevu",
+            // Parola & 2FA Yöneticileri
+            "com.x8bit.bitwarden",
+            "com.onepassword.android",
+            "com.lastpass.lpandroid",
+            "keepass2android.keepass2android",
+            "com.google.android.apps.authenticator2",
+            "com.azure.authenticator",
+            "org.torproject.torbrowser"
+        )
+    }
+
     private val sensitiveAppKeywords = listOf(
         "bank", "cüzdan", "wallet", "binance", "paribu", "btcturk",
         "ayar", "setting", "installer", "packageinstaller", "play store", "google play"
@@ -44,6 +92,7 @@ class SafetyGate {
     fun isSensitiveAppPackage(packageName: String): Boolean {
         if (packageName.isBlank() || packageName == "unknown") return false
         val lowerPkg = packageName.lowercase(Locale.ROOT)
+        if (SENSITIVE_PACKAGES.contains(lowerPkg)) return true
         return sensitiveAppKeywords.any { kw -> lowerPkg.contains(kw) } || lowerPkg.contains("vending")
     }
 
@@ -80,6 +129,16 @@ class SafetyGate {
                 val matchedLine = findTargetLine(action.targetId, screenContent)
                 if ((matchedLine != null && isSensitive(matchedLine)) || isSensitive(action.text)) {
                     return true to "Güvenlik Uyarısı: '${action.text}' metni hassas bir alana girilecek. Devam edilsin mi?"
+                }
+            }
+
+            is AgentAction.NoteAction -> {
+                if (action.action == "clear") {
+                    return true to "Güvenlik Uyarısı: Dahili not defterindeki TÜM notlar kalıcı olarak silinecek. Onaylıyor musunuz?"
+                }
+                if (action.action == "delete") {
+                    val target = action.title.ifBlank { action.noteId.ifBlank { action.text.ifBlank { "seçilen" } } }
+                    return true to "Güvenlik Uyarısı: '$target' referanslı not kalıcı olarak silinecek. Onaylıyor musunuz?"
                 }
             }
 

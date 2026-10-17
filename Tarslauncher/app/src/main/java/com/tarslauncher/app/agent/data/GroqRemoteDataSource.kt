@@ -39,7 +39,7 @@ class GroqRemoteDataSource(
             )
         }
 
-        val model = DEFAULT_GROQ_MODEL
+        val model = preferredModelProvider().trim().ifBlank { DEFAULT_GROQ_MODEL }
         var lastError: Throwable? = null
         var attempt = 0
 
@@ -157,8 +157,8 @@ class GroqRemoteDataSource(
         return JsonObject().apply {
             addProperty("model", model)
             addProperty("temperature", 0.15)
-            // Keep completion token reservation compact (512 instead of 2048) to save 75% upfront TPM quota
-            addProperty("max_completion_tokens", 512)
+            // Balanced token reservation (800) prevents truncation while respecting TPM quota
+            addProperty("max_completion_tokens", 800)
             addProperty("top_p", 0.9)
 
             // Force JSON object format for reliable Agent parsing
@@ -199,6 +199,11 @@ class GroqRemoteDataSource(
         }
 
         val firstChoice = choices[0].asJsonObject
+        val finishReason = firstChoice.get("finish_reason")?.asString
+        if (finishReason == "length") {
+            throw IllegalStateException("Model çıktısı maksimum token sınırına (max_tokens) takılarak yarıda kesildi.")
+        }
+
         val message = firstChoice.getAsJsonObject("message")
             ?: throw IllegalStateException("Groq message içeriği bulunamadı.")
 

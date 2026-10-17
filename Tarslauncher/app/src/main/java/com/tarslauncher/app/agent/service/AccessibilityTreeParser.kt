@@ -38,11 +38,24 @@ class AccessibilityTreeParser {
             if (node == null || depth > 18 || elementCounter >= 90) return false
 
             val isVisible = node.isVisibleToUser
+            if (!isVisible) {
+                for (i in 0 until node.childCount) {
+                    val reachedLimit = traverse(node.getChild(i), depth + 1)
+                    if (reachedLimit) return true
+                }
+                return false
+            }
+
             val isPassword = node.isPassword
-            val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim()?.take(60).orEmpty()
-            val text = scrubSensitiveTokens(rawText)
-            val contentDesc = if (isPassword) "" else scrubSensitiveTokens(node.contentDescription?.toString()?.trim()?.take(60).orEmpty())
-            val hintText = if (isPassword) "" else scrubSensitiveTokens(node.hintText?.toString()?.trim()?.take(45).orEmpty())
+            val rawText = if (isPassword) "•••••• [ŞİFRE]" else node.text?.toString()?.trim().orEmpty()
+            val text = if (isPassword) rawText else scrubSensitiveTokens(rawText).take(60)
+
+            val rawDesc = if (isPassword) "" else node.contentDescription?.toString()?.trim().orEmpty()
+            val contentDesc = if (isPassword) "" else scrubSensitiveTokens(rawDesc).take(60)
+
+            val rawHint = if (isPassword) "" else node.hintText?.toString()?.trim().orEmpty()
+            val hintText = if (isPassword) "" else scrubSensitiveTokens(rawHint).take(45)
+
             val isClickable = node.isClickable
             val isLongClickable = node.isLongClickable
             val isEditable = node.isEditable
@@ -50,10 +63,8 @@ class AccessibilityTreeParser {
             val isChecked = node.isCheckable && node.isChecked
             val isSelected = node.isSelected
 
-            val isRelevant = isVisible && (
-                isClickable || isLongClickable || isEditable || isScrollable ||
-                    text.isNotEmpty() || contentDesc.isNotEmpty() || hintText.isNotEmpty()
-                )
+            val isRelevant = isClickable || isLongClickable || isEditable || isScrollable ||
+                text.isNotEmpty() || contentDesc.isNotEmpty() || hintText.isNotEmpty()
 
             if (isRelevant) {
                 elementCounter++
@@ -130,15 +141,30 @@ class AccessibilityTreeParser {
     }
 
     private fun scrubSensitiveTokens(input: String): String {
-        if (input.isEmpty()) return input
-        return input
-            .replace(REGEX_GROQ_KEY, "gsk_***[GİZLİ]***")
-            .replace(REGEX_AIZA_KEY, "AIza***[GİZLİ]***")
-            .replace(REGEX_JWT, "***[JWT_GİZLİ]***")
-            .replace(REGEX_IBAN, "***[IBAN_GİZLİ]***")
-            .replace(REGEX_CREDIT_CARD, "***[KART_GİZLİ]***")
-            .replace(REGEX_TCKN, "***[TCKN_GİZLİ]***")
-            .replace(REGEX_OTP, "***[OTP_GİZLİ]***")
+        if (input.length < 4) return input
+
+        var result = input
+        val hasDigits = input.any { it.isDigit() }
+
+        if (input.contains("gsk_")) {
+            result = result.replace(REGEX_GROQ_KEY, "gsk_***[GİZLİ]***")
+        }
+        if (input.contains("AIza")) {
+            result = result.replace(REGEX_AIZA_KEY, "AIza***[GİZLİ]***")
+        }
+        if (input.contains("eyJ")) {
+            result = result.replace(REGEX_JWT, "***[JWT_GİZLİ]***")
+        }
+
+        if (hasDigits) {
+            result = result
+                .replace(REGEX_IBAN, "***[IBAN_GİZLİ]***")
+                .replace(REGEX_CREDIT_CARD, "***[KART_GİZLİ]***")
+                .replace(REGEX_TCKN, "***[TCKN_GİZLİ]***")
+                .replace(REGEX_OTP, "***[OTP_GİZLİ]***")
+                .replace(REGEX_CVV, "***[CVV_GİZLİ]***")
+        }
+        return result
     }
 
     companion object {
@@ -149,6 +175,7 @@ class AccessibilityTreeParser {
         private val REGEX_CREDIT_CARD = Regex("""\b(?:\d{4}[ -]?){3}\d{4}\b|\b\d{15,19}\b""")
         private val REGEX_TCKN = Regex("""\b[1-9]\d{10}\b""")
         private val REGEX_OTP = Regex("""(?i)\b(?:otp|kod|code|doğrulama|şifre|onay|pin)[\s:=#-]*\d{4,8}\b|\b\d{4,8}\s*(?:kodu|kod|otp|pin)\b""")
+        private val REGEX_CVV = Regex("""(?i)\b(?:cvv|cvc|güvenlik\s*kodu)[\s:=]*\d{3,4}\b""")
     }
 }
 

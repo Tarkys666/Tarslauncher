@@ -219,11 +219,25 @@ class AgentLoopRunner(
                 return@flow
             }
 
-            val sanitizedRawDump = screenDump.formattedContent
-                .replace("</untrusted_screen_state>", "[FILTERED_TAG]")
-                .replace("<untrusted_screen_state>", "[FILTERED_TAG]")
+            val tagSanitizerRegex = Regex("""</?\s*untrusted_[a-zA-Z0-9_]+\s*>""", RegexOption.IGNORE_CASE)
+            val sanitizedRawDump = tagSanitizerRegex.replace(screenDump.formattedContent, "[FILTERED_TAG]")
             val unchangedWarning = if (screenUnchanged) {
                 "[SİSTEM UYARISI: Önceki eylemden sonra ekran DEĞİŞMEDİ! Aynı öğeye tekrar dokunmak yerine farklı bir öğe seçin, scroll yapın veya back kullanın.]\n"
+            } else {
+                ""
+            }
+            val noteDirective = if (isNoteGoal(userGoal) && step == 1) {
+                """
+                [ÖZEL NOT ALMA TALİMATI]: Kullanıcının hedefi doğrudan bir NOT alma/yönetme işlemidir!
+                - KESİNLİKLE hiçbir harici not uygulaması (Keep, Samsung Notes, Not Defteri vb.) AÇMA!
+                - KESİNLİKLE ekranda arayüzü (UI) açıp tek tek yazmaya (type/tap) ÇALIŞMA!
+                - Kullanıcının ilettiği mesajı ("$userGoal") dikkatle anla ve düzelt:
+                  * İmla ve ifade bozukluklarını düzelt, emir kelimelerini ("not al", "bunu kaydet" vb.) temizle.
+                  * Anlamlı bir 'title' (başlık) ve anlaşılır düzgün bir 'text' (içerik) oluştur.
+                - Doğrudan tek adımda yerleşik 'note' aracını çağır:
+                  {"action": "note", "args": {"action": "add", "title": "...", "text": "..."}}
+
+                """.trimIndent()
             } else {
                 ""
             }
@@ -232,7 +246,7 @@ class AgentLoopRunner(
             } else {
                 ""
             }
-            val sanitizedScreenContent = "$firstStepPlanHint$unchangedWarning<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
+            val sanitizedScreenContent = "$noteDirective$firstStepPlanHint$unchangedWarning<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
 
             // Token Tasarrufu (Rate Limit Koruması):
             // Geçmiş adımların tam ekran ağaçları yerine sadece kompakt özetleri history'de tutulur;
@@ -347,7 +361,15 @@ class AgentLoopRunner(
                 state = AgentOverlayNotchManager.NotchState.ACTIVE
             )
 
-            // 3. Sonlandırma veya Kullanıcıya soru kontrolleri
+            // 3. Sonlandırma, Not Güvenliği veya Kullanıcıya soru kontrolleri
+            if (isNoteGoal(userGoal) && action is AgentAction.OpenApp && isNoteApp(action.appName)) {
+                val guardMsg = "Harici not uygulaması açmana veya UI aramana gerek yok! Kullanıcının hedefini anla, dilbilgisini düzelt ve doğrudan yerleşik 'note' aracını kullan."
+                emit(AgentEvent.StatusLog("Yönlendirme: $guardMsg"))
+                history.add(ChatMessage(ChatMessage.Role.MODEL, "EYLEM: open_app(\"${action.appName}\")"))
+                history.add(ChatMessage(ChatMessage.Role.USER, "SİSTEM UYARISI: $guardMsg"))
+                continue
+            }
+
             when (action) {
                 is AgentAction.Done -> {
                     datasetCollector.recordStep(
@@ -469,15 +491,12 @@ class AgentLoopRunner(
                 return@flow
             }
 
-            // A-B-A-B salınım tespiti (Oscillation Circuit Breaker)
-            val sigSize = recentActionSignatures.size
-            val isOscillating = sigSize >= 4 &&
-                recentActionSignatures[sigSize - 1] == recentActionSignatures[sigSize - 3] &&
-                recentActionSignatures[sigSize - 2] == recentActionSignatures[sigSize - 4] &&
-                recentActionSignatures[sigSize - 1] != recentActionSignatures[sigSize - 2]
+            // Salınım ve Kısır Döngü Tespiti (Cycle Detection: A-B-A-B veya A-B-C-A-B-C)
+            val isOscillating = detectCycle(recentActionSignatures)
 
             if (isOscillating) {
-                val oscillateMsg = "Ajan iki eylem arasında kısır döngüye girdi (A-B-A-B salınımı: ${recentActionSignatures[sigSize - 2]} <-> ${recentActionSignatures[sigSize - 1]})"
+                val lastFew = recentActionSignatures.takeLast(4).joinToString(" -> ")
+                val oscillateMsg = "Ajan ardışık eylemler arasında kısır döngüye girdi ($lastFew)"
                 datasetCollector.recordStep(
                     sessionId = sessionId,
                     step = step,
@@ -617,6 +636,22 @@ class AgentLoopRunner(
                 screenDumpSnippet = screenDump.formattedContent.take(500)
             )
 
+            // Eğer not aracı başarıyla çalıştıysa UI'da beklemeden/gezinmeden görevi anında tamamla
+            if (action is AgentAction.NoteAction && executionSummary.startsWith("BAŞARILI")) {
+                currentPlan = currentPlan?.markAllCompleted()
+                currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
+                val finishTitle = if (action.action == "add") "✓ Not Kaydedildi" else "✓ Not İşlemi Tamamlandı"
+                service.overlayNotch.showOrUpdate(
+                    stepNumber = step,
+                    plan = currentPlan,
+                    liveDetail = finishTitle,
+                    state = AgentOverlayNotchManager.NotchState.COMPLETED
+                )
+                logSessionTermination(sessionId, userGoal, "COMPLETED", executionSummary, step, lastPackageName)
+                emit(AgentEvent.Success(executionSummary))
+                return@flow
+            }
+
             // Dinamik bekleme payı (Ekran yüklenmesi ve RPM/TPM koruması)
             // AgentAction.Wait zaten ActionExecutor içinde kendi süresi kadar beklediğinden ekstra gecikme atlanır
             if (action !is AgentAction.Wait) {
@@ -679,6 +714,35 @@ class AgentLoopRunner(
         }
         supabaseLogger.logSession(sessionObj)
         firebaseLogger.logSessionFinish(sessionId, status, summary, totalSteps)
+    }
+
+    private fun isNoteGoal(goal: String): Boolean {
+        val lower = goal.lowercase().trim()
+        val noteKeywords = listOf(
+            "not al", "not et", "not düş", "not kaydet", "not defter", "notlar", "not ekle",
+            "şunu not", "bunu not", "not:", "not :", "take a note", "take note", "save note",
+            "record note", "add note", "not tut", "notlarım", "not yaz"
+        )
+        return noteKeywords.any { lower.contains(it) }
+    }
+
+    private fun isNoteApp(appName: String): Boolean {
+        val lower = appName.lowercase().trim()
+        return lower.contains("keep") || lower.contains("note") || lower.contains("not") || lower.contains("memo")
+    }
+
+    private fun detectCycle(signatures: List<String>): Boolean {
+        val n = signatures.size
+        for (period in 2..3) {
+            if (n >= period * 2) {
+                val currentCycle = signatures.takeLast(period)
+                val previousCycle = signatures.dropLast(period).takeLast(period)
+                if (currentCycle == previousCycle && currentCycle.toSet().size > 1) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }
 

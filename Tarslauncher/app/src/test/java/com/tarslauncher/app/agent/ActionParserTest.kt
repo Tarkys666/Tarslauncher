@@ -183,5 +183,36 @@ class ActionParserTest {
         assertTrue(listAction is AgentAction.NoteAction)
         val noteList = listAction as AgentAction.NoteAction
         assertEquals("list", noteList.action)
+
+        val turkishNoteRaw = """
+            {
+               "thought": "Kullanıcının market alışverişi isteğini anlayıp düzelterek doğrudan dahili not defterine ekliyorum.",
+               "action": "not_al",
+               "args": {
+                   "action": "ekle",
+                   "baslik": "Market Alışverişi",
+                   "icerik": "Yarın marketten süt, yumurta ve tam buğday ekmeği alınacak."
+               }
+            }
+        """.trimIndent()
+        val parsedTurkish = ActionParser.parse(turkishNoteRaw)
+        assertTrue(parsedTurkish is AgentAction.NoteAction)
+        val turkishNote = parsedTurkish as AgentAction.NoteAction
+        assertEquals("add", turkishNote.action)
+        assertEquals("Market Alışverişi", turkishNote.title)
+        assertEquals("Yarın marketten süt, yumurta ve tam buğday ekmeği alınacak.", turkishNote.text)
+    }
+
+    @Test
+    fun `parse safely extracts string or missing IDs without failing`() {
+        val stringIdRaw = """{"thought": "ID string gelmiş", "action": "tap", "args": {"id": "42"}}"""
+        val action1 = ActionParser.parse(stringIdRaw)
+        assertTrue(action1 is AgentAction.Tap)
+        assertEquals(42, (action1 as AgentAction.Tap).targetId)
+
+        val nonNumericIdRaw = """{"thought": "ID geçersiz string gelmiş", "action": "tap", "args": {"id": "submit_btn"}}"""
+        val action2 = ActionParser.parse(nonNumericIdRaw)
+        assertTrue(action2 is AgentAction.Tap)
+        assertEquals(-1, (action2 as AgentAction.Tap).targetId)
     }
 }

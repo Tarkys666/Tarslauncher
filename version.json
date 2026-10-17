@@ -1,7 +1,7 @@
 {
-  "versionCode": 36,
-  "versionName": "1.8.1",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.1/TarsLauncher-release.apk",
+  "versionCode": 37,
+  "versionName": "1.8.2",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.2/TarsLauncher-release.apk",
   "apkSize": 11085864,
-  "releaseNotes": "TARS v1.8.1: Tam Ekran Otomatik Gizleme & Yerleşik Not Defteri Aracı — Uygulamalar veya videolar tam ekran yapıldığında Dynamic Island çentiği otomatik kaybolur; yeni 'note' yerleşik aracıyla ajana not aldırabilir, Ayarlar > TARS Not Defteri ekranından notlarınızı görüntüleyebilir, ekleyebilir veya silebilirsiniz."
+  "releaseNotes": "TARS v1.8.2: 21st.dev Tasarımlı Minimalist Dynamic Island & Erişilebilirlik Optimizasyonu — Saf siyah, yazısız ve kompakt (88x28dp) Dynamic Island çentiği, 21st.dev tarzı zarif açılır kontrol arayüzü, tam ekran uygulamalarda otomatik gizleme, yerleşik not defteri aracı, güvenlik/gizlilik korumaları ve erişilebilirlik servisi performans/pil optimizasyonları."
 }

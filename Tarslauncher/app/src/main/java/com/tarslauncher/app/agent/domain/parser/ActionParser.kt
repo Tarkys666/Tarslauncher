@@ -167,28 +167,20 @@ object ActionParser {
             }
 
             "tap", "click" -> {
-                val id = args.get("id")?.asInt
-                    ?: args.get("target_id")?.asInt
-                    ?: -1
+                val id = args.getSafeInt("id", "target_id", fallback = -1)
                 AgentAction.Tap(thought, id, stepIndex)
             }
 
             "long_press", "long_click", "hold" -> {
-                val id = args.get("id")?.asInt
-                    ?: args.get("target_id")?.asInt
-                    ?: -1
+                val id = args.getSafeInt("id", "target_id", fallback = -1)
                 AgentAction.LongPress(thought, id, stepIndex)
             }
 
             "type", "type_text", "input" -> {
-                val id = args.get("id")?.asInt
-                    ?: args.get("target_id")?.asInt
-                    ?: -1
+                val id = args.getSafeInt("id", "target_id", fallback = -1)
                 val text = args.get("text")?.asString
                     ?: args.get("value")?.asString.orEmpty()
-                val pressEnter = args.get("enter")?.asBoolean
-                    ?: args.get("press_enter")?.asBoolean
-                    ?: true
+                val pressEnter = args.getSafeBoolean("enter", "press_enter", fallback = true)
                 AgentAction.TypeText(thought, id, text, pressEnter, stepIndex)
             }
 
@@ -208,7 +200,7 @@ object ActionParser {
             "quick_settings" -> AgentAction.QuickSettings(thought, stepIndex)
 
             "set_volume", "volume" -> {
-                val level = args.get("level")?.asInt ?: args.get("percent")?.asInt ?: -1
+                val level = args.getSafeInt("level", "percent", fallback = -1)
                 val mode = (
                     args.get("mode")?.asString
                         ?: args.get("direction")?.asString
@@ -230,10 +222,8 @@ object ActionParser {
             "flashlight", "torch" -> {
                 val stateStr = (args.get("state")?.asString ?: args.get("mode")?.asString).orEmpty().lowercase()
                 val enabled = when {
-                    args.has("enabled") -> args.get("enabled").asBoolean
-                    args.has("on") -> args.get("on").asBoolean
                     stateStr == "off" || stateStr == "false" || stateStr == "kapat" -> false
-                    else -> true
+                    else -> args.getSafeBoolean("enabled", "on", fallback = true)
                 }
                 AgentAction.Flashlight(thought, enabled, stepIndex)
             }
@@ -253,16 +243,16 @@ object ActionParser {
             }
 
             "set_alarm", "alarm" -> {
-                val hour = args.get("hour")?.asInt ?: 8
-                val minute = args.get("minute")?.asInt ?: args.get("minutes")?.asInt ?: 0
+                val hour = args.getSafeInt("hour", fallback = 8)
+                val minute = args.getSafeInt("minute", "minutes", fallback = 0)
                 val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
                 AgentAction.SetAlarm(thought, hour.coerceIn(0, 23), minute.coerceIn(0, 59), message, stepIndex)
             }
 
             "set_timer", "timer" -> {
-                val seconds = args.get("seconds")?.asInt
-                    ?: (args.get("minutes")?.asInt?.times(60))
-                    ?: 60
+                val seconds = args.getSafeInt("seconds", fallback = -1).let { sec ->
+                    if (sec > 0) sec else (args.getSafeInt("minutes", fallback = 1) * 60)
+                }
                 val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
                 AgentAction.SetTimer(thought, seconds.coerceIn(1, 86_400), message, stepIndex)
             }
@@ -273,22 +263,42 @@ object ActionParser {
                 AgentAction.ClipboardSet(thought, text, stepIndex)
             }
 
-            "note", "take_note", "save_note", "create_note", "not", "not_al" -> {
-                val act = (
+            "note", "take_note", "save_note", "create_note", "add_note", "record_note", "write_note", "not", "not_al", "not_ekle", "not_kaydet" -> {
+                val rawAct = (
                     args.get("action")?.asString
                         ?: args.get("mode")?.asString
                         ?: args.get("command")?.asString
+                        ?: args.get("type")?.asString
                         ?: "add"
                 ).lowercase().trim()
+
+                val act = when (rawAct) {
+                    "add", "create", "save", "ekle", "kaydet", "yaz", "yeni", "new" -> "add"
+                    "list", "get", "show", "read", "listele", "göster", "oku" -> "list"
+                    "delete", "remove", "del", "sil", "kaldır" -> "delete"
+                    "clear", "clean", "temizle", "hepsini_sil" -> "clear"
+                    else -> "add"
+                }
+
                 val text = args.get("text")?.asString
                     ?: args.get("content")?.asString
                     ?: args.get("note")?.asString
-                    ?: args.get("message")?.asString.orEmpty()
+                    ?: args.get("message")?.asString
+                    ?: args.get("icerik")?.asString
+                    ?: args.get("not_metni")?.asString
+                    ?: args.get("body")?.asString.orEmpty()
+
                 val title = args.get("title")?.asString
                     ?: args.get("baslik")?.asString
-                    ?: args.get("label")?.asString.orEmpty()
+                    ?: args.get("label")?.asString
+                    ?: args.get("konu")?.asString
+                    ?: args.get("subject")?.asString
+                    ?: args.get("header")?.asString.orEmpty()
+
                 val noteId = args.get("id")?.asString
-                    ?: args.get("target")?.asString.orEmpty()
+                    ?: args.get("target")?.asString
+                    ?: args.get("note_id")?.asString.orEmpty()
+
                 AgentAction.NoteAction(thought, act, text, title, noteId, stepIndex)
             }
 
@@ -316,6 +326,42 @@ object ActionParser {
 
             else -> AgentAction.Unknown(thought, actionName, stepIndex)
         }
+    }
+
+    private fun JsonObject.getSafeInt(vararg keys: String, fallback: Int = -1): Int {
+        for (k in keys) {
+            val el = get(k) ?: continue
+            if (el.isJsonNull) continue
+            val num = runCatching {
+                if (el.isJsonPrimitive && el.asJsonPrimitive.isNumber) {
+                    el.asInt
+                } else {
+                    el.asString.filter { it.isDigit() || it == '-' }.toIntOrNull()
+                }
+            }.getOrNull()
+            if (num != null) return num
+        }
+        return fallback
+    }
+
+    private fun JsonObject.getSafeBoolean(vararg keys: String, fallback: Boolean = false): Boolean {
+        for (k in keys) {
+            val el = get(k) ?: continue
+            if (el.isJsonNull) continue
+            val bool = runCatching {
+                if (el.isJsonPrimitive && el.asJsonPrimitive.isBoolean) {
+                    el.asBoolean
+                } else {
+                    when (el.asString.trim().lowercase()) {
+                        "true", "1", "on", "yes", "açık" -> true
+                        "false", "0", "off", "no", "kapalı" -> false
+                        else -> null
+                    }
+                }
+            }.getOrNull()
+            if (bool != null) return bool
+        }
+        return fallback
     }
 }
 

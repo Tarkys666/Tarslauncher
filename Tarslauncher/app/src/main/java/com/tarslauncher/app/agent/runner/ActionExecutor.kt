@@ -380,11 +380,22 @@ class ActionExecutor(
         val noteManager = com.tarslauncher.app.data.notes.NoteManager(context)
         when (action.action) {
             "add", "create", "save" -> {
-                if (action.text.isBlank()) {
+                val rawText = action.text.trim()
+                val rawTitle = action.title.trim()
+                val finalText = rawText.ifBlank { rawTitle }
+                val finalTitle = if (rawTitle.isNotBlank()) {
+                    rawTitle
+                } else if (finalText.length > 35) {
+                    finalText.take(32).substringBeforeLast(" ") + "..."
+                } else {
+                    finalText
+                }
+
+                if (finalText.isBlank()) {
                     "BAŞARISIZ: Not metni boş olamaz."
                 } else {
-                    val saved = noteManager.addNote(action.text, action.title)
-                    "BAŞARILI: Not kaydedildi [ID: ${saved.id}, Başlık: '${saved.title}']. İçerik: '${saved.content}'"
+                    val saved = noteManager.addNote(finalText, finalTitle)
+                    "BAŞARILI: Not yerleşik not defterine kaydedildi [ID: ${saved.id}, Başlık: '${saved.title}']. İçerik: '${saved.content}'. Görev tamamlandı; bir sonraki adımda doğrudan 'done' aracını çağırabilirsiniz."
                 }
             }
             "list", "get", "show" -> {

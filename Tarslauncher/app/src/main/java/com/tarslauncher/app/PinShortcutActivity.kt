@@ -31,6 +31,10 @@ class PinShortcutActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            window.setHideOverlayWindows(true)
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             handlePinShortcut()
         } else {
@@ -139,7 +143,9 @@ class PinShortcutActivity : ComponentActivity() {
         }
 
         if (!isFinishing && !isDestroyed) {
-            builder.show()
+            val dialog = builder.create()
+            dialog.window?.decorView?.filterTouchesWhenObscured = true
+            dialog.show()
         } else {
             finish()
         }

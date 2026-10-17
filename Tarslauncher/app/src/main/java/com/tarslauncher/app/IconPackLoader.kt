@@ -24,8 +24,13 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
     private val iconMap = ConcurrentHashMap<String, String>()
     private val packageFallbackMap = ConcurrentHashMap<String, String>()
     private val resIdCache = ConcurrentHashMap<String, Int>()
-    private val drawableCache = LruCache<String, Drawable>(128)
-    private val imageBitmapCache = LruCache<String, ImageBitmap>(256)
+
+    private val maxCacheSizeKb = (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt().coerceAtLeast(2048)
+    private val imageBitmapCache = object : LruCache<String, ImageBitmap>(maxCacheSizeKb) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int {
+            return ((value.width * value.height * 4) / 1024).coerceAtLeast(1)
+        }
+    }
 
     var isLoaded by mutableStateOf(false)
         private set
@@ -103,27 +108,18 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
 
         val componentString = "ComponentInfo{$appPackageName/$appActivityName}"
 
-        // 1. Check in-memory LRU cache first
-        drawableCache.get(componentString)?.let { cached ->
-            return cached.constantState?.newDrawable() ?: cached
-        }
-
         val drawableName = iconMap[componentString]
             ?: packageFallbackMap[appPackageName]
             ?: return null
 
         return try {
-            // 2. Cache resource identifier to eliminate linear reflection lookups
+            // Cache resource identifier to eliminate linear reflection lookups
             val resId = resIdCache.getOrPut(drawableName) {
                 resources.getIdentifier(drawableName, "drawable", packPackageName)
             }
 
             if (resId != 0) {
-                val drawable = ResourcesCompat.getDrawable(resources, resId, null)
-                if (drawable != null) {
-                    drawableCache.put(componentString, drawable)
-                }
-                drawable
+                ResourcesCompat.getDrawable(resources, resId, null)
             } else {
                 null
             }

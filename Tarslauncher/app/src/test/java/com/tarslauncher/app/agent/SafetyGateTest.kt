@@ -102,9 +102,52 @@ class SafetyGateTest {
             [11] "Tamam" <tık>
         """.trimIndent()
 
-        val action = AgentAction.Tap("Tamam butonuna basıyorum", 11)
+        val action = AgentAction.Tap("Tamam'a basıyorum", 11)
         val (needsConfirm, _) = safetyGate.evaluate(action, screenDump)
-
         assertFalse("Normal 'Tamam' butonu gereksiz güvenlik onayı istememeli", needsConfirm)
+    }
+
+    @Test
+    fun `isSensitiveAppPackage blocks Turkish banking, fintech and password managers`() {
+        val sensitivePkgs = listOf(
+            "com.garanti.cepsubesi",
+            "com.ykb.android",
+            "com.isisortaklik.iscep",
+            "com.ziraat.ziraatmobil",
+            "com.mobile.papara",
+            "com.getmidas.app",
+            "tr.gov.turkiye.edevlet.kapisi",
+            "com.x8bit.bitwarden",
+            "com.onepassword.android"
+        )
+        sensitivePkgs.forEach { pkg ->
+            assertTrue("Paket engellenmeliydi: $pkg", safetyGate.isSensitiveAppPackage(pkg))
+        }
+
+        val harmlessPkgs = listOf(
+            "com.android.calculator2",
+            "com.example.notes",
+            "com.spotify.music"
+        )
+        harmlessPkgs.forEach { pkg ->
+            assertFalse("Zararsız paket engellenmemeliydi: $pkg", safetyGate.isSensitiveAppPackage(pkg))
+        }
+    }
+
+    @Test
+    fun `NoteAction clear and delete require explicit user confirmation`() {
+        val clearAction = AgentAction.NoteAction("Tüm notları temizliyorum", action = "clear")
+        val (clearNeedsConfirm, clearPrompt) = safetyGate.evaluate(clearAction, "")
+        assertTrue(clearNeedsConfirm)
+        assertTrue(clearPrompt.contains("TÜM notlar"))
+
+        val deleteAction = AgentAction.NoteAction("Toplantı notunu siliyorum", action = "delete", title = "Toplantı")
+        val (deleteNeedsConfirm, deletePrompt) = safetyGate.evaluate(deleteAction, "")
+        assertTrue(deleteNeedsConfirm)
+        assertTrue(deletePrompt.contains("Toplantı"))
+
+        val addAction = AgentAction.NoteAction("Yeni not ekliyorum", action = "add", title = "Alışveriş", text = "Süt, ekmek")
+        val (addNeedsConfirm, _) = safetyGate.evaluate(addAction, "")
+        assertFalse("Not ekleme işlemi kullanıcı onayı istememeli", addNeedsConfirm)
     }
 }

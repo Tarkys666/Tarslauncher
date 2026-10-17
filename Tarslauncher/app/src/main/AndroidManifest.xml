@@ -29,7 +29,7 @@
 
     <application
         android:allowBackup="false"
-        android:fullBackupContent="false"
+        android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -85,7 +85,7 @@
         <!-- TARS AI Phone Agent Accessibility Service -->
         <service
             android:name=".agent.service.TarsAccessibilityService"
-            android:exported="false"
+            android:exported="true"
             android:label="TARS Agent"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>

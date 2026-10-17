@@ -3,9 +3,7 @@
 
 # Enable all optimizations
 -optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
--optimizationpasses 5
 -allowaccessmodification
--dontpreverify
 
 # Obfuscation settings
 # -obfuscationdictionary dictionary.txt
@@ -31,9 +29,6 @@
 -keep class com.tarslauncher.app.data.sync.** { *; }
 -keep class com.tarslauncher.app.data.updater.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.updater.** { *; }
-
-# Security: Hide sensitive classes from reflection
--keepnames class com.tarslauncher.app.utils.SecurityHelper
 
 # Gson serialization
 -keepattributes Signature
