@@ -13,6 +13,7 @@ sealed interface AgentAction {
 
     fun toOperationalSignature(): String = when (this) {
         is CreateWorkspaceItem -> "Create(${itemType.name}, ${title.take(30)})"
+        is UpdateWorkspaceItem -> "Update($targetQuery, ${title.take(24)})"
         is CompleteWorkspaceItem -> "Complete($targetQuery)"
         is DeleteWorkspaceItem -> "Delete($targetQuery)"
         is ClearCompletedTasks -> "ClearCompletedTasks"
@@ -35,6 +36,17 @@ sealed interface AgentAction {
         val alarmMinute: Int? = null,
         val durationSeconds: Long? = null,
         val isTomorrow: Boolean = false,
+        override val stepIndex: Int = -1
+    ) : AgentAction
+
+    data class UpdateWorkspaceItem(
+        override val thought: String,
+        val targetQuery: String,
+        val title: String = "",
+        val content: String = "",
+        val checklist: List<String> = emptyList(),
+        val tags: List<String> = emptyList(),
+        val appendMode: Boolean = true,
         override val stepIndex: Int = -1
     ) : AgentAction
 
@@ -85,3 +97,4 @@ sealed interface AgentAction {
         override val stepIndex: Int = -1
     ) : AgentAction
 }
+

@@ -251,6 +251,39 @@ object ActionParser {
                 )
             }
 
+            "update", "append", "edit", "modify", "guncelle", "güncelle", "not_guncelle", "ekleme_yap" -> {
+                val target = extractTarget(args).ifBlank { "son" }
+                val title = (
+                    args.get("title")?.asString
+                        ?: args.get("baslik")?.asString
+                        ?: args.get("name")?.asString
+                )?.trim().orEmpty()
+                val content = (
+                    args.get("content")?.asString
+                        ?: args.get("text")?.asString
+                        ?: args.get("description")?.asString
+                        ?: args.get("icerik")?.asString
+                        ?: args.get("body")?.asString
+                        ?: args.get("note")?.asString
+                )?.trim().orEmpty()
+                val checklist = extractStringList(args.get("checklist") ?: args.get("subtasks") ?: args.get("items"))
+                val tags = extractStringList(args.get("tags") ?: args.get("labels") ?: args.get("etiketler"))
+                val appendMode = runCatching {
+                    args.get("append")?.asBoolean
+                }.getOrNull() ?: (actionName == "append" || actionName == "ekleme_yap")
+
+                AgentAction.UpdateWorkspaceItem(
+                    thought = thought,
+                    targetQuery = target,
+                    title = title,
+                    content = content,
+                    checklist = checklist,
+                    tags = tags,
+                    appendMode = appendMode,
+                    stepIndex = stepIndex
+                )
+            }
+
             "complete", "complete_task", "mark_done", "tamamla", "bitir" -> {
                 val target = extractTarget(args)
                 AgentAction.CompleteWorkspaceItem(thought, target, stepIndex)
@@ -269,7 +302,8 @@ object ActionParser {
                 AgentAction.ClearAllWorkspace(thought, stepIndex)
             }
 
-            "query", "list", "search", "summarize", "listele", "göster", "özetle" -> {
+            "query", "list", "search", "summarize", "chat", "answer", "reply", "recall",
+            "listele", "göster", "özetle", "yanıtla", "cevapla", "hatırla", "bul" -> {
                 val filter = (args.get("type")?.asString ?: args.get("filter")?.asString ?: "ALL").uppercase()
                 val summary = extractSummaryOrText(args)
                 AgentAction.QueryWorkspace(thought, filter, summary, stepIndex)

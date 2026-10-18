@@ -67,12 +67,18 @@ class AgentLoopRunner(
             state = AgentOverlayNotchManager.NotchState.THINKING
         )
 
-        // 1. Mevcut Firebase Workspace kayıtlarını al
+        // 1. Mevcut Second Brain (Yerel Kasa + Firebase) kayıtlarını al
         val existingItems = workspaceRepository.getItems()
-        val systemPrompt = AgentPromptProvider.buildWorkspaceSystemPrompt(existingItems)
-        val history = mutableListOf(
-            ChatMessage(ChatMessage.Role.USER, cleanGoal)
+        val systemPrompt = AgentPromptProvider.buildWorkspaceSystemPrompt(
+            existingItems = existingItems,
+            userQuery = cleanGoal
         )
+        val history = mutableListOf<ChatMessage>().apply {
+            synchronized(sessionLock) {
+                addAll(recentSessionHistory.takeLast(MAX_SESSION_HISTORY_MESSAGES))
+            }
+            add(ChatMessage(ChatMessage.Role.USER, cleanGoal))
+        }
 
         if (!currentCoroutineContext().isActive) return@flow
 
@@ -168,7 +174,7 @@ class AgentLoopRunner(
             action = nextDecision.getOrThrow().action
         }
 
-        // 3. Firebase Workspace İşlemini Uygula
+        // 3. Second Brain & Firebase Workspace İşlemini Uygula
         service?.overlayNotch?.showOrUpdate(
             stepNumber = 2,
             plan = currentPlan,
@@ -202,26 +208,63 @@ class AgentLoopRunner(
                     val summary = if (alarmInfo != null) {
                         "'${finalAction.title}' kaydedildi ve $alarmInfo için alarm + geri sayım başlatıldı."
                     } else {
-                        "[${finalAction.itemType.labelTr}] '${finalAction.title}' kaydedildi."
+                        "[${finalAction.itemType.labelTr}] '${finalAction.title}' Second Brain kasasına kaydedildi."
                     }
+                    recordSessionTurn(cleanGoal, summary)
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
-                    service?.overlayNotch?.showOrUpdate(
-                        stepNumber = 2,
-                        plan = currentPlan,
-                        liveDetail = badge,
-                        state = AgentOverlayNotchManager.NotchState.COMPLETED
-                    )
+                    if (alarmInfo == null) {
+                        service?.overlayNotch?.showOrUpdate(
+                            stepNumber = 2,
+                            plan = currentPlan,
+                            liveDetail = badge,
+                            state = AgentOverlayNotchManager.NotchState.COMPLETED
+                        )
+                    }
                     emit(AgentEvent.Success(summary))
                 } else {
-                    val err = saveResult.exceptionOrNull()?.message ?: "Firebase kayıt hatası"
+                    val err = saveResult.exceptionOrNull()?.message ?: "Kayıt hatası"
                     service?.overlayNotch?.showOrUpdate(
                         stepNumber = 2,
                         plan = currentPlan,
                         liveDetail = "Kayıt Hatası",
                         state = AgentOverlayNotchManager.NotchState.FAILED
                     )
-                    emit(AgentEvent.Failure("Firebase'e kaydedilemedi: $err"))
+                    emit(AgentEvent.Failure("Kaydedilemedi: $err"))
+                }
+            }
+
+            is AgentAction.UpdateWorkspaceItem -> {
+                val res = workspaceRepository.appendOrUpdateByQuery(
+                    idOrQuery = finalAction.targetQuery,
+                    newTitle = finalAction.title,
+                    additionalContent = finalAction.content,
+                    additionalChecklist = finalAction.checklist,
+                    additionalTags = finalAction.tags,
+                    appendMode = finalAction.appendMode
+                )
+                if (res.isSuccess) {
+                    val item = res.getOrThrow()
+                    val summary = "'${item.title}' notu Second Brain kasasında güncellendi."
+                    recordSessionTurn(cleanGoal, summary)
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Güncellendi",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Güncelleme hatası"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Hata",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure(err))
                 }
             }
 
@@ -230,6 +273,7 @@ class AgentLoopRunner(
                 if (res.isSuccess) {
                     val item = res.getOrThrow()
                     val summary = "'${item.title}' tamamlandı olarak işaretlendi."
+                    recordSessionTurn(cleanGoal, summary)
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -255,7 +299,8 @@ class AgentLoopRunner(
                 val res = workspaceRepository.deleteByQuery(finalAction.targetQuery)
                 if (res.isSuccess) {
                     val item = res.getOrThrow()
-                    val summary = "'${item.title}' çalışma alanından silindi."
+                    val summary = "'${item.title}' Second Brain kasasından silindi."
+                    recordSessionTurn(cleanGoal, summary)
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -281,7 +326,8 @@ class AgentLoopRunner(
                 val res = workspaceRepository.clearCompletedTasks()
                 if (res.isSuccess) {
                     val count = res.getOrDefault(0)
-                    val summary = "$count tamamlanmış görev çalışma alanından temizlendi."
+                    val summary = "$count tamamlanmış görev temizlendi."
+                    recordSessionTurn(cleanGoal, summary)
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -304,24 +350,20 @@ class AgentLoopRunner(
             }
 
             is AgentAction.ClearAllWorkspace -> {
-                service?.overlayNotch?.showOrUpdate(
-                    stepNumber = 2,
-                    plan = currentPlan,
-                    liveDetail = "Onay?",
-                    state = AgentOverlayNotchManager.NotchState.THINKING
-                )
+                val confirmText = "Tüm notlarınızı kalıcı olarak silmek istediğinize emin misiniz?"
                 val confirmDeferred = CompletableDeferred<String?>()
-                emit(
-                    AgentEvent.QuestionToUser(
-                        "Tüm çalışma alanı kayıtlarınızı kalıcı olarak silmek istediğinize emin misiniz? Onaylamak için 'Evet' yazın.",
-                        confirmDeferred
-                    )
-                )
-                val confirmation = withTimeoutOrNull(45_000L) {
-                    confirmDeferred.await()
-                }?.trim()?.lowercase().orEmpty()
+                service?.overlayNotch?.promptUserQuestion(confirmText) { reply ->
+                    if (!confirmDeferred.isCompleted) {
+                        confirmDeferred.complete(reply)
+                    }
+                }
+                emit(AgentEvent.QuestionToUser(confirmText, confirmDeferred))
 
-                val isConfirmed = confirmation in listOf("evet", "onay", "yes", "sil", "tamam")
+                val confirmation = withTimeoutOrNull(60_000L) {
+                    confirmDeferred.await()
+                }?.trim()?.lowercase(Locale.forLanguageTag("tr-TR")).orEmpty()
+
+                val isConfirmed = confirmation in listOf("evet", "onay", "onayla", "yes", "sil", "tamam")
                 if (!isConfirmed) {
                     service?.overlayNotch?.showOrUpdate(
                         stepNumber = 2,
@@ -329,13 +371,14 @@ class AgentLoopRunner(
                         liveDetail = "İptal",
                         state = AgentOverlayNotchManager.NotchState.FAILED
                     )
-                    emit(AgentEvent.Failure("Tüm kayıtları silme işlemi kullanıcı tarafından onaylanmadı."))
+                    emit(AgentEvent.Failure("Tüm kayıtları silme işlemi iptal edildi."))
                     return@flow
                 }
 
                 val res = workspaceRepository.clearAll()
                 if (res.isSuccess) {
-                    val summary = "Tüm çalışma alanı kayıtları temizlendi."
+                    val summary = "Tüm Second Brain kayıtları temizlendi."
+                    synchronized(sessionLock) { recentSessionHistory.clear() }
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -360,48 +403,36 @@ class AgentLoopRunner(
             is AgentAction.QueryWorkspace -> {
                 val summary = finalAction.summaryResponse.ifBlank {
                     if (existingItems.isEmpty()) {
-                        "Çalışma alanınızda henüz kayıtlı görev, not veya fikir bulunmuyor."
+                        "Second Brain kasanızda henüz kayıtlı not, görev veya fikir bulunmuyor."
                     } else {
-                        val tasks = existingItems.count { it.type == WorkspaceItemType.TASK && !it.isCompleted }
-                        val notes = existingItems.count { it.type == WorkspaceItemType.NOTE }
-                        val ideas = existingItems.count { it.type == WorkspaceItemType.IDEA }
-                        "Aktif: $tasks Görev, $notes Not, $ideas Fikir bulunuyor."
+                        existingItems.take(5).joinToString("\n") { "- ${it.title}" }
                     }
                 }
+                recordSessionTurn(cleanGoal, summary)
                 currentPlan = currentPlan.markAllCompleted()
                 emit(AgentEvent.PlanStepUpdated(currentPlan))
                 service?.overlayNotch?.showAgentReply(summary)
-                service?.overlayNotch?.showOrUpdate(
-                    stepNumber = 2,
-                    plan = currentPlan,
-                    liveDetail = "✓ Özetlendi",
-                    state = AgentOverlayNotchManager.NotchState.COMPLETED
-                )
                 emit(AgentEvent.Success(summary))
             }
 
             is AgentAction.Done -> {
+                recordSessionTurn(cleanGoal, finalAction.summary)
                 currentPlan = currentPlan.markAllCompleted()
                 emit(AgentEvent.PlanStepUpdated(currentPlan))
                 service?.overlayNotch?.showAgentReply(finalAction.summary)
-                service?.overlayNotch?.showOrUpdate(
-                    stepNumber = 2,
-                    plan = currentPlan,
-                    liveDetail = "✓ Tamamlandı",
-                    state = AgentOverlayNotchManager.NotchState.COMPLETED
-                )
                 emit(AgentEvent.Success(finalAction.summary))
             }
 
             else -> {
-                // Fallback: Eğer model bilinmeyen bir eylem döndürdüyse bile kullanıcının girdisini NOT olarak kaydet
+                // Fallback: Eğer model bilinmeyen bir eylem döndürdüyse bile kullanıcının girdisini NOT olarak Second Brain'e kaydet
                 val fallbackItem = WorkspaceItem(
                     type = WorkspaceItemType.NOTE,
-                    title = cleanGoal.take(36),
-                    content = cleanGoal
+                    title = cleanGoal.take(48),
+                    content = if (cleanGoal.length > 48) cleanGoal else ""
                 )
                 val saveRes = workspaceRepository.addItem(fallbackItem)
                 if (saveRes.isSuccess) {
+                    recordSessionTurn(cleanGoal, "Not olarak kaydedildi: ${fallbackItem.title}")
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -423,6 +454,16 @@ class AgentLoopRunner(
             }
         }
     }.flowOn(Dispatchers.Default)
+
+    private fun recordSessionTurn(userText: String, modelSummary: String) {
+        synchronized(sessionLock) {
+            recentSessionHistory.add(ChatMessage(ChatMessage.Role.USER, userText.take(300)))
+            recentSessionHistory.add(ChatMessage(ChatMessage.Role.MODEL, modelSummary.take(400)))
+            while (recentSessionHistory.size > MAX_SESSION_HISTORY_MESSAGES) {
+                recentSessionHistory.removeAt(0)
+            }
+        }
+    }
 
     private fun resolveAndScheduleAlarm(
         action: AgentAction.CreateWorkspaceItem,
@@ -514,8 +555,12 @@ class AgentLoopRunner(
 
     companion object {
         private const val MAX_PROMPT_LENGTH = 2_000
+        private const val MAX_SESSION_HISTORY_MESSAGES = 8
+        private val sessionLock = Any()
+        private val recentSessionHistory = mutableListOf<ChatMessage>()
         private val RELATIVE_TIME_REGEX = Regex("""\b(\d{1,4})\s*(saniye|sn|dakika|dk|saat)\s*sonra\b""")
         private val SAAT_TIME_REGEX = Regex("""\bsaat\s*(\d{1,2})(?:[:.](\d{2}))?\b""")
         private val COLON_TIME_REGEX = Regex("""\b([01]?\d|2[0-3])[:.]([0-5]\d)\b""")
     }
 }
+

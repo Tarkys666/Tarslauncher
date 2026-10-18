@@ -190,13 +190,19 @@ private fun MonochromeNoteRow(
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val displayBody = remember(item.title, item.content) {
+    val displayBody = remember(item.title, item.content, item.checklist) {
         val t = item.title.trim()
         val c = item.content.trim()
-        if (c.isNotBlank() && !c.equals(t, ignoreCase = true)) {
+        val base = if (c.isNotBlank() && !c.equals(t, ignoreCase = true)) {
             "$t — $c"
         } else {
             t
+        }
+        if (item.checklist.isNotEmpty()) {
+            val subText = item.checklist.joinToString(" · ") { it.text.trim() }
+            "$base ($subText)"
+        } else {
+            base
         }
     }
 

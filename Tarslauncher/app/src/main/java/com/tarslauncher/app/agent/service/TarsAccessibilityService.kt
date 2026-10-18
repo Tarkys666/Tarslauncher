@@ -57,12 +57,7 @@ class TarsAccessibilityService : AccessibilityService() {
             }
 
             overlayNotch.onTaskSubmitted = { prompt ->
-                val vm = AgentViewModel.getInstance()
-                if (vm != null) {
-                    vm.startTask(prompt)
-                } else {
-                    startAgentTaskFromOverlay(prompt)
-                }
+                startAgentTaskFromOverlay(prompt)
             }
 
             val prefs = AgentPreferences(this)

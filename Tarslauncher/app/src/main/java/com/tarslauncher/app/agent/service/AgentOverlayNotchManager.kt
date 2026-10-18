@@ -83,6 +83,9 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var countdownTextView: TextView? = null
     private var countdownCancelBtn: TextView? = null
     private var agentMessageView: TextView? = null
+    private var questionActionRow: LinearLayout? = null
+    private var confirmBtnView: TextView? = null
+    private var cancelQuestionBtnView: TextView? = null
     private var alarmDismissBtn: TextView? = null
     private var inputCardView: LinearLayout? = null
     private var inputEditText: EditText? = null
@@ -157,6 +160,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     fun showIdle() {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
             if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
                 hide()
                 return@post
@@ -164,6 +168,10 @@ class AgentOverlayNotchManager(private val context: Context) {
             currentState = NotchState.IDLE
             currentPlan = null
             currentStepNum = 1
+            if (pendingQuestionCallback == null && !isAlarmRinging) {
+                activeQuestionText = null
+                activeReplyText = null
+            }
 
             if (rootContainer == null) {
                 createAndAttachOverlay()
@@ -186,6 +194,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     ) {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
             if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
                 hide()
                 return@post
@@ -194,6 +203,12 @@ class AgentOverlayNotchManager(private val context: Context) {
             currentState = state
             if (plan != null) {
                 currentPlan = plan
+            }
+
+            if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
+                activeQuestionText = null
+                pendingQuestionCallback = null
+                inputEditText?.setText("")
             }
 
             if (rootContainer == null) {
@@ -210,13 +225,20 @@ class AgentOverlayNotchManager(private val context: Context) {
             }
 
             if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
+                val delayMs = if (!activeReplyText.isNullOrBlank()) 2400L else 1500L
                 val toIdleTask = Runnable {
-                    if (!isExpanded && pendingQuestionCallback == null && !isAlarmRinging) {
+                    if (pendingQuestionCallback == null && !isAlarmRinging) {
+                        activeReplyText = null
+                        activeQuestionText = null
+                        val hasTypedText = !inputEditText?.text?.toString().isNullOrBlank()
+                        if (isExpanded && !hasTypedText) {
+                            collapseIsland()
+                        }
                         showIdle()
                     }
                 }
                 autoIdleRunnable = toIdleTask
-                mainHandler.postDelayed(toIdleTask, 2800L)
+                mainHandler.postDelayed(toIdleTask, delayMs)
             }
         }
     }
@@ -247,17 +269,20 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             startCountdownLoop()
 
-            // Auto-collapse back to the compact live countdown pill after 3.8s if user isn't typing
+            // Auto-collapse back to the compact live countdown pill after 2.6s if user isn't typing
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
             val collapseTask = Runnable {
                 val hasInput = !inputEditText?.text?.toString().isNullOrBlank()
-                if (isExpanded && !hasInput && pendingQuestionCallback == null && !isAlarmRinging) {
+                if (pendingQuestionCallback == null && !isAlarmRinging) {
                     activeReplyText = null
-                    collapseIsland()
+                    if (isExpanded && !hasInput) {
+                        collapseIsland()
+                    }
+                    showIdle()
                 }
             }
             autoIdleRunnable = collapseTask
-            mainHandler.postDelayed(collapseTask, 3800L)
+            mainHandler.postDelayed(collapseTask, 2600L)
         }
     }
 
@@ -379,6 +404,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     fun promptUserQuestion(question: String, onAnswer: (String) -> Unit) {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
             if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
                 onAnswer("")
                 return@post
@@ -391,10 +417,11 @@ class AgentOverlayNotchManager(private val context: Context) {
             activeReplyText = null
             currentState = NotchState.THINKING
 
-            updateUiContent(currentStepNum, currentPlan, "Soru", NotchState.THINKING)
+            updateUiContent(currentStepNum, currentPlan, "Onay", NotchState.THINKING)
             if (!isExpanded) {
                 expandIsland(popKeyboard = true)
             } else {
+                ensureExpandedFocusable(popKeyboard = true)
                 updateExpandedState()
                 inputEditText?.requestFocus()
                 val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -404,18 +431,37 @@ class AgentOverlayNotchManager(private val context: Context) {
     }
 
     /**
-     * Displays an AI reply/summary directly inside the Dynamic Island.
+     * Displays an AI Second Brain reply/summary directly inside the Dynamic Island.
      */
     fun showAgentReply(reply: String) {
         mainHandler.post {
+            autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
             if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) return@post
             if (rootContainer == null) {
                 createAndAttachOverlay()
             }
+            currentState = NotchState.IDLE
+            currentPlan = null
+            currentStepNum = 1
             activeReplyText = reply
             activeQuestionText = null
             pendingQuestionCallback = null
+            inputEditText?.setText("")
             animateIslandNotificationBanner()
+
+            val cleanTask = Runnable {
+                val hasInput = !inputEditText?.text?.toString().isNullOrBlank()
+                if (pendingQuestionCallback == null && !isAlarmRinging && !hasInput) {
+                    activeReplyText = null
+                    if (isExpanded) {
+                        collapseIsland()
+                    }
+                    showIdle()
+                }
+            }
+            autoIdleRunnable = cleanTask
+            mainHandler.postDelayed(cleanTask, 9000L)
         }
     }
 
@@ -478,6 +524,9 @@ class AgentOverlayNotchManager(private val context: Context) {
             countdownTextView = null
             countdownCancelBtn = null
             agentMessageView = null
+            questionActionRow = null
+            confirmBtnView = null
+            cancelQuestionBtnView = null
             alarmDismissBtn = null
             inputCardView = null
             inputEditText = null
@@ -530,10 +579,12 @@ class AgentOverlayNotchManager(private val context: Context) {
                 }
             }
 
-            // Outside touch detection when expanded to collapse smoothly
+            // Outside touch detection when expanded to collapse smoothly (do not auto-dismiss while awaiting confirmation)
             container.setOnTouchListener { _, event ->
                 if (event.action == MotionEvent.ACTION_OUTSIDE && isExpanded) {
-                    collapseIsland()
+                    if (pendingQuestionCallback == null) {
+                        collapseIsland()
+                    }
                     true
                 } else {
                     false
@@ -711,15 +762,17 @@ class AgentOverlayNotchManager(private val context: Context) {
             contentDescription = "Kapat"
             isFocusable = true
             setOnClickListener {
-                pendingQuestionCallback?.invoke("")
+                val cb = pendingQuestionCallback
                 pendingQuestionCallback = null
                 activeQuestionText = null
                 activeReplyText = null
+                inputEditText?.setText("")
                 if (isAlarmRinging) {
                     isAlarmRinging = false
                     stopBorderPulseAnimation()
                 }
                 collapseIsland()
+                cb?.invoke("")
             }
         }
         header.addView(closeBtn)
@@ -792,6 +845,67 @@ class AgentOverlayNotchManager(private val context: Context) {
         agentMessageView = messageBox
         expanded.addView(messageBox)
 
+        // --- 3b. One-Tap Confirmation / Cancel Action Row for Questions ---
+        val qRow = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            }
+            visibility = View.GONE
+        }
+
+        val confirmBtn = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                marginEnd = dp(6)
+            }
+            gravity = Gravity.CENTER
+            text = "[ ONAYLA ]"
+            setTextColor(Color.BLACK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            background = sharpSurface(Color.WHITE, Color.WHITE)
+            isFocusable = true
+            setOnClickListener {
+                val cb = pendingQuestionCallback
+                pendingQuestionCallback = null
+                activeQuestionText = null
+                activeReplyText = null
+                inputEditText?.setText("")
+                updateExpandedState()
+                collapseIsland()
+                cb?.invoke("Evet")
+            }
+        }
+        confirmBtnView = confirmBtn
+        qRow.addView(confirmBtn)
+
+        val cancelQBtn = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f)
+            gravity = Gravity.CENTER
+            text = "[ İPTAL ]"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.MONOSPACE
+            background = sharpSurface(Color.BLACK, Color.parseColor("#444444"))
+            isFocusable = true
+            setOnClickListener {
+                val cb = pendingQuestionCallback
+                pendingQuestionCallback = null
+                activeQuestionText = null
+                activeReplyText = null
+                inputEditText?.setText("")
+                updateExpandedState()
+                collapseIsland()
+                cb?.invoke("")
+            }
+        }
+        cancelQuestionBtnView = cancelQBtn
+        qRow.addView(cancelQBtn)
+
+        questionActionRow = qRow
+        expanded.addView(qRow)
+
         // Dismiss button when alarm is ringing
         val dismissAlarm = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(-1, dp(36)).apply {
@@ -846,15 +960,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    val hasText = !s.isNullOrBlank()
-                    startButtonView?.isEnabled = hasText
-                    if (hasText) {
-                        startButtonView?.background = sharpSurface(Color.WHITE, Color.WHITE)
-                        startButtonView?.setTextColor(Color.BLACK)
-                    } else {
-                        startButtonView?.background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
-                        startButtonView?.setTextColor(Color.parseColor("#555555"))
-                    }
+                    refreshSendButtonVisual()
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -901,11 +1007,38 @@ class AgentOverlayNotchManager(private val context: Context) {
         return expanded
     }
 
+    private fun refreshSendButtonVisual() {
+        val hasText = !inputEditText?.text?.toString().isNullOrBlank()
+        val canSubmit = hasText || pendingQuestionCallback != null
+        startButtonView?.isEnabled = canSubmit
+        if (canSubmit) {
+            startButtonView?.background = sharpSurface(Color.WHITE, Color.WHITE)
+            startButtonView?.setTextColor(Color.BLACK)
+        } else {
+            startButtonView?.background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
+            startButtonView?.setTextColor(Color.parseColor("#555555"))
+        }
+    }
+
     private fun sharpSurface(color: Int, borderColor: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 0f
         setColor(color)
         setStroke(dp(1), borderColor)
+    }
+
+    private fun ensureExpandedFocusable(popKeyboard: Boolean) {
+        val wm = windowManager ?: return
+        val container = rootContainer ?: return
+        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
+        lp.width = minOf(dp(348), context.resources.displayMetrics.widthPixels - dp(24))
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+        lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+            if (popKeyboard) WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE else WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+        wm.updateViewLayout(container, lp)
     }
 
     private fun expandIsland(popKeyboard: Boolean = true) {
@@ -914,21 +1047,24 @@ class AgentOverlayNotchManager(private val context: Context) {
             hide()
             return
         }
+
+        // If user taps Island after a task completed/stopped, clean up stale status & messages immediately
+        if (popKeyboard && (currentState == NotchState.COMPLETED || currentState == NotchState.FAILED)) {
+            autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
+            currentState = NotchState.IDLE
+            currentPlan = null
+            currentStepNum = 1
+            if (pendingQuestionCallback == null && !isAlarmRinging) {
+                activeReplyText = null
+                activeQuestionText = null
+            }
+        }
+
         isExpanded = true
 
-        val wm = windowManager ?: return
         val container = rootContainer ?: return
-        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
-
-        lp.width = minOf(dp(348), context.resources.displayMetrics.widthPixels - dp(24))
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT
-        lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-            if (popKeyboard) WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE else WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
-
-        wm.updateViewLayout(container, lp)
+        ensureExpandedFocusable(popKeyboard)
 
         // Expanded card: Pure Pitch Black (#000000), 0dp sharp corners, 1dp monochrome border
         (container.background as? GradientDrawable)?.apply {
@@ -949,7 +1085,11 @@ class AgentOverlayNotchManager(private val context: Context) {
         container.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
                 if (isExpanded) {
+                    val cb = pendingQuestionCallback
+                    pendingQuestionCallback = null
+                    activeQuestionText = null
                     collapseIsland()
+                    cb?.invoke("")
                     return@setOnKeyListener true
                 }
             }
@@ -977,6 +1117,19 @@ class AgentOverlayNotchManager(private val context: Context) {
         if (!isExpanded) return
         isExpanded = false
         stopBorderPulseAnimation()
+
+        // Clean up finished state and old replies whenever collapsing so "Tamamlandı" never lingers
+        if (currentState == NotchState.COMPLETED || currentState == NotchState.FAILED) {
+            autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoIdleRunnable = null
+            currentState = NotchState.IDLE
+            currentPlan = null
+            currentStepNum = 1
+        }
+        if (pendingQuestionCallback == null && !isAlarmRinging) {
+            activeReplyText = null
+            activeQuestionText = null
+        }
 
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         inputEditText?.let { imm?.hideSoftInputFromWindow(it.windowToken, 0) }
@@ -1020,22 +1173,24 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private fun submitTaskFromInput() {
         val taskText = inputEditText?.text?.toString()?.trim().orEmpty()
+        val questionCb = pendingQuestionCallback
+        if (questionCb != null) {
+            inputEditText?.setText("")
+            pendingQuestionCallback = null
+            activeQuestionText = null
+            activeReplyText = null
+            updateExpandedState()
+            collapseIsland()
+            questionCb.invoke(taskText.ifBlank { "Evet" })
+            return
+        }
         if (taskText.isNotBlank()) {
             inputEditText?.setText("")
-            val questionCb = pendingQuestionCallback
-            if (questionCb != null) {
-                pendingQuestionCallback = null
-                activeQuestionText = null
-                activeReplyText = null
-                updateExpandedState()
-                collapseIsland()
-                questionCb.invoke(taskText)
-            } else {
-                activeReplyText = null
-                updateExpandedState()
-                collapseIsland()
-                onTaskSubmitted?.invoke(taskText)
-            }
+            activeReplyText = null
+            activeQuestionText = null
+            updateExpandedState()
+            collapseIsland()
+            onTaskSubmitted?.invoke(taskText)
         }
     }
 
@@ -1091,7 +1246,7 @@ class AgentOverlayNotchManager(private val context: Context) {
     }
 
     private fun updateExpandedState() {
-        val isRunning = currentState == NotchState.ACTIVE || currentState == NotchState.THINKING
+        val isRunning = (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING) && pendingQuestionCallback == null
         stopButtonView?.visibility = if (isRunning) View.VISIBLE else View.GONE
         alarmDismissBtn?.visibility = if (isAlarmRinging) View.VISIBLE else View.GONE
 
@@ -1100,12 +1255,14 @@ class AgentOverlayNotchManager(private val context: Context) {
 
         val question = activeQuestionText
         val reply = activeReplyText
+        val hasPendingQuestion = !question.isNullOrBlank() && pendingQuestionCallback != null
+        questionActionRow?.visibility = if (hasPendingQuestion) View.VISIBLE else View.GONE
 
-        if (!question.isNullOrBlank()) {
-            expandedStatusView?.text = "SORU"
+        if (hasPendingQuestion) {
+            expandedStatusView?.text = "ONAY / SORU"
             agentMessageView?.text = "- $question"
             agentMessageView?.visibility = View.VISIBLE
-            inputEditText?.hint = "Yanıtınızı yazın..."
+            inputEditText?.hint = "Yanıt yazın veya üstten onaylayın..."
         } else if (!reply.isNullOrBlank()) {
             expandedStatusView?.text = if (isAlarmRinging) "ALARM" else "BİLDİRİM"
             agentMessageView?.text = reply
@@ -1119,10 +1276,11 @@ class AgentOverlayNotchManager(private val context: Context) {
                 NotchState.IDLE -> if (hasActiveCountdown) "GERİ SAYIM AKTİF" else "HAZIR"
                 NotchState.THINKING -> "DÜŞÜNÜYOR..."
                 NotchState.ACTIVE -> "İŞLENİYOR..."
-                NotchState.COMPLETED -> "TAMAMLANDI"
-                NotchState.FAILED -> "DURDURULDU"
+                NotchState.COMPLETED -> "HAZIR"
+                NotchState.FAILED -> "HAZIR"
             }
         }
+        refreshSendButtonVisual()
     }
 
     private fun updateUiContent(
