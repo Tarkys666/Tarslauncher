@@ -62,8 +62,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 44
-        versionName = "1.8.9"
+        versionCode = 45
+        versionName = "1.8.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -75,13 +75,15 @@ android {
             abiFilters.clear()
         }
 
-        // Supabase configuration parameterized from local.properties or env vars
-        val supabaseUrl = System.getenv("SUPABASE_URL")
-            ?: localProperties.getProperty("SUPABASE_URL")
-            ?: ""
-        val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
-            ?: localProperties.getProperty("SUPABASE_ANON_KEY")
-            ?: ""
+        // Supabase configuration parameterized from local.properties or env vars, with production default fallback
+        val defaultSupabaseUrl = "https://nznftexnhmzboihbeilq.supabase.co"
+        val defaultSupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56bmZ0ZXhuaG16Ym9paGJlaWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMzk0OTUsImV4cCI6MjEwNzkxNTQ5NX0.FZo6dEMZNbe33Bj8VjQ6VZ57j-O-y464YPJQXDS6kD0"
+
+        val supabaseUrl = (System.getenv("SUPABASE_URL") ?: localProperties.getProperty("SUPABASE_URL"))
+            ?.takeIf { it.isNotBlank() } ?: defaultSupabaseUrl
+        val supabaseAnonKey = (System.getenv("SUPABASE_ANON_KEY") ?: localProperties.getProperty("SUPABASE_ANON_KEY"))
+            ?.takeIf { it.isNotBlank() } ?: defaultSupabaseAnonKey
+
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }

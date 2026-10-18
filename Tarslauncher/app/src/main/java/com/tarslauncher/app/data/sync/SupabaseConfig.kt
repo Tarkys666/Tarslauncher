@@ -17,17 +17,21 @@ import kotlinx.coroutines.withContext
 object SupabaseConfig {
     private const val TAG = "SupabaseConfig"
 
+    private const val DEFAULT_SUPABASE_URL = "https://nznftexnhmzboihbeilq.supabase.co"
+    private const val DEFAULT_SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56bmZ0ZXhuaG16Ym9paGJlaWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMzk0OTUsImV4cCI6MjEwNzkxNTQ5NX0.FZo6dEMZNbe33Bj8VjQ6VZ57j-O-y464YPJQXDS6kD0"
+
     /**
      * Supabase project base URL (e.g. https://<project-ref>.supabase.co).
      */
     val SUPABASE_URL: String
-        get() = BuildConfig.SUPABASE_URL.trim()
+        get() = BuildConfig.SUPABASE_URL.ifBlank { DEFAULT_SUPABASE_URL }.trim()
 
     /**
      * Supabase anon/public JWT key.
      */
     val SUPABASE_ANON_KEY: String
-        get() = BuildConfig.SUPABASE_ANON_KEY.trim()
+        get() = BuildConfig.SUPABASE_ANON_KEY.ifBlank { DEFAULT_SUPABASE_ANON_KEY }.trim()
 
     val REST_BASE_URL: String
         get() = "$SUPABASE_URL/rest/v1"
