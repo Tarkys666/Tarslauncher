@@ -34,10 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.tarslauncher.app.agent.data.AgentPreferences
-import com.tarslauncher.app.agent.data.GroqRemoteDataSource
-import com.tarslauncher.app.agent.domain.model.ChatMessage
-import com.tarslauncher.app.agent.domain.prompt.AgentPromptProvider
 import com.tarslauncher.app.data.model.WorkspaceItem
 import com.tarslauncher.app.data.model.WorkspaceItemType
 import com.tarslauncher.app.data.sync.GoogleAuthManager
@@ -61,15 +57,16 @@ private val MonoDisabledBg = Color(0xFF141414)
  */
 @Composable
 fun ManageNotesDialog(
-    onDismiss: () -> Unit,
-    onOpenAgentSettings: (() -> Unit)? = null
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     val authManager = remember { GoogleAuthManager(context) }
     val workspaceRepo = remember { FirebaseWorkspaceRepository(context, authManager) }
     val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
+    var newNoteInput by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         authManager.ensureSessionUid()
@@ -172,6 +169,99 @@ fun ManageNotesDialog(
                                 )
                             }
                         }
+                    }
+                }
+
+                // ─── 3. NEW NOTE INPUT BAR (ZERO CORNER, MONOCHROME) ───────────
+                HorizontalDivider(thickness = 1.dp, color = MonoLine)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "+ ",
+                        color = MonoMuted,
+                        fontSize = 15.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    BasicTextField(
+                        value = newNoteInput,
+                        onValueChange = { newNoteInput = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        textStyle = TextStyle(
+                            color = MonoWhite,
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        cursorBrush = SolidColor(MonoWhite),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (newNoteInput.isNotBlank()) {
+                                    val text = newNoteInput.trim()
+                                    newNoteInput = ""
+                                    focusManager.clearFocus()
+                                    coroutineScope.launch {
+                                        workspaceRepo.addItem(
+                                            WorkspaceItem(
+                                                type = WorkspaceItemType.NOTE,
+                                                title = text,
+                                                content = ""
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        ),
+                        decorationBox = { innerTextField ->
+                            if (newNoteInput.isEmpty()) {
+                                Text(
+                                    text = "Yeni not ekle...",
+                                    color = MonoDim,
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            innerTextField()
+                        }
+                    )
+
+                    if (newNoteInput.isNotBlank()) {
+                        Text(
+                            text = "EKLE",
+                            color = MonoWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .border(BorderStroke(1.dp, MonoBorder), RectangleShape)
+                                .clickable {
+                                    val text = newNoteInput.trim()
+                                    newNoteInput = ""
+                                    focusManager.clearFocus()
+                                    coroutineScope.launch {
+                                        workspaceRepo.addItem(
+                                            WorkspaceItem(
+                                                type = WorkspaceItemType.NOTE,
+                                                title = text,
+                                                content = ""
+                                            )
+                                        )
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
                     }
                 }
             }

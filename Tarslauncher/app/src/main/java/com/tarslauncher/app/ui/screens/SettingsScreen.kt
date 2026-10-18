@@ -320,7 +320,19 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "TARS AGENT & WORKSPACE",
+            title = "NOTLARIM",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Notlarım",
+                    description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
+                    type = SettingType.BUTTON,
+                    onClick = { showNotesDialog = true }
+                )
+            )
+        ),
+        SettingsItem.Category(
+            title = "YAPAY ZEKA & LLM YÖNETİMİ",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
@@ -340,12 +352,6 @@ fun SettingsScreen(
                         agentPrefs.setQwenEnabled(enabled)
                         com.tarslauncher.app.agent.ui.AgentViewModel.getInstance()?.onToggleQwenEnabled(enabled)
                     }
-                ),
-                SettingsItem.Setting(
-                    title = "Notlarım",
-                    description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
-                    type = SettingType.BUTTON,
-                    onClick = { showNotesDialog = true }
                 )
             )
         ),
@@ -666,11 +672,7 @@ fun SettingsScreen(
 
     if (showNotesDialog) {
         ManageNotesDialog(
-            onDismiss = { showNotesDialog = false },
-            onOpenAgentSettings = {
-                showNotesDialog = false
-                showAgentSheet = true
-            }
+            onDismiss = { showNotesDialog = false }
         )
     }
 

@@ -1,7 +1,7 @@
 {
-  "versionCode": 45,
-  "versionName": "1.8.10",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.10/TarsLauncher-release.apk",
+  "versionCode": 46,
+  "versionName": "1.8.11",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.11/TarsLauncher-release.apk",
   "apkSize": 12500000,
-  "releaseNotes": "TARS v1.8.10: Supabase uç nokta ve anonim anahtar üretim yapılandırması düzeltildi — CI derlemelerinde Supabase URL ve Anon Key eksikliğinden kaynaklanan bağlantı hatası giderildi, güvenli varsayılan uç nokta entegrasyonu sağlandı."
+  "releaseNotes": "TARS v1.8.11: Notlarım ve Yapay Zeka/LLM yönetimi tamamen ayrıştırıldı — Notlar ekranına doğrudan monokrom not ekleme çubuğu eklendi, Ayarlar altında Notlarım ve Yapay Zeka & LLM Yönetimi ayrı kategorilere bölündü."
 }
