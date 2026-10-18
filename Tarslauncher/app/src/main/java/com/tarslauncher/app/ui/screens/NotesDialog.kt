@@ -106,24 +106,19 @@ fun ManageNotesDialog(
                         text = "N O T L A R",
                         color = MonoWhite,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Light,
+                        fontWeight = FontWeight.ExtraLight,
                         letterSpacing = 3.sp
                     )
 
-                    Box(
+                    Text(
+                        text = "×",
+                        color = MonoMuted,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Light,
                         modifier = Modifier
-                            .border(BorderStroke(1.dp, MonoBorder), RectangleShape)
                             .clickable { onDismiss() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✕",
-                            color = MonoWhite,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Light
-                        )
-                    }
+                            .padding(horizontal = 6.dp)
+                    )
                 }
 
                 HorizontalDivider(thickness = 1.dp, color = MonoLine)

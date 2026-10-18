@@ -63,8 +63,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "1.8.7"
+        versionCode = 43
+        versionName = "1.8.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -132,7 +132,7 @@ class AgentViewModel(
                 currentPlan = null,
                 pendingQuestion = null,
                 taskInput = "",
-                logs = listOf("Başlatılıyor [Qwen 3.8-27B // Workspace Brain]...")
+                logs = listOf("Düşünüyor...")
             )
         }
 
@@ -164,7 +164,18 @@ class AgentViewModel(
             it.copy(
                 isRunning = false,
                 pendingQuestion = null,
-                logs = it.logs + "[Durduruldu] İşlem iptal edildi."
+                logs = it.logs + "İşlem durduruldu."
+            )
+        }
+    }
+
+    fun clearLogs() {
+        _uiState.update {
+            it.copy(
+                logs = emptyList(),
+                finalMessage = null,
+                isFailure = false,
+                currentPlan = null
             )
         }
     }
@@ -187,7 +198,7 @@ class AgentViewModel(
                 _uiState.update {
                     it.copy(
                         pendingQuestion = event,
-                        logs = it.logs + "> [Soru] ${event.question}"
+                        logs = it.logs + event.question
                     )
                 }
             }
@@ -204,7 +215,7 @@ class AgentViewModel(
                         pendingQuestion = null,
                         finalMessage = event.summary,
                         isFailure = false,
-                        logs = it.logs + "> [Tamamlandı] ${event.summary}"
+                        logs = it.logs + event.summary
                     )
                 }
             }
@@ -215,7 +226,7 @@ class AgentViewModel(
                         pendingQuestion = null,
                         finalMessage = event.errorReason,
                         isFailure = true,
-                        logs = it.logs + "> [Hata] ${event.errorReason}"
+                        logs = it.logs + event.errorReason
                     )
                 }
             }

@@ -702,17 +702,21 @@ class AgentOverlayNotchManager(private val context: Context) {
     }
 
     /**
-     * Ultra-minimal, pure monochrome (`#000000` background, `#FFFFFF` / `#888888` / `#222222`,
-     * zero rounded corners `0dp`) AI conversation & countdown card matching TARS Launcher.
+     * Ultra-minimal TARS Launcher style expanded Dynamic Island card:
+     * - Pure `#000000` surface, single hairline border (`#1F1F1F`), zero nested boxes
+     * - Wide-spaced `T A R S` light typography (`sans-serif-light`, `letterSpacing = 0.35f`)
+     * - Clean `- ` prefixed conversation & input rows separated only by `1px` `#181818` lines
      */
     private fun buildExpandedView(c: Context = uiContext): LinearLayout {
+        val lightTypeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+
         val expanded = LinearLayout(c).apply {
             layoutParams = LinearLayout.LayoutParams(-1, -2)
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(18), dp(14), dp(18), dp(12))
         }
 
-        // --- 1. Monochrome Header Row: [T A R S] · [STATUS] ----- [✕] ---
+        // --- 1. Minimal TARS Header: T A R S ................. × ---
         val header = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -724,28 +728,22 @@ class AgentOverlayNotchManager(private val context: Context) {
         val title = TextView(c).apply {
             text = "T A R S"
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.MONOSPACE
-            letterSpacing = 0.15f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = lightTypeface
+            letterSpacing = 0.32f
             includeFontPadding = false
         }
         header.addView(title)
 
-        val divider = TextView(c).apply {
-            text = " // "
-            setTextColor(Color.parseColor("#555555"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-            typeface = Typeface.MONOSPACE
-            includeFontPadding = false
-        }
-        header.addView(divider)
-
         expandedStatusView = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-            text = "HAZIR"
-            setTextColor(Color.parseColor("#888888"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
-            typeface = Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply {
+                marginStart = dp(12)
+            }
+            text = ""
+            setTextColor(Color.parseColor("#666666"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
+            typeface = lightTypeface
+            letterSpacing = 0.18f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false
@@ -753,12 +751,13 @@ class AgentOverlayNotchManager(private val context: Context) {
         header.addView(expandedStatusView)
 
         val closeBtn = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
-            gravity = Gravity.CENTER
-            text = "✕"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(24))
+            gravity = Gravity.CENTER or Gravity.END
+            text = "×"
+            setTextColor(Color.parseColor("#777777"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            typeface = lightTypeface
+            background = null
             contentDescription = "Kapat"
             isFocusable = true
             setOnClickListener {
@@ -778,32 +777,32 @@ class AgentOverlayNotchManager(private val context: Context) {
         header.addView(closeBtn)
         expanded.addView(header)
 
-        // Thin monochrome separator line ('-')
+        // Hairline separator
         expanded.addView(View(c).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply {
-                bottomMargin = dp(10)
+            layoutParams = LinearLayout.LayoutParams(-1, 1).apply {
+                bottomMargin = dp(8)
             }
-            setBackgroundColor(Color.parseColor("#222222"))
+            setBackgroundColor(Color.parseColor("#1C1C1C"))
         })
 
-        // --- 2. Live Countdown Row (Visible when an alarm/timer is active) ---
+        // --- 2. Live Countdown Row (Borderless, visible only when an alarm is active) ---
         val cdRow = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(10)
+                bottomMargin = dp(8)
             }
-            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(0, dp(4), 0, dp(6))
             visibility = if (countdownTargetMs > System.currentTimeMillis()) View.VISIBLE else View.GONE
         }
 
         val cdText = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             text = ""
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            typeface = Typeface.MONOSPACE
+            setTextColor(Color.parseColor("#CCCCCC"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = lightTypeface
+            letterSpacing = 0.04f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
@@ -812,13 +811,14 @@ class AgentOverlayNotchManager(private val context: Context) {
 
         val cdCancel = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
-                marginStart = dp(8)
+                marginStart = dp(10)
             }
-            text = "[İPTAL]"
-            setTextColor(Color.parseColor("#888888"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-            typeface = Typeface.MONOSPACE
-            setPadding(dp(4), dp(2), dp(4), dp(2))
+            text = "İPTAL"
+            setTextColor(Color.parseColor("#666666"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
+            typeface = lightTypeface
+            letterSpacing = 0.16f
+            setPadding(dp(6), dp(2), dp(2), dp(2))
             setOnClickListener { cancelAlarmCountdown() }
         }
         countdownCancelBtn = cdCancel
@@ -827,25 +827,25 @@ class AgentOverlayNotchManager(private val context: Context) {
         countdownRowView = cdRow
         expanded.addView(cdRow)
 
-        // --- 3. Agent Question / Reply / Alarm Alert Box (Monochrome, 0dp corner) ---
+        // --- 3. Agent Reply / Question Text (Clean borderless '-' text on pure black) ---
         val messageBox = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(10)
             }
-            background = sharpSurface(Color.BLACK, Color.parseColor("#444444"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = null
+            setPadding(0, dp(4), 0, dp(6))
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.MONOSPACE
-            setLineSpacing(dpF(2), 1.0f)
-            maxLines = 6
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = lightTypeface
+            setLineSpacing(dpF(3), 1.0f)
+            maxLines = 8
             ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
         }
         agentMessageView = messageBox
         expanded.addView(messageBox)
 
-        // --- 3b. One-Tap Confirmation / Cancel Action Row for Questions ---
+        // --- 3b. Minimal Confirmation / Cancel Row (TARS Ultra-Minimal Dialog style) ---
         val qRow = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -856,15 +856,16 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
 
         val confirmBtn = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
-                marginEnd = dp(6)
+            layoutParams = LinearLayout.LayoutParams(0, dp(32), 1f).apply {
+                marginEnd = dp(8)
             }
             gravity = Gravity.CENTER
-            text = "[ ONAYLA ]"
-            setTextColor(Color.BLACK)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            background = sharpSurface(Color.WHITE, Color.WHITE)
+            text = "ONAYLA"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = lightTypeface
+            letterSpacing = 0.2f
+            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
             isFocusable = true
             setOnClickListener {
                 val cb = pendingQuestionCallback
@@ -881,13 +882,14 @@ class AgentOverlayNotchManager(private val context: Context) {
         qRow.addView(confirmBtn)
 
         val cancelQBtn = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f)
+            layoutParams = LinearLayout.LayoutParams(0, dp(32), 1f)
             gravity = Gravity.CENTER
-            text = "[ İPTAL ]"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.MONOSPACE
-            background = sharpSurface(Color.BLACK, Color.parseColor("#444444"))
+            text = "İPTAL"
+            setTextColor(Color.parseColor("#777777"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = lightTypeface
+            letterSpacing = 0.2f
+            background = sharpSurface(Color.BLACK, Color.parseColor("#1F1F1F"))
             isFocusable = true
             setOnClickListener {
                 val cb = pendingQuestionCallback
@@ -908,15 +910,16 @@ class AgentOverlayNotchManager(private val context: Context) {
 
         // Dismiss button when alarm is ringing
         val dismissAlarm = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, dp(36)).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, dp(34)).apply {
                 bottomMargin = dp(10)
             }
             gravity = Gravity.CENTER
-            text = "[ ALARMI KAPAT ]"
-            setTextColor(Color.BLACK)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            background = sharpSurface(Color.WHITE, Color.WHITE)
+            text = "ALARMI KAPAT"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = lightTypeface
+            letterSpacing = 0.22f
+            background = sharpSurface(Color.BLACK, Color.parseColor("#444444"))
             visibility = View.GONE
             setOnClickListener {
                 cancelAlarmCountdown()
@@ -926,26 +929,35 @@ class AgentOverlayNotchManager(private val context: Context) {
         alarmDismissBtn = dismissAlarm
         expanded.addView(dismissAlarm)
 
-        // --- 4. Ultra-Minimal Monochrome Input Row (0dp corner, '-' aesthetic) ---
+        // --- 4. Borderless Minimal Input Row: - Not veya soru yaz...       ↑ ---
         val inputCard = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(-1, -2)
-            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
-            setPadding(dp(10), dp(6), dp(6), dp(6))
+            background = null
+            setPadding(0, dp(2), 0, dp(2))
         }
         inputCardView = inputCard
+
+        val dashPrefix = TextView(c).apply {
+            text = "- "
+            setTextColor(Color.parseColor("#666666"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = lightTypeface
+            includeFontPadding = false
+        }
+        inputCard.addView(dashPrefix)
 
         val input = EditText(c).apply {
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             background = null
-            hint = "Not, alarm veya mesaj yaz..."
-            setHintTextColor(Color.parseColor("#555555"))
+            hint = "Not veya soru yaz..."
+            setHintTextColor(Color.parseColor("#444444"))
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            typeface = lightTypeface
             setPadding(dp(2), dp(6), dp(8), dp(6))
-            minHeight = dp(36)
+            minHeight = dp(34)
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             maxLines = 3
@@ -969,16 +981,17 @@ class AgentOverlayNotchManager(private val context: Context) {
         inputCard.addView(input)
 
         stopButtonView = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(-2, dp(34)).apply {
+            layoutParams = LinearLayout.LayoutParams(-2, dp(30)).apply {
                 marginEnd = dp(6)
             }
             text = "DUR"
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
-            typeface = Typeface.MONOSPACE
-            setPadding(dp(10), 0, dp(10), 0)
-            background = sharpSurface(Color.BLACK, Color.WHITE)
+            setTextColor(Color.parseColor("#888888"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = lightTypeface
+            letterSpacing = 0.16f
+            setPadding(dp(8), 0, dp(8), 0)
+            background = null
             visibility = View.GONE
             isFocusable = true
             setOnClickListener {
@@ -989,13 +1002,13 @@ class AgentOverlayNotchManager(private val context: Context) {
         inputCard.addView(stopButtonView)
 
         startButtonView = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34))
+            layoutParams = LinearLayout.LayoutParams(dp(30), dp(30))
             gravity = Gravity.CENTER
             text = "↑"
-            setTextColor(Color.parseColor("#555555"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
+            setTextColor(Color.parseColor("#333333"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = lightTypeface
+            background = null
             isEnabled = false
             isFocusable = true
             setOnClickListener { submitTaskFromInput() }
@@ -1011,27 +1024,23 @@ class AgentOverlayNotchManager(private val context: Context) {
         val hasText = !inputEditText?.text?.toString().isNullOrBlank()
         val canSubmit = hasText || pendingQuestionCallback != null
         startButtonView?.isEnabled = canSubmit
-        if (canSubmit) {
-            startButtonView?.background = sharpSurface(Color.WHITE, Color.WHITE)
-            startButtonView?.setTextColor(Color.BLACK)
-        } else {
-            startButtonView?.background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
-            startButtonView?.setTextColor(Color.parseColor("#555555"))
-        }
+        startButtonView?.setTextColor(
+            if (canSubmit) Color.WHITE else Color.parseColor("#333333")
+        )
     }
 
     private fun sharpSurface(color: Int, borderColor: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 0f
         setColor(color)
-        setStroke(dp(1), borderColor)
+        setStroke(1, borderColor)
     }
 
     private fun ensureExpandedFocusable(popKeyboard: Boolean) {
         val wm = windowManager ?: return
         val container = rootContainer ?: return
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
-        lp.width = minOf(dp(348), context.resources.displayMetrics.widthPixels - dp(24))
+        lp.width = minOf(dp(340), context.resources.displayMetrics.widthPixels - dp(28))
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT
         lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -1066,20 +1075,20 @@ class AgentOverlayNotchManager(private val context: Context) {
         val container = rootContainer ?: return
         ensureExpandedFocusable(popKeyboard)
 
-        // Expanded card: Pure Pitch Black (#000000), 0dp sharp corners, 1dp monochrome border
+        // Expanded card: Pure Pitch Black (#000000), 0dp sharp corners, 1px hairline border
         (container.background as? GradientDrawable)?.apply {
             cornerRadius = 0f
             setColor(Color.BLACK)
-            setStroke(dp(1), Color.parseColor("#333333"))
+            setStroke(1, Color.parseColor("#222222"))
         }
 
         compactRowView?.visibility = View.GONE
         expandedContainerView?.visibility = View.VISIBLE
         updateExpandedState()
 
-        container.scaleX = 0.94f
-        container.scaleY = 0.94f
-        container.alpha = 0.92f
+        container.scaleX = 0.96f
+        container.scaleY = 0.96f
+        container.alpha = 0.94f
 
         container.isFocusableInTouchMode = true
         container.setOnKeyListener { _, keyCode, event ->
@@ -1100,8 +1109,8 @@ class AgentOverlayNotchManager(private val context: Context) {
             .scaleX(1.0f)
             .scaleY(1.0f)
             .alpha(1.0f)
-            .setDuration(200L)
-            .setInterpolator(OvershootInterpolator(1.08f))
+            .setDuration(180L)
+            .setInterpolator(DecelerateInterpolator())
             .start()
 
         if (popKeyboard) {
@@ -1259,25 +1268,24 @@ class AgentOverlayNotchManager(private val context: Context) {
         questionActionRow?.visibility = if (hasPendingQuestion) View.VISIBLE else View.GONE
 
         if (hasPendingQuestion) {
-            expandedStatusView?.text = "ONAY / SORU"
-            agentMessageView?.text = "- $question"
+            expandedStatusView?.text = ""
+            agentMessageView?.text = if (question!!.startsWith("-")) question else "- $question"
             agentMessageView?.visibility = View.VISIBLE
-            inputEditText?.hint = "Yanıt yazın veya üstten onaylayın..."
+            inputEditText?.hint = "Yanıt yaz..."
         } else if (!reply.isNullOrBlank()) {
-            expandedStatusView?.text = if (isAlarmRinging) "ALARM" else "BİLDİRİM"
-            agentMessageView?.text = reply
+            expandedStatusView?.text = ""
+            val formattedReply = if (reply.startsWith("-") || reply.startsWith("⏰")) reply else "- $reply"
+            agentMessageView?.text = formattedReply
             agentMessageView?.visibility = View.VISIBLE
-            inputEditText?.hint = "Not, alarm veya mesaj yaz..."
+            inputEditText?.hint = "Not veya soru yaz..."
         } else {
             agentMessageView?.visibility = View.GONE
             agentMessageView?.text = ""
-            inputEditText?.hint = "Not, alarm veya mesaj yaz..."
+            inputEditText?.hint = "Not veya soru yaz..."
             expandedStatusView?.text = when (currentState) {
-                NotchState.IDLE -> if (hasActiveCountdown) "GERİ SAYIM AKTİF" else "HAZIR"
-                NotchState.THINKING -> "DÜŞÜNÜYOR..."
-                NotchState.ACTIVE -> "İŞLENİYOR..."
-                NotchState.COMPLETED -> "HAZIR"
-                NotchState.FAILED -> "HAZIR"
+                NotchState.THINKING -> "DÜŞÜNÜYOR"
+                NotchState.ACTIVE -> "İŞLİYOR"
+                else -> ""
             }
         }
         refreshSendButtonVisual()
