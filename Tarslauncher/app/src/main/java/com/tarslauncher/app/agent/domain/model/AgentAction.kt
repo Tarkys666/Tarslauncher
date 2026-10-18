@@ -1,7 +1,10 @@
 package com.tarslauncher.app.agent.domain.model
 
+import com.tarslauncher.app.data.model.WorkspaceItemType
+import com.tarslauncher.app.data.model.WorkspacePriority
+
 /**
- * Represents an action determined by the AI Agent to interact with the device.
+ * Represents a Notion-style Workspace action determined by the TARS LLM Brain.
  */
 sealed interface AgentAction {
     val thought: String
@@ -9,182 +12,54 @@ sealed interface AgentAction {
         get() = -1
 
     fun toOperationalSignature(): String = when (this) {
-        is OpenApp -> "OpenApp($appName)"
-        is OpenUrl -> "OpenUrl($url)"
-        is SearchWeb -> "SearchWeb($platform, $query)"
-        is Tap -> "Tap($targetId)"
-        is LongPress -> "LongPress($targetId)"
-        is TypeText -> "TypeText($targetId, $text, pressEnter=$pressEnter)"
-        is Scroll -> "Scroll($direction)"
-        is Back -> "Back"
-        is Home -> "Home"
-        is Recents -> "Recents"
-        is Notifications -> "Notifications"
-        is QuickSettings -> "QuickSettings"
-        is SetVolume -> "SetVolume($mode, level=$level)"
-        is MediaControl -> "MediaControl($command)"
-        is Flashlight -> "Flashlight($enabled)"
-        is TakeScreenshot -> "TakeScreenshot"
-        is LockScreen -> "LockScreen"
-        is OpenSettings -> "OpenSettings($section)"
-        is SetAlarm -> "SetAlarm($hour:$minute, $message)"
-        is SetTimer -> "SetTimer(${seconds}s, $message)"
-        is ClipboardSet -> "ClipboardSet(${text.take(30)})"
-        is NoteAction -> "NoteAction($action, ${text.take(30)})"
-        is Wait -> "Wait(${durationMs}ms)"
+        is CreateWorkspaceItem -> "Create(${itemType.name}, ${title.take(30)})"
+        is CompleteWorkspaceItem -> "Complete($targetQuery)"
+        is DeleteWorkspaceItem -> "Delete($targetQuery)"
+        is ClearCompletedTasks -> "ClearCompletedTasks"
+        is ClearAllWorkspace -> "ClearAllWorkspace"
+        is QueryWorkspace -> "Query($filterType)"
         is AskUser -> "AskUser($question)"
         is Done -> "Done"
         is Unknown -> "Unknown($rawAction)"
     }
 
-    data class OpenApp(
+    data class CreateWorkspaceItem(
         override val thought: String,
-        val appName: String,
+        val itemType: WorkspaceItemType,
+        val title: String,
+        val content: String = "",
+        val priority: WorkspacePriority = WorkspacePriority.MEDIUM,
+        val checklist: List<String> = emptyList(),
+        val tags: List<String> = emptyList(),
         override val stepIndex: Int = -1
     ) : AgentAction
 
-    data class OpenUrl(
+    data class CompleteWorkspaceItem(
         override val thought: String,
-        val url: String,
+        val targetQuery: String,
         override val stepIndex: Int = -1
     ) : AgentAction
 
-    data class SearchWeb(
+    data class DeleteWorkspaceItem(
         override val thought: String,
-        val query: String,
-        val platform: String = "google",
+        val targetQuery: String,
         override val stepIndex: Int = -1
     ) : AgentAction
 
-    data class Tap(
-        override val thought: String,
-        val targetId: Int,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class LongPress(
-        override val thought: String,
-        val targetId: Int,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class TypeText(
-        override val thought: String,
-        val targetId: Int,
-        val text: String,
-        val pressEnter: Boolean = true,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class Scroll(
-        override val thought: String,
-        val direction: Direction,
-        override val stepIndex: Int = -1
-    ) : AgentAction {
-        enum class Direction {
-            UP,
-            DOWN;
-
-            companion object {
-                fun fromString(value: String): Direction =
-                    if (value.equals("up", ignoreCase = true)) UP else DOWN
-            }
-        }
-    }
-
-    data class Back(
+    data class ClearCompletedTasks(
         override val thought: String,
         override val stepIndex: Int = -1
     ) : AgentAction
 
-    data class Home(
+    data class ClearAllWorkspace(
         override val thought: String,
         override val stepIndex: Int = -1
     ) : AgentAction
 
-    data class Recents(
+    data class QueryWorkspace(
         override val thought: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class Notifications(
-        override val thought: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class QuickSettings(
-        override val thought: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class SetVolume(
-        override val thought: String,
-        val mode: String,
-        val level: Int = -1,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class MediaControl(
-        override val thought: String,
-        val command: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class Flashlight(
-        override val thought: String,
-        val enabled: Boolean,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class TakeScreenshot(
-        override val thought: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class LockScreen(
-        override val thought: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class OpenSettings(
-        override val thought: String,
-        val section: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class SetAlarm(
-        override val thought: String,
-        val hour: Int,
-        val minute: Int,
-        val message: String = "",
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class SetTimer(
-        override val thought: String,
-        val seconds: Int,
-        val message: String = "",
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class ClipboardSet(
-        override val thought: String,
-        val text: String,
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class NoteAction(
-        override val thought: String,
-        val action: String, // "add", "list", "delete", "clear"
-        val text: String = "",
-        val title: String = "",
-        val noteId: String = "",
-        override val stepIndex: Int = -1
-    ) : AgentAction
-
-    data class Wait(
-        override val thought: String,
-        val durationMs: Long,
+        val filterType: String = "ALL",
+        val summaryResponse: String = "",
         override val stepIndex: Int = -1
     ) : AgentAction
 

@@ -141,9 +141,10 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showNotesDialog by remember { mutableStateOf(false) }
+    var showAgentSheet by remember { mutableStateOf(false) }
 
-    val noteManager = remember { com.tarslauncher.app.data.notes.NoteManager(context) }
-    val savedNotes by noteManager.notesFlow.collectAsState(initial = emptyList())
+    val workspaceRepo = remember { com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository(context) }
+    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
     
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -160,7 +161,7 @@ fun SettingsScreen(
         appVersion,
         isSyncing,
         lastBackupTime,
-        savedNotes.size
+        workspaceItems.size
     ) {
         listOf(
             SettingsItem.Category(
@@ -296,12 +297,18 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "TARS NOTES (NOT DEFTERİ)",
+            title = "TARS AGENT & WORKSPACE",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "Manage Notes",
-                    description = if (savedNotes.isEmpty()) "Henüz kayıtlı not yok" else "${savedNotes.size} not kayıtlı (Görüntüle / Ekle / Sil)",
+                    title = "TARS Agent Konsolu",
+                    description = "LLM API anahtarı, Dynamic Island ve hızlı komut konsolu",
+                    type = SettingType.BUTTON,
+                    onClick = { showAgentSheet = true }
+                ),
+                SettingsItem.Setting(
+                    title = "TARS Workspace (Görev / Not / Fikir)",
+                    description = if (workspaceItems.isEmpty()) "Henüz kayıt yok (Google Auth & Firebase)" else "${workspaceItems.size} bulut kaydı (Görev, Not ve Fikirleri Yönet)",
                     type = SettingType.BUTTON,
                     onClick = { showNotesDialog = true }
                 )
@@ -624,7 +631,33 @@ fun SettingsScreen(
 
     if (showNotesDialog) {
         ManageNotesDialog(
-            onDismiss = { showNotesDialog = false }
+            onDismiss = { showNotesDialog = false },
+            onOpenAgentSettings = {
+                showNotesDialog = false
+                showAgentSheet = true
+            }
+        )
+    }
+
+    if (showAgentSheet) {
+        val agentViewModel = remember(context) {
+            val owner = context as? androidx.lifecycle.ViewModelStoreOwner
+            if (owner != null) {
+                androidx.lifecycle.ViewModelProvider(
+                    owner,
+                    com.tarslauncher.app.agent.ui.AgentViewModel.Factory(context.applicationContext as android.app.Application)
+                )[com.tarslauncher.app.agent.ui.AgentViewModel::class.java]
+            } else {
+                com.tarslauncher.app.agent.ui.AgentViewModel(context.applicationContext as android.app.Application)
+            }
+        }
+        com.tarslauncher.app.agent.ui.AgentBottomSheet(
+            viewModel = agentViewModel,
+            onDismissRequest = { showAgentSheet = false },
+            onOpenWorkspace = {
+                showAgentSheet = false
+                showNotesDialog = true
+            }
         )
     }
 

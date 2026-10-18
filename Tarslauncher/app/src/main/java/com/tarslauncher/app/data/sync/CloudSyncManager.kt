@@ -60,7 +60,6 @@ class CloudSyncManager(
             val foldersJson = dataStore.getFoldersJson() ?: "[]"
             val pwasJson = dataStore.getPwasJson() ?: "[]"
             val usageStatsJson = dataStore.getUsageStatsJson() ?: "[]"
-            val notesJson = dataStore.getNotesJson() ?: "[]"
 
             val settingsMap = hashMapOf<String, Any?>(
                 "showAppDrawer" to currentSettings.showAppDrawer,
@@ -79,7 +78,6 @@ class CloudSyncManager(
                 "foldersJson" to foldersJson,
                 "pwasJson" to pwasJson,
                 "usageStatsJson" to usageStatsJson,
-                "notesJson" to notesJson,
                 "settings" to settingsMap
             )
 
@@ -126,11 +124,6 @@ class CloudSyncManager(
             val usageStatsJson = snapshot.getString("usageStatsJson")
             if (!usageStatsJson.isNullOrBlank()) {
                 dataStore.saveUsageStatsJson(usageStatsJson)
-            }
-
-            val notesJson = snapshot.getString("notesJson")
-            if (!notesJson.isNullOrBlank()) {
-                dataStore.saveNotesJson(notesJson)
             }
 
             val updatedAt = snapshot.getLong("updatedAt") ?: System.currentTimeMillis()

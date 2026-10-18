@@ -1,24 +1,19 @@
 package com.tarslauncher.app.agent.ui
 
 import android.app.Application
-import android.content.Context
-import android.content.Intent
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.tarslauncher.app.agent.data.AgentPreferences
-import com.tarslauncher.app.agent.data.AgentProvider
-import com.tarslauncher.app.agent.data.GeminiAgentBrain
-import com.tarslauncher.app.agent.data.GeminiRemoteDataSource
 import com.tarslauncher.app.agent.data.GroqAgentBrain
 import com.tarslauncher.app.agent.data.GroqRemoteDataSource
-import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
 import com.tarslauncher.app.agent.domain.model.AgentEvent
 import com.tarslauncher.app.agent.runner.AgentLoopRunner
 import com.tarslauncher.app.agent.service.TarsAccessibilityService
+import com.tarslauncher.app.data.sync.GoogleAuthManager
+import com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,17 +24,18 @@ import kotlinx.coroutines.launch
 class AgentViewModel(
     application: Application,
     private val preferences: AgentPreferences = AgentPreferences(application),
-    private val datasetCollector: AgentDatasetCollector = AgentDatasetCollector(application)
+    private val authManager: GoogleAuthManager = GoogleAuthManager(application),
+    private val workspaceRepository: FirebaseWorkspaceRepository = FirebaseWorkspaceRepository(application, authManager)
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
         AgentUiState(
             provider = preferences.getProvider(),
-            geminiApiKey = preferences.getGeminiApiKey(),
             groqApiKey = preferences.getGroqApiKey(),
             groqModel = preferences.getGroqModel(),
-            supabaseUrl = preferences.getSupabaseUrl(),
-            supabaseAnonKey = preferences.getSupabaseAnonKey(),
+            googleWebClientId = preferences.getGoogleWebClientId(),
+            isGoogleSignedIn = authManager.isGoogleSignedIn,
+            userEmail = authManager.currentUser?.email,
             isServiceActive = TarsAccessibilityService.isConnected(),
             isAgentEnabled = preferences.isAgentEnabled()
         )
@@ -55,22 +51,25 @@ class AgentViewModel(
                 _uiState.update { it.copy(isServiceActive = active) }
             }
         }
-        refreshDatasetCount()
-    }
-
-    fun refreshDatasetCount() {
         viewModelScope.launch {
-            val count = datasetCollector.getDatasetCount()
-            _uiState.update { it.copy(datasetCount = count) }
+            authManager.authUserFlow.collect { user ->
+                _uiState.update {
+                    it.copy(
+                        isGoogleSignedIn = user != null && !user.isAnonymous,
+                        userEmail = user?.email
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            workspaceRepository.workspaceItemsFlow.collect { items ->
+                _uiState.update { it.copy(workspaceCount = items.size) }
+            }
         }
     }
 
     fun onTaskInputChanged(newInput: String) {
         _uiState.update { it.copy(taskInput = newInput) }
-    }
-
-    fun onProviderChanged(newProvider: AgentProvider) {
-        // Locked to GROQ
     }
 
     fun onSaveApiKey(newApiKey: String) {
@@ -79,16 +78,10 @@ class AgentViewModel(
         _uiState.update { it.copy(groqApiKey = trimmed) }
     }
 
-    fun onSaveGroqModel(model: String) {
-        // Fixed to GroqRemoteDataSource.DEFAULT_GROQ_MODEL
-    }
-
-    fun onSaveSupabaseConfig(url: String, key: String) {
-        val trimmedUrl = url.trim()
-        val trimmedKey = key.trim()
-        preferences.setSupabaseUrl(trimmedUrl)
-        preferences.setSupabaseAnonKey(trimmedKey)
-        _uiState.update { it.copy(supabaseUrl = trimmedUrl, supabaseAnonKey = trimmedKey) }
+    fun onSaveGoogleWebClientId(clientId: String) {
+        val trimmed = clientId.trim()
+        preferences.setGoogleWebClientId(trimmed)
+        _uiState.update { it.copy(googleWebClientId = preferences.getGoogleWebClientId()) }
     }
 
     fun onToggleAgentEnabled(enabled: Boolean) {
@@ -129,16 +122,6 @@ class AgentViewModel(
             return
         }
 
-        if (!TarsAccessibilityService.isConnected()) {
-            _uiState.update {
-                it.copy(
-                    isFailure = true,
-                    finalMessage = "TARS Erişilebilirlik Servisi aktif değil. Lütfen ayarlardan servisi açın."
-                )
-            }
-            return
-        }
-
         currentExecutionJob?.cancel()
         TarsAccessibilityService.getInstance()?.overlayNotch?.onStopRequested = {
             stopTask()
@@ -151,8 +134,8 @@ class AgentViewModel(
                 finalMessage = null,
                 currentPlan = null,
                 pendingQuestion = null,
-                pendingConfirmation = null,
-                logs = listOf("Başlatılıyor [Qwen 3.8-27B]...")
+                taskInput = "",
+                logs = listOf("Başlatılıyor [Qwen 3.8-27B // Workspace Brain]...")
             )
         }
 
@@ -165,9 +148,7 @@ class AgentViewModel(
         val runner = AgentLoopRunner(
             context = getApplication(),
             agentBrain = brain,
-            datasetCollector = datasetCollector,
-            providerName = "GROQ",
-            modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+            workspaceRepository = workspaceRepository
         )
 
         currentExecutionJob = viewModelScope.launch {
@@ -178,25 +159,17 @@ class AgentViewModel(
     }
 
     fun stopTask() {
-        _uiState.value.pendingConfirmation?.userDecision?.complete(false)
         _uiState.value.pendingQuestion?.userAnswer?.complete(null)
         currentExecutionJob?.cancel()
         currentExecutionJob = null
-        TarsAccessibilityService.getInstance()?.overlayNotch?.hide()
+        TarsAccessibilityService.getInstance()?.overlayNotch?.showIdle()
         _uiState.update {
             it.copy(
                 isRunning = false,
-                pendingConfirmation = null,
                 pendingQuestion = null,
-                logs = it.logs + "[Durduruldu] Görev iptal edildi."
+                logs = it.logs + "[Durduruldu] İşlem iptal edildi."
             )
         }
-    }
-
-    fun onConfirmDecision(approved: Boolean) {
-        val confirmation = _uiState.value.pendingConfirmation ?: return
-        confirmation.userDecision.complete(approved)
-        _uiState.update { it.copy(pendingConfirmation = null) }
     }
 
     fun onAnswerQuestion(answer: String?) {
@@ -205,36 +178,13 @@ class AgentViewModel(
         _uiState.update { it.copy(pendingQuestion = null) }
     }
 
-    fun exportDataset(context: Context) {
-        val intent = datasetCollector.createExportIntent(context)
-        if (intent != null) {
-            val chooser = Intent.createChooser(intent, "TARS Eğitim Veri Setini Paylaş (.jsonl)").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(chooser)
-        } else {
-            Toast.makeText(context, "Henüz toplanmış bir eğitim verisi yok.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun clearDataset(context: Context) {
-        viewModelScope.launch {
-            val cleared = datasetCollector.clearDataset()
-            refreshDatasetCount()
-            if (cleared) {
-                Toast.makeText(context, "Eğitim veri seti sıfırlandı.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     private fun handleAgentEvent(event: AgentEvent) {
         when (event) {
             is AgentEvent.StatusLog -> {
                 _uiState.update { it.copy(logs = it.logs + event.message) }
-                refreshDatasetCount()
             }
             is AgentEvent.AwaitingConfirmation -> {
-                _uiState.update { it.copy(pendingConfirmation = event) }
+                event.userDecision.complete(true)
             }
             is AgentEvent.QuestionToUser -> {
                 _uiState.update {
@@ -243,7 +193,6 @@ class AgentViewModel(
                         logs = it.logs + "> [Soru] ${event.question}"
                     )
                 }
-                refreshDatasetCount()
             }
             is AgentEvent.PlanCreated -> {
                 _uiState.update { it.copy(currentPlan = event.plan) }
@@ -256,26 +205,22 @@ class AgentViewModel(
                     it.copy(
                         isRunning = false,
                         pendingQuestion = null,
-                        pendingConfirmation = null,
                         finalMessage = event.summary,
                         isFailure = false,
                         logs = it.logs + "> [Tamamlandı] ${event.summary}"
                     )
                 }
-                refreshDatasetCount()
             }
             is AgentEvent.Failure -> {
                 _uiState.update {
                     it.copy(
                         isRunning = false,
                         pendingQuestion = null,
-                        pendingConfirmation = null,
                         finalMessage = event.errorReason,
                         isFailure = true,
                         logs = it.logs + "> [Hata] ${event.errorReason}"
                     )
                 }
-                refreshDatasetCount()
             }
         }
     }

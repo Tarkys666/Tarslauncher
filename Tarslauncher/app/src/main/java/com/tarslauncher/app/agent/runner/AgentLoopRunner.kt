@@ -1,748 +1,405 @@
 package com.tarslauncher.app.agent.runner
 
 import android.content.Context
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.tarslauncher.app.agent.data.firebase.FirebaseAgentLogger
-import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
-import com.tarslauncher.app.agent.data.supabase.SupabaseAgentLogger
+import com.tarslauncher.app.agent.data.AgentPreferences
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
-import com.tarslauncher.app.agent.domain.memory.AgentMemoryManager
 import com.tarslauncher.app.agent.domain.model.AgentAction
 import com.tarslauncher.app.agent.domain.model.AgentEvent
 import com.tarslauncher.app.agent.domain.model.AgentPlan
 import com.tarslauncher.app.agent.domain.model.ChatMessage
 import com.tarslauncher.app.agent.domain.model.PlanStep
 import com.tarslauncher.app.agent.domain.prompt.AgentPromptProvider
-import com.tarslauncher.app.agent.domain.safety.SafetyGate
-import com.tarslauncher.app.agent.domain.skill.AgentSkillManager
-import android.os.PowerManager
 import com.tarslauncher.app.agent.service.AgentOverlayNotchManager
 import com.tarslauncher.app.agent.service.TarsAccessibilityService
+import com.tarslauncher.app.data.model.ChecklistItem
+import com.tarslauncher.app.data.model.WorkspaceItem
+import com.tarslauncher.app.data.model.WorkspaceItemType
+import com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
-import java.util.UUID
+import kotlinx.coroutines.withTimeoutOrNull
 
+/**
+ * Executes Notion-style Workspace + LLM requests and updates the Dynamic Island overlay.
+ */
 class AgentLoopRunner(
     private val context: Context,
     private val agentBrain: AgentBrain,
-    private val safetyGate: SafetyGate = SafetyGate(),
-    private val datasetCollector: AgentDatasetCollector = AgentDatasetCollector(context),
-    private val maxSteps: Int = 25,
-    private val providerName: String = "GEMINI",
-    private val modelName: String = "DEFAULT"
+    private val workspaceRepository: FirebaseWorkspaceRepository = FirebaseWorkspaceRepository(context)
 ) {
 
-    private val actionExecutor = ActionExecutor(context)
-    private val memoryManager = AgentMemoryManager(context)
-    private val skillManager = AgentSkillManager(context)
-    private val firebaseLogger = FirebaseAgentLogger(context)
-    private val supabaseLogger = SupabaseAgentLogger(context)
-
     fun runAgent(userGoal: String): Flow<AgentEvent> = flow {
-        val service = TarsAccessibilityService.getInstance()
-        if (service == null) {
-            emit(AgentEvent.Failure("TARS Erişilebilirlik Servisi aktif değil. Lütfen ayarlardan servisi açın."))
-            return@flow
-        }
-
-        val prefs = com.tarslauncher.app.agent.data.AgentPreferences(context)
+        val prefs = AgentPreferences(context)
         if (!prefs.isAgentEnabled()) {
             emit(AgentEvent.Failure("Güvenlik Kilidi: TARS Ajanı ayarlardan tamamen kapatılmış durumda."))
             return@flow
         }
 
-        val sessionId = "tars_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
-        emit(AgentEvent.StatusLog("Hedef başlatılıyor: \"$userGoal\""))
-
-        // 1. Önceki oturum hafızasını (Session Continuity) sorgula
-        val lastSession = memoryManager.getLastSessionMemory()
-        val memoryContext = lastSession?.let {
-            "Son Görev: \"${it.lastGoal}\", Son Durum: \"${it.lastStatus}\", Özet: \"${it.lastSummary}\", Paket: \"${it.lastAppPackage}\""
-        }
-        if (memoryContext != null) {
-            emit(AgentEvent.StatusLog("Önceki görev bağlamı hatırlandı."))
+        val cleanGoal = userGoal.trim().take(MAX_PROMPT_LENGTH)
+        if (cleanGoal.isBlank()) {
+            emit(AgentEvent.Failure("Boş komut işlenemez."))
+            return@flow
         }
 
-        // 2. İlgili Markdown Beceri (Skill) tarifini ara
-        val relevantSkill = skillManager.findRelevantSkill(userGoal)
-        if (relevantSkill != null) {
-            emit(AgentEvent.StatusLog("Öğrenilmiş ilgili beceri (skill) yüklendi."))
-        }
+        val service = TarsAccessibilityService.getInstance()
+        emit(AgentEvent.StatusLog("Girdi analiz ediliyor: \"${cleanGoal.take(120)}\""))
 
-        // 3. Başlangıç Planı (Tek Geçişli / Single-Pass Planlama ile ekstra API çağrısı ve Rate Limit önlenir)
-        val initialSteps = listOf(PlanStep(index = 1, title = userGoal, isCompleted = false, isInProgress = true))
-        var currentPlan: AgentPlan? = AgentPlan(goal = userGoal, steps = initialSteps)
-        emit(AgentEvent.PlanCreated(currentPlan!!))
-        service.overlayNotch.showOrUpdate(
+        val initialSteps = listOf(
+            PlanStep(index = 1, title = "Niyet ve içerik analizi (LLM)", isCompleted = false, isInProgress = true),
+            PlanStep(index = 2, title = "Firebase Workspace senkronizasyonu", isCompleted = false, isInProgress = false)
+        )
+        var currentPlan = AgentPlan(goal = cleanGoal, steps = initialSteps)
+        emit(AgentEvent.PlanCreated(currentPlan))
+
+        service?.overlayNotch?.showOrUpdate(
             stepNumber = 1,
             plan = currentPlan,
-            liveDetail = "Planlıyor",
+            liveDetail = "Düşünüyor",
             state = AgentOverlayNotchManager.NotchState.THINKING
         )
 
-        // Supabase & Firebase Oturum Kaydı Başlatma
-        val planJsonArray = JsonArray().apply {
-            currentPlan?.steps?.forEach { s ->
-                add(JsonObject().apply {
-                    addProperty("step", s.index)
-                    addProperty("title", s.title)
-                })
-            }
-        }
-        val initialSessionObj = JsonObject().apply {
-            addProperty("id", sessionId)
-            addProperty("goal", userGoal)
-            addProperty("status", "IN_PROGRESS")
-            add("plan", planJsonArray)
-            addProperty("total_steps", 0)
-        }
-        supabaseLogger.logSession(initialSessionObj)
-
-        firebaseLogger.logSessionStart(
-            sessionId = sessionId,
-            goal = userGoal,
-            plan = currentPlan,
-            provider = providerName,
-            model = modelName
+        // 1. Mevcut Firebase Workspace kayıtlarını al
+        val existingItems = workspaceRepository.getItems()
+        val systemPrompt = AgentPromptProvider.buildWorkspaceSystemPrompt(existingItems)
+        val history = mutableListOf(
+            ChatMessage(ChatMessage.Role.USER, cleanGoal)
         )
 
-        val systemPrompt = AgentPromptProvider.buildSystemPrompt(
-            relevantSkillMarkdown = relevantSkill,
-            sessionMemoryContext = memoryContext
+        if (!currentCoroutineContext().isActive) return@flow
+
+        // 2. LLM Kararını Al
+        val decisionResult = agentBrain.decideNextAction(
+            systemPrompt = systemPrompt,
+            history = history
         )
 
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val history = mutableListOf<ChatMessage>()
-        history.add(ChatMessage(ChatMessage.Role.USER, "HEDEF GÖREV: $userGoal"))
-
-        var previousActionSignature = ""
-        var identicalActionRepeatCount = 0
-        val recentActionSignatures = mutableListOf<String>()
-        var previousScreenContent = ""
-        var consecutiveUnchangedScreenCount = 0
-        var lastActionWasWait = false
-        val successfulActionSignatures = mutableListOf<String>()
-        var lastPackageName = ""
-
-        for (step in 1..maxSteps) {
-            if (!currentCoroutineContext().isActive || !prefs.isAgentEnabled()) {
-                if (!prefs.isAgentEnabled()) {
-                    emit(AgentEvent.Failure("Ajan güvenlik kilidi devreye girdi ve işlem durduruldu."))
-                }
-                return@flow
-            }
-
-            if (powerManager?.isInteractive == false) {
-                val screenOffMsg = "Ekran kapandı veya cihaz kilitlendi, işlem güvenlik sebebiyle sonlandırıldı."
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = "Ekran Kapalı",
-                    state = AgentOverlayNotchManager.NotchState.FAILED
-                )
-                logSessionTermination(sessionId, userGoal, "SCREEN_OFF", screenOffMsg, step, lastPackageName)
-                emit(AgentEvent.Failure(screenOffMsg))
-                return@flow
-            }
-
-            // 1. Ekranı dökümle ve değişim kontrolü yap (Screen State Diffing)
-            val screenDump = service.captureScreenDump()
-            lastPackageName = screenDump.packageName
-
-            // Pre-Flight Privacy Gate: Hassas uygulama ise LLM çağrılmadan önce iptal et
-            if (safetyGate.isSensitiveAppPackage(screenDump.packageName)) {
-                val privacyMsg = "Güvenlik Engeli: Hassas uygulama tespit edildi (${screenDump.packageName}). LLM gizlilik koruması nedeniyle işlem iptal edildi."
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = "Gizlilik Engeli",
-                    state = AgentOverlayNotchManager.NotchState.FAILED
-                )
-                datasetCollector.recordStep(
-                    sessionId = sessionId,
-                    step = step,
-                    goal = userGoal,
-                    systemPrompt = systemPrompt,
-                    screenDump = screenDump.formattedContent,
-                    rawModelResponse = "ENGEL: Pre-Flight Privacy Gate ($privacyMsg)",
-                    parsedAction = null,
-                    executionResult = privacyMsg,
-                    provider = providerName,
-                    model = modelName,
-                    status = "PRIVACY_BLOCKED"
-                )
-                logSessionTermination(sessionId, userGoal, "PRIVACY_BLOCKED", privacyMsg, step, lastPackageName)
-                emit(AgentEvent.Failure(privacyMsg))
-                return@flow
-            }
-
-            val screenUnchanged = step > 1 && !lastActionWasWait && screenDump.formattedContent == previousScreenContent
-            previousScreenContent = screenDump.formattedContent
-
-            if (screenUnchanged) {
-                consecutiveUnchangedScreenCount++
-            } else {
-                consecutiveUnchangedScreenCount = 0
-            }
-
-            if (consecutiveUnchangedScreenCount >= 3) {
-                val unchangedMsg = "Ekran ardışık 3 adım boyunca değişmedi. Batarya ve kota koruması için döngü sonlandırıldı."
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = "Ekran Değişmedi",
-                    state = AgentOverlayNotchManager.NotchState.FAILED
-                )
-                datasetCollector.recordStep(
-                    sessionId = sessionId,
-                    step = step,
-                    goal = userGoal,
-                    systemPrompt = systemPrompt,
-                    screenDump = screenDump.formattedContent,
-                    rawModelResponse = "ENGEL: Ekran 3 ardışık adım değişmedi",
-                    parsedAction = null,
-                    executionResult = unchangedMsg,
-                    provider = providerName,
-                    model = modelName,
-                    status = "FAILED_UNCHANGED_SCREEN"
-                )
-                logSessionTermination(sessionId, userGoal, "FAILED_UNCHANGED_SCREEN", unchangedMsg, step, lastPackageName)
-                emit(AgentEvent.Failure(unchangedMsg))
-                return@flow
-            }
-
-            val tagSanitizerRegex = Regex("""</?\s*untrusted_[a-zA-Z0-9_]+\s*>""", RegexOption.IGNORE_CASE)
-            val sanitizedRawDump = tagSanitizerRegex.replace(screenDump.formattedContent, "[FILTERED_TAG]")
-            val unchangedWarning = if (screenUnchanged) {
-                "[SİSTEM UYARISI: Önceki eylemden sonra ekran DEĞİŞMEDİ! Aynı öğeye tekrar dokunmak yerine farklı bir öğe seçin, scroll yapın veya back kullanın.]\n"
-            } else {
-                ""
-            }
-            val noteDirective = if (isNoteGoal(userGoal) && step == 1) {
-                """
-                [ÖZEL NOT ALMA TALİMATI]: Kullanıcının hedefi doğrudan bir NOT alma/yönetme işlemidir!
-                - KESİNLİKLE hiçbir harici not uygulaması (Keep, Samsung Notes, Not Defteri vb.) AÇMA!
-                - KESİNLİKLE ekranda arayüzü (UI) açıp tek tek yazmaya (type/tap) ÇALIŞMA!
-                - Kullanıcının ilettiği mesajı ("$userGoal") dikkatle anla ve düzelt:
-                  * İmla ve ifade bozukluklarını düzelt, emir kelimelerini ("not al", "bunu kaydet" vb.) temizle.
-                  * Anlamlı bir 'title' (başlık) ve anlaşılır düzgün bir 'text' (içerik) oluştur.
-                - Doğrudan tek adımda yerleşik 'note' aracını çağır:
-                  {"action": "note", "args": {"action": "add", "title": "...", "text": "..."}}
-
-                """.trimIndent()
-            } else {
-                ""
-            }
-            val firstStepPlanHint = if (step == 1) {
-                "[İLK ADIM NOTU: Hedefi 2-4 kısa aşamaya bölerek JSON yanıtına \"replan\": [\"1. aşama\", \"2. aşama\", ...] dizisini ekle ve ilk eylemini (action) üret.]\n"
-            } else {
-                ""
-            }
-            val sanitizedScreenContent = "$noteDirective$firstStepPlanHint$unchangedWarning<untrusted_screen_state>\n$sanitizedRawDump\n</untrusted_screen_state>"
-
-            // Token Tasarrufu (Rate Limit Koruması):
-            // Geçmiş adımların tam ekran ağaçları yerine sadece kompakt özetleri history'de tutulur;
-            // tam ekran ağacı YALNIZCA mevcut adım (currentScreenMsg) için gönderilir!
-            val boundedHistory = if (history.size > 13) {
-                listOf(history.first()) + history.takeLast(12)
-            } else {
-                history
-            }
-            val currentScreenMsg = ChatMessage(ChatMessage.Role.USER, "AKTİF EKRAN (Adım $step):\n$sanitizedScreenContent")
-            val requestHistory = boundedHistory + currentScreenMsg
-
-            emit(AgentEvent.StatusLog("Adım $step/$maxSteps: Ekran inceleniyor ve karar alınıyor..."))
-            service.overlayNotch.showOrUpdate(
-                stepNumber = step,
+        if (decisionResult.isFailure) {
+            val errorMsg = decisionResult.exceptionOrNull()?.message ?: "Bilinmeyen model hatası"
+            service?.overlayNotch?.showOrUpdate(
+                stepNumber = 1,
                 plan = currentPlan,
-                liveDetail = "İnceliyor",
+                liveDetail = "Hata",
+                state = AgentOverlayNotchManager.NotchState.FAILED
+            )
+            emit(AgentEvent.Failure("Yapay zeka yanıt veremedi: $errorMsg"))
+            return@flow
+        }
+
+        val decision = decisionResult.getOrThrow()
+        var action = decision.action
+
+        if (!decision.replan.isNullOrEmpty()) {
+            val planSteps = decision.replan.mapIndexed { idx, title ->
+                PlanStep(index = idx + 1, title = title, isCompleted = idx == 0, isInProgress = idx == 1)
+            }
+            currentPlan = AgentPlan(goal = userGoal, steps = planSteps)
+            emit(AgentEvent.PlanStepUpdated(currentPlan))
+        } else {
+            currentPlan = currentPlan.markStepInProgress(2)
+            emit(AgentEvent.PlanStepUpdated(currentPlan))
+        }
+
+        if (action.thought.isNotBlank()) {
+            emit(AgentEvent.StatusLog("Analiz: ${action.thought}"))
+        }
+
+        // Eğer LLM ek soru sorduysa (AskUser)
+        if (action is AgentAction.AskUser) {
+            service?.overlayNotch?.showOrUpdate(
+                stepNumber = 1,
+                plan = currentPlan,
+                liveDetail = "? ${action.question}",
                 state = AgentOverlayNotchManager.NotchState.THINKING
             )
+            val answerDeferred = CompletableDeferred<String?>()
+            emit(AgentEvent.QuestionToUser(action.question, answerDeferred))
 
-            // 2. Karar al
-            val decisionResult = agentBrain.decideNextAction(
-                systemPrompt = systemPrompt,
-                history = requestHistory
-            )
+            val userReply = withTimeoutOrNull(60_000L) {
+                answerDeferred.await()
+            }?.trim()
 
-            if (decisionResult.isFailure) {
-                val errorMsg = decisionResult.exceptionOrNull()?.message ?: "Bilinmeyen model hatası"
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
+            if (userReply.isNullOrBlank()) {
+                val cancelMsg = "Kullanıcı soruyu yanıtlamadı veya süre aşıldı."
+                service?.overlayNotch?.showOrUpdate(
+                    stepNumber = 1,
                     plan = currentPlan,
-                    liveDetail = errorMsg,
+                    liveDetail = "İptal",
                     state = AgentOverlayNotchManager.NotchState.FAILED
                 )
-                datasetCollector.recordStep(
-                    sessionId = sessionId,
-                    step = step,
-                    goal = userGoal,
-                    systemPrompt = systemPrompt,
-                    screenDump = screenDump.formattedContent,
-                    rawModelResponse = "HATA: $errorMsg",
-                    parsedAction = null,
-                    executionResult = "Model Hatası: $errorMsg",
-                    provider = providerName,
-                    model = modelName,
-                    status = "FAILED"
-                )
-
-                logSessionTermination(sessionId, userGoal, "FAILED", errorMsg, step, lastPackageName)
-                emit(AgentEvent.Failure("Yapay zeka yanıt veremedi: $errorMsg"))
+                emit(AgentEvent.Failure(cancelMsg))
                 return@flow
             }
 
-            val decision = decisionResult.getOrThrow()
-            val action = decision.action
+            emit(AgentEvent.StatusLog("Kullanıcı yanıtı: \"$userReply\""))
+            history.add(ChatMessage(ChatMessage.Role.MODEL, "SORU: ${action.question}"))
+            history.add(ChatMessage(ChatMessage.Role.USER, "YANIT: $userReply"))
 
-            if (decision.reflection.isNotBlank()) {
-                emit(AgentEvent.StatusLog("Doğrulama: ${decision.reflection}"))
+            val secondDecision = agentBrain.decideNextAction(systemPrompt, history)
+            if (secondDecision.isFailure) {
+                val err = secondDecision.exceptionOrNull()?.message ?: "Model hatası"
+                service?.overlayNotch?.showOrUpdate(
+                    stepNumber = 2,
+                    plan = currentPlan,
+                    liveDetail = "Hata",
+                    state = AgentOverlayNotchManager.NotchState.FAILED
+                )
+                emit(AgentEvent.Failure(err))
+                return@flow
             }
-            emit(AgentEvent.StatusLog("Adım $step: ${action.thought}"))
+            action = secondDecision.getOrThrow().action
+        }
 
-            // Dinamik Planlama & Yeniden Planlama (Re-Plan) kontrolü
-            if (!decision.replan.isNullOrEmpty()) {
-                if (step == 1) {
-                    val planSteps = decision.replan.mapIndexed { idx, title ->
-                        PlanStep(index = idx + 1, title = title, isCompleted = false, isInProgress = idx == 0)
+        // 3. Firebase Workspace İşlemini Uygula
+        service?.overlayNotch?.showOrUpdate(
+            stepNumber = 2,
+            plan = currentPlan,
+            liveDetail = "Kaydediyor",
+            state = AgentOverlayNotchManager.NotchState.ACTIVE
+        )
+
+        when (val finalAction = action) {
+            is AgentAction.CreateWorkspaceItem -> {
+                val checklistItems = finalAction.checklist.map { ChecklistItem(text = it) }
+                val newItem = WorkspaceItem(
+                    type = finalAction.itemType,
+                    title = finalAction.title,
+                    content = finalAction.content,
+                    checklist = checklistItems,
+                    priority = finalAction.priority,
+                    tags = finalAction.tags
+                )
+                val saveResult = workspaceRepository.addItem(newItem)
+                if (saveResult.isSuccess) {
+                    val badge = when (finalAction.itemType) {
+                        WorkspaceItemType.TASK -> "✓ Görev Eklendi"
+                        WorkspaceItemType.NOTE -> "✓ Not Kaydedildi"
+                        WorkspaceItemType.IDEA -> "✓ Fikir Eklendi"
                     }
-                    currentPlan = AgentPlan(goal = userGoal, steps = planSteps)
-                    emit(AgentEvent.PlanCreated(currentPlan!!))
-                    emit(AgentEvent.StatusLog("Mini-Plan hazırlandı (${planSteps.size} aşama)."))
-                } else {
-                    currentPlan = currentPlan?.replaceRemainingSteps(decision.replan)
-                    currentPlan?.let { updated ->
-                        emit(AgentEvent.PlanStepUpdated(updated))
-                        emit(AgentEvent.StatusLog("Plan güncellendi (${decision.replan.size} kalan aşama)."))
-                    }
-                }
-            } else if (action.stepIndex > 0) {
-                currentPlan = currentPlan?.markStepInProgress(action.stepIndex)
-                currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
-            }
-
-            val actionWord = when (action) {
-                is AgentAction.Tap, is AgentAction.LongPress -> "Tıklıyor"
-                is AgentAction.TypeText -> "Yazıyor"
-                is AgentAction.Scroll -> "Kaydırıyor"
-                is AgentAction.OpenApp, is AgentAction.OpenUrl -> "Açıyor"
-                is AgentAction.SearchWeb -> "Arıyor"
-                is AgentAction.SetVolume -> "Ses"
-                is AgentAction.MediaControl -> "Medya"
-                is AgentAction.Flashlight -> "Fener"
-                is AgentAction.TakeScreenshot -> "Görüntü"
-                is AgentAction.LockScreen -> "Kilitliyor"
-                is AgentAction.OpenSettings -> "Ayarlar"
-                is AgentAction.SetAlarm -> "Alarm"
-                is AgentAction.SetTimer -> "Sayaç"
-                is AgentAction.Wait -> "Bekliyor"
-                is AgentAction.Back -> "Geri"
-                is AgentAction.Home -> "Ana Ekran"
-                is AgentAction.Recents -> "Son Görevler"
-                is AgentAction.Notifications, is AgentAction.QuickSettings -> "Bildirimler"
-                is AgentAction.ClipboardSet -> "Kopyalıyor"
-                is AgentAction.Done -> "Tamamlandı"
-                is AgentAction.AskUser -> "Soru"
-                else -> "İşliyor"
-            }
-
-            service.overlayNotch.showOrUpdate(
-                stepNumber = step,
-                plan = currentPlan,
-                liveDetail = actionWord,
-                state = AgentOverlayNotchManager.NotchState.ACTIVE
-            )
-
-            // 3. Sonlandırma, Not Güvenliği veya Kullanıcıya soru kontrolleri
-            if (isNoteGoal(userGoal) && action is AgentAction.OpenApp && isNoteApp(action.appName)) {
-                val guardMsg = "Harici not uygulaması açmana veya UI aramana gerek yok! Kullanıcının hedefini anla, dilbilgisini düzelt ve doğrudan yerleşik 'note' aracını kullan."
-                emit(AgentEvent.StatusLog("Yönlendirme: $guardMsg"))
-                history.add(ChatMessage(ChatMessage.Role.MODEL, "EYLEM: open_app(\"${action.appName}\")"))
-                history.add(ChatMessage(ChatMessage.Role.USER, "SİSTEM UYARISI: $guardMsg"))
-                continue
-            }
-
-            when (action) {
-                is AgentAction.Done -> {
-                    datasetCollector.recordStep(
-                        sessionId = sessionId,
-                        step = step,
-                        goal = userGoal,
-                        systemPrompt = systemPrompt,
-                        screenDump = screenDump.formattedContent,
-                        rawModelResponse = decision.rawResponse,
-                        parsedAction = action,
-                        executionResult = action.summary,
-                        provider = decision.provider,
-                        model = decision.model,
-                        status = "COMPLETED"
-                    )
-
-                    currentPlan = currentPlan?.markAllCompleted()
-                    currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
-                    service.overlayNotch.showOrUpdate(
-                        stepNumber = step,
+                    val summary = "[${finalAction.itemType.labelTr}] '${finalAction.title}' Firebase çalışma alanına kaydedildi."
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
                         plan = currentPlan,
-                        liveDetail = "✓ ${action.summary}",
+                        liveDetail = badge,
                         state = AgentOverlayNotchManager.NotchState.COMPLETED
                     )
-
-                    if (successfulActionSignatures.isNotEmpty()) {
-                        skillManager.saveSkill(userGoal, lastPackageName, successfulActionSignatures)
-                        emit(AgentEvent.StatusLog("İşlem yeni bir beceri (.md skill) olarak kaydedildi."))
-                    }
-
-                    logSessionTermination(sessionId, userGoal, "COMPLETED", action.summary, step, lastPackageName)
-                    emit(AgentEvent.Success(action.summary))
-                    return@flow
-                }
-
-                is AgentAction.AskUser -> {
-                    datasetCollector.recordStep(
-                        sessionId = sessionId,
-                        step = step,
-                        goal = userGoal,
-                        systemPrompt = systemPrompt,
-                        screenDump = screenDump.formattedContent,
-                        rawModelResponse = decision.rawResponse,
-                        parsedAction = action,
-                        executionResult = action.question,
-                        provider = decision.provider,
-                        model = decision.model,
-                        status = "ASK_USER"
-                    )
-                    service.overlayNotch.showOrUpdate(
-                        stepNumber = step,
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = saveResult.exceptionOrNull()?.message ?: "Firebase kayıt hatası"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
                         plan = currentPlan,
-                        liveDetail = "? ${action.question}",
-                        state = AgentOverlayNotchManager.NotchState.THINKING
-                    )
-                    val answerDeferred = CompletableDeferred<String?>()
-                    emit(AgentEvent.QuestionToUser(action.question, answerDeferred))
-
-                    val userReply = withTimeoutOrNull(60_000L) {
-                        answerDeferred.await()
-                    }?.trim()
-                    if (userReply.isNullOrBlank()) {
-                        val cancelMsg = "Kullanıcı soruyu yanıtlamadı veya süre aşıldı (60 sn) (${action.question})."
-                        service.overlayNotch.showOrUpdate(
-                            stepNumber = step,
-                            plan = currentPlan,
-                            liveDetail = cancelMsg,
-                            state = AgentOverlayNotchManager.NotchState.FAILED
-                        )
-                        logSessionTermination(sessionId, userGoal, "ASK_USER_CANCELLED", cancelMsg, step, lastPackageName)
-                        emit(AgentEvent.Failure(cancelMsg))
-                        return@flow
-                    }
-
-                    emit(AgentEvent.StatusLog("Kullanıcı yanıtı: \"$userReply\""))
-                    history.add(ChatMessage(ChatMessage.Role.MODEL, "SORU: ${action.question}"))
-                    history.add(ChatMessage(ChatMessage.Role.USER, "KULLANICI YANITI: $userReply"))
-                    lastActionWasWait = true
-                    continue
-                }
-
-                else -> Unit
-            }
-
-            // 4. Döngü kırıcı (Circuit Breaker)
-            val currentSignature = action.toOperationalSignature()
-            recentActionSignatures.add(currentSignature)
-
-            if (currentSignature == previousActionSignature) {
-                identicalActionRepeatCount++
-            } else {
-                identicalActionRepeatCount = 0
-            }
-            previousActionSignature = currentSignature
-
-            if (identicalActionRepeatCount >= 3) {
-                val stuckMsg = "Ajan aynı eylemde takıldı ($currentSignature)"
-                datasetCollector.recordStep(
-                    sessionId = sessionId,
-                    step = step,
-                    goal = userGoal,
-                    systemPrompt = systemPrompt,
-                    screenDump = screenDump.formattedContent,
-                    rawModelResponse = decision.rawResponse,
-                    parsedAction = action,
-                    executionResult = stuckMsg,
-                    provider = decision.provider,
-                    model = decision.model,
-                    status = "FAILED_STUCK"
-                )
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = stuckMsg,
-                    state = AgentOverlayNotchManager.NotchState.FAILED
-                )
-                logSessionTermination(sessionId, userGoal, "FAILED_STUCK", stuckMsg, step, lastPackageName)
-                emit(AgentEvent.Failure("$stuckMsg. Güvenlik sebebiyle durduruldu."))
-                return@flow
-            }
-
-            // Salınım ve Kısır Döngü Tespiti (Cycle Detection: A-B-A-B veya A-B-C-A-B-C)
-            val isOscillating = detectCycle(recentActionSignatures)
-
-            if (isOscillating) {
-                val lastFew = recentActionSignatures.takeLast(4).joinToString(" -> ")
-                val oscillateMsg = "Ajan ardışık eylemler arasında kısır döngüye girdi ($lastFew)"
-                datasetCollector.recordStep(
-                    sessionId = sessionId,
-                    step = step,
-                    goal = userGoal,
-                    systemPrompt = systemPrompt,
-                    screenDump = screenDump.formattedContent,
-                    rawModelResponse = decision.rawResponse,
-                    parsedAction = action,
-                    executionResult = oscillateMsg,
-                    provider = decision.provider,
-                    model = decision.model,
-                    status = "FAILED_OSCILLATION"
-                )
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = "Döngü Salınımı",
-                    state = AgentOverlayNotchManager.NotchState.FAILED
-                )
-                logSessionTermination(sessionId, userGoal, "FAILED_OSCILLATION", oscillateMsg, step, lastPackageName)
-                emit(AgentEvent.Failure("$oscillateMsg. Güvenlik sebebiyle durduruldu."))
-                return@flow
-            }
-
-            // 5. Güvenlik Kapısı kontrolü
-            val (needsConfirm, promptReason) = safetyGate.evaluate(action, screenDump.formattedContent)
-            if (needsConfirm) {
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
-                    plan = currentPlan,
-                    liveDetail = "⚠ Onay bekleniyor: $promptReason",
-                    state = AgentOverlayNotchManager.NotchState.THINKING
-                )
-                val confirmationDeferred = CompletableDeferred<Boolean>()
-                emit(AgentEvent.AwaitingConfirmation(promptReason, confirmationDeferred))
-
-                val isApproved = withTimeoutOrNull(60_000L) {
-                    confirmationDeferred.await()
-                } ?: false
-                if (!isApproved) {
-                    val rejectMsg = "Hassas işlem kullanıcı tarafından onaylanmadı veya süre aşıldı (60 sn)"
-                    datasetCollector.recordStep(
-                        sessionId = sessionId,
-                        step = step,
-                        goal = userGoal,
-                        systemPrompt = systemPrompt,
-                        screenDump = screenDump.formattedContent,
-                        rawModelResponse = decision.rawResponse,
-                        parsedAction = action,
-                        executionResult = rejectMsg,
-                        provider = decision.provider,
-                        model = decision.model,
-                        status = "REJECTED_BY_USER"
-                    )
-                    service.overlayNotch.showOrUpdate(
-                        stepNumber = step,
-                        plan = currentPlan,
-                        liveDetail = rejectMsg,
+                        liveDetail = "Kayıt Hatası",
                         state = AgentOverlayNotchManager.NotchState.FAILED
                     )
-                    logSessionTermination(sessionId, userGoal, "REJECTED_BY_USER", rejectMsg, step, lastPackageName)
-                    emit(AgentEvent.Failure("$rejectMsg."))
+                    emit(AgentEvent.Failure("Firebase'e kaydedilemedi: $err"))
+                }
+            }
+
+            is AgentAction.CompleteWorkspaceItem -> {
+                val res = workspaceRepository.completeByQuery(finalAction.targetQuery)
+                if (res.isSuccess) {
+                    val item = res.getOrThrow()
+                    val summary = "'${item.title}' tamamlandı olarak işaretlendi."
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Tamamlandı",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Kayıt bulunamadı"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Bulunamadı",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure(err))
+                }
+            }
+
+            is AgentAction.DeleteWorkspaceItem -> {
+                val res = workspaceRepository.deleteByQuery(finalAction.targetQuery)
+                if (res.isSuccess) {
+                    val item = res.getOrThrow()
+                    val summary = "'${item.title}' çalışma alanından silindi."
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Silindi",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Silinecek kayıt bulunamadı"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Bulunamadı",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure(err))
+                }
+            }
+
+            is AgentAction.ClearCompletedTasks -> {
+                val res = workspaceRepository.clearCompletedTasks()
+                if (res.isSuccess) {
+                    val count = res.getOrDefault(0)
+                    val summary = "$count tamamlanmış görev çalışma alanından temizlendi."
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Temizlendi",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Temizleme hatası"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Hata",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure(err))
+                }
+            }
+
+            is AgentAction.ClearAllWorkspace -> {
+                service?.overlayNotch?.showOrUpdate(
+                    stepNumber = 2,
+                    plan = currentPlan,
+                    liveDetail = "Onay?",
+                    state = AgentOverlayNotchManager.NotchState.THINKING
+                )
+                val confirmDeferred = CompletableDeferred<String?>()
+                emit(
+                    AgentEvent.QuestionToUser(
+                        "Tüm çalışma alanı kayıtlarınızı kalıcı olarak silmek istediğinize emin misiniz? Onaylamak için 'Evet' yazın.",
+                        confirmDeferred
+                    )
+                )
+                val confirmation = withTimeoutOrNull(45_000L) {
+                    confirmDeferred.await()
+                }?.trim()?.lowercase().orEmpty()
+
+                val isConfirmed = confirmation in listOf("evet", "onay", "yes", "sil", "tamam")
+                if (!isConfirmed) {
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "İptal",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure("Tüm kayıtları silme işlemi kullanıcı tarafından onaylanmadı."))
                     return@flow
                 }
+
+                val res = workspaceRepository.clearAll()
+                if (res.isSuccess) {
+                    val summary = "Tüm çalışma alanı kayıtları temizlendi."
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Sıfırlandı",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success(summary))
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Sıfırlama hatası"
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Hata",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure(err))
+                }
             }
 
-            // 6. Eylemi çalıştır (Semantik etiket zenginleştirmesi ile)
-            val semanticSignature = buildSemanticSignature(action, service)
-            val executionSummary = actionExecutor.execute(action)
-            emit(AgentEvent.StatusLog("Sonuç: $executionSummary"))
-            service.overlayNotch.showOrUpdate(
-                stepNumber = step,
-                plan = currentPlan,
-                liveDetail = actionWord,
-                state = AgentOverlayNotchManager.NotchState.ACTIVE
-            )
-
-            // Sadece BAŞARILI eylemleri skill olarak kaydet
-            if (executionSummary.startsWith("BAŞARILI")) {
-                successfulActionSignatures.add(semanticSignature)
-            }
-            lastActionWasWait = action is AgentAction.Wait
-
-            // Model hafızasına kompakt ekran özeti, eylem ve sonucunu ekle (Token şişmesini önler)
-            history.add(
-                ChatMessage(
-                    ChatMessage.Role.USER,
-                    "ADIM $step ÖZETİ [Paket: ${screenDump.packageName}, ${screenDump.elementCount} öğe]"
-                )
-            )
-            history.add(
-                ChatMessage(
-                    ChatMessage.Role.MODEL,
-                    buildString {
-                        if (decision.reflection.isNotBlank()) append("DOĞRULAMA: ${decision.reflection}\n")
-                        append("DÜŞÜNCE: ${action.thought}\nEYLEM: $semanticSignature")
+            is AgentAction.QueryWorkspace -> {
+                val summary = finalAction.summaryResponse.ifBlank {
+                    if (existingItems.isEmpty()) {
+                        "Çalışma alanınızda henüz kayıtlı görev, not veya fikir bulunmuyor."
+                    } else {
+                        val tasks = existingItems.count { it.type == WorkspaceItemType.TASK && !it.isCompleted }
+                        val notes = existingItems.count { it.type == WorkspaceItemType.NOTE }
+                        val ideas = existingItems.count { it.type == WorkspaceItemType.IDEA }
+                        "Aktif: $tasks Görev, $notes Not, $ideas Fikir bulunuyor."
                     }
-                )
-            )
-            history.add(ChatMessage(ChatMessage.Role.USER, "SONUÇ: $executionSummary"))
-
-            // Trajectory Dataset'ine adımı kaydet
-            datasetCollector.recordStep(
-                sessionId = sessionId,
-                step = step,
-                goal = userGoal,
-                systemPrompt = systemPrompt,
-                screenDump = screenDump.formattedContent,
-                rawModelResponse = decision.rawResponse,
-                parsedAction = action,
-                executionResult = executionSummary,
-                provider = decision.provider,
-                model = decision.model,
-                status = "IN_PROGRESS"
-            )
-
-            // Supabase'e adımı kaydet
-            val stepObj = JsonObject().apply {
-                addProperty("id", "${sessionId}_step_$step")
-                addProperty("session_id", sessionId)
-                addProperty("step", step)
-                addProperty("thought", action.thought)
-                addProperty("action_signature", semanticSignature)
-                addProperty("execution_result", executionSummary)
-                addProperty("status", "IN_PROGRESS")
-            }
-            supabaseLogger.logStep(stepObj)
-
-            // Firebase'e adımı ve LLM düşüncesini kaydet
-            firebaseLogger.logStep(
-                sessionId = sessionId,
-                step = step,
-                thought = action.thought,
-                actionSignature = semanticSignature,
-                executionResult = executionSummary,
-                status = "IN_PROGRESS",
-                screenDumpSnippet = screenDump.formattedContent.take(500)
-            )
-
-            // Eğer not aracı başarıyla çalıştıysa UI'da beklemeden/gezinmeden görevi anında tamamla
-            if (action is AgentAction.NoteAction && executionSummary.startsWith("BAŞARILI")) {
-                currentPlan = currentPlan?.markAllCompleted()
-                currentPlan?.let { emit(AgentEvent.PlanStepUpdated(it)) }
-                val finishTitle = if (action.action == "add") "✓ Not Kaydedildi" else "✓ Not İşlemi Tamamlandı"
-                service.overlayNotch.showOrUpdate(
-                    stepNumber = step,
+                }
+                currentPlan = currentPlan.markAllCompleted()
+                emit(AgentEvent.PlanStepUpdated(currentPlan))
+                service?.overlayNotch?.showOrUpdate(
+                    stepNumber = 2,
                     plan = currentPlan,
-                    liveDetail = finishTitle,
+                    liveDetail = "✓ Özetlendi",
                     state = AgentOverlayNotchManager.NotchState.COMPLETED
                 )
-                logSessionTermination(sessionId, userGoal, "COMPLETED", executionSummary, step, lastPackageName)
-                emit(AgentEvent.Success(executionSummary))
-                return@flow
+                emit(AgentEvent.Success(summary))
             }
 
-            // Dinamik bekleme payı (Ekran yüklenmesi ve RPM/TPM koruması)
-            // AgentAction.Wait zaten ActionExecutor içinde kendi süresi kadar beklediğinden ekstra gecikme atlanır
-            if (action !is AgentAction.Wait) {
-                val dynamicDelay = when (action) {
-                    is AgentAction.OpenApp, is AgentAction.OpenUrl -> 1800L
-                    is AgentAction.Scroll -> 1000L
-                    else -> 1200L
+            is AgentAction.Done -> {
+                currentPlan = currentPlan.markAllCompleted()
+                emit(AgentEvent.PlanStepUpdated(currentPlan))
+                service?.overlayNotch?.showOrUpdate(
+                    stepNumber = 2,
+                    plan = currentPlan,
+                    liveDetail = "✓ Tamamlandı",
+                    state = AgentOverlayNotchManager.NotchState.COMPLETED
+                )
+                emit(AgentEvent.Success(finalAction.summary))
+            }
+
+            else -> {
+                // Fallback: Eğer model bilinmeyen bir eylem döndürdüyse bile kullanıcının girdisini NOT olarak kaydet
+                val fallbackItem = WorkspaceItem(
+                    type = WorkspaceItemType.NOTE,
+                    title = cleanGoal.take(36),
+                    content = cleanGoal
+                )
+                val saveRes = workspaceRepository.addItem(fallbackItem)
+                if (saveRes.isSuccess) {
+                    currentPlan = currentPlan.markAllCompleted()
+                    emit(AgentEvent.PlanStepUpdated(currentPlan))
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "✓ Not Kaydedildi",
+                        state = AgentOverlayNotchManager.NotchState.COMPLETED
+                    )
+                    emit(AgentEvent.Success("Not olarak kaydedildi: '${fallbackItem.title}'"))
+                } else {
+                    service?.overlayNotch?.showOrUpdate(
+                        stepNumber = 2,
+                        plan = currentPlan,
+                        liveDetail = "Hata",
+                        state = AgentOverlayNotchManager.NotchState.FAILED
+                    )
+                    emit(AgentEvent.Failure("İşlem yürütülemedi."))
                 }
-                delay(dynamicDelay)
             }
         }
-
-        val maxStepsMsg = "Maksimum adım sınırına ($maxSteps) ulaşıldı."
-        service.overlayNotch.showOrUpdate(
-            stepNumber = maxSteps,
-            plan = currentPlan,
-            liveDetail = maxStepsMsg,
-            state = AgentOverlayNotchManager.NotchState.FAILED
-        )
-        logSessionTermination(sessionId, userGoal, "MAX_STEPS_REACHED", maxStepsMsg, maxSteps, lastPackageName)
-        emit(AgentEvent.Failure(maxStepsMsg))
     }.flowOn(Dispatchers.Default)
 
-    private fun buildSemanticSignature(action: AgentAction, service: TarsAccessibilityService): String {
-        return when (action) {
-            is AgentAction.Tap -> {
-                val summary = service.treeParser.getNodeSummary(action.targetId)
-                if (!summary.isNullOrBlank()) "Tap(${action.targetId} [$summary])" else action.toOperationalSignature()
-            }
-            is AgentAction.LongPress -> {
-                val summary = service.treeParser.getNodeSummary(action.targetId)
-                if (!summary.isNullOrBlank()) "LongPress(${action.targetId} [$summary])" else action.toOperationalSignature()
-            }
-            is AgentAction.TypeText -> {
-                val summary = service.treeParser.getNodeSummary(action.targetId)
-                if (!summary.isNullOrBlank()) {
-                    "TypeText(${action.targetId} [$summary], \"${action.text}\", enter=${action.pressEnter})"
-                } else {
-                    action.toOperationalSignature()
-                }
-            }
-            else -> action.toOperationalSignature()
-        }
-    }
-
-    private suspend fun logSessionTermination(
-        sessionId: String,
-        userGoal: String,
-        status: String,
-        summary: String,
-        totalSteps: Int,
-        lastPackageName: String
-    ) {
-        memoryManager.saveLastSession(userGoal, status, summary, lastPackageName)
-        val sessionObj = JsonObject().apply {
-            addProperty("id", sessionId)
-            addProperty("status", status)
-            addProperty("execution_summary", summary)
-            addProperty("total_steps", totalSteps)
-        }
-        supabaseLogger.logSession(sessionObj)
-        firebaseLogger.logSessionFinish(sessionId, status, summary, totalSteps)
-    }
-
-    private fun isNoteGoal(goal: String): Boolean {
-        val lower = goal.lowercase().trim()
-        val noteKeywords = listOf(
-            "not al", "not et", "not düş", "not kaydet", "not defter", "notlar", "not ekle",
-            "şunu not", "bunu not", "not:", "not :", "take a note", "take note", "save note",
-            "record note", "add note", "not tut", "notlarım", "not yaz"
-        )
-        return noteKeywords.any { lower.contains(it) }
-    }
-
-    private fun isNoteApp(appName: String): Boolean {
-        val lower = appName.lowercase().trim()
-        return lower.contains("keep") || lower.contains("note") || lower.contains("not") || lower.contains("memo")
-    }
-
-    private fun detectCycle(signatures: List<String>): Boolean {
-        val n = signatures.size
-        for (period in 2..3) {
-            if (n >= period * 2) {
-                val currentCycle = signatures.takeLast(period)
-                val previousCycle = signatures.dropLast(period).takeLast(period)
-                if (currentCycle == previousCycle && currentCycle.toSet().size > 1) {
-                    return true
-                }
-            }
-        }
-        return false
+    companion object {
+        private const val MAX_PROMPT_LENGTH = 2_000
     }
 }
-

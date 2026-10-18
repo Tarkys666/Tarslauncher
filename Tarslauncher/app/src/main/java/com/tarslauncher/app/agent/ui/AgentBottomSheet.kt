@@ -3,7 +3,6 @@ package com.tarslauncher.app.agent.ui
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
-import com.tarslauncher.app.agent.data.AgentProvider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -54,6 +53,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -61,7 +62,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun AgentBottomSheet(
     viewModel: AgentViewModel,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    onOpenWorkspace: (() -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -69,9 +71,9 @@ fun AgentBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var showKeyEditor by remember { mutableStateOf(uiState.groqApiKey.isBlank()) }
+    var showApiKeyText by remember { mutableStateOf(false) }
     var tempApiKey by remember(uiState.groqApiKey) { mutableStateOf(uiState.groqApiKey) }
-    var tempSupabaseUrl by remember(uiState.supabaseUrl) { mutableStateOf(uiState.supabaseUrl) }
-    var tempSupabaseKey by remember(uiState.supabaseAnonKey) { mutableStateOf(uiState.supabaseAnonKey) }
+    var tempWebClientId by remember(uiState.googleWebClientId) { mutableStateOf(uiState.googleWebClientId) }
 
     val mainScrollState = rememberScrollState()
 
@@ -100,7 +102,7 @@ fun AgentBottomSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
         ) {
-            // Header: TARS Monologue Title
+            // Header: TARS Workspace Agent Title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -108,7 +110,7 @@ fun AgentBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "TARS // SYSTEM AGENT",
+                        text = "TARS // WORKSPACE AGENT",
                         color = Color.White,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Light,
@@ -117,7 +119,7 @@ fun AgentBottomSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "AUTONOMOUS SUB-ROUTINE EXECUTION",
+                        text = "NOTION-STYLE CLOUD WORKSPACE & LLM",
                         color = Color.White.copy(alpha = 0.4f),
                         fontSize = 9.sp,
                         letterSpacing = 1.sp,
@@ -127,22 +129,6 @@ fun AgentBottomSheet(
 
                 // Minimalist Engine & Key Toggle Row
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.5f)), RoundedCornerShape(3.dp))
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "[QWEN 3.8-27B]",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
                     Box(
                         modifier = Modifier
                             .border(
@@ -198,7 +184,7 @@ fun AgentBottomSheet(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = "⚠ GÜVENLİK KİLİDİ AKTİF: TARS Ajanı tamamen kapatıldı. Hiçbir eylem veya ekran okuma çalışmaz.",
+                        text = "⚠ GÜVENLİK KİLİDİ AKTİF: TARS Ajanı ve Dynamic Island devre dışı.",
                         color = Color(0xFFFF8A80),
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
@@ -209,7 +195,7 @@ fun AgentBottomSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Service Status Monochromatic Banner
+            // Dynamic Island Overlay Service Status Banner
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -235,15 +221,15 @@ fun AgentBottomSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (uiState.isServiceActive) "ACCESSIBILITY // ACTIVE" else "ACCESSIBILITY // OFFLINE",
+                        text = if (uiState.isServiceActive) "DYNAMIC ISLAND // ACTIVE" else "DYNAMIC ISLAND // OFFLINE",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = if (uiState.isServiceActive) "[LINKED]" else "[TAP TO ENGAGE]",
-                        color = if (uiState.isServiceActive) Color.White.copy(alpha = 0.5f) else Color.White,
+                        text = if (uiState.isServiceActive) "[LINKED]" else "[TAP TO ENABLE]",
+                        color = if (uiState.isServiceActive) Color(0xFF69F0AE) else Color.White,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = if (uiState.isServiceActive) FontWeight.Normal else FontWeight.Bold
@@ -251,7 +237,7 @@ fun AgentBottomSheet(
                 }
             }
 
-            // Key & Engine Editor (Expandable Monochrome Card with 1-Tap Paste)
+            // Key & Cloud Engine Editor
             AnimatedVisibility(visible = showKeyEditor) {
                 Card(
                     modifier = Modifier
@@ -286,13 +272,26 @@ fun AgentBottomSheet(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        Text(
-                            text = "GROQ API KEY (gsk_...)",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "GROQ API KEY (gsk_...) • AES-256 KEYSTORE",
+                                fontSize = 10.sp,
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = if (showApiKeyText) "[GİZLE]" else "[GÖSTER]",
+                                fontSize = 9.sp,
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.clickable { showApiKeyText = !showApiKeyText }
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
@@ -301,7 +300,7 @@ fun AgentBottomSheet(
                         ) {
                             OutlinedTextField(
                                 value = tempApiKey,
-                                onValueChange = { tempApiKey = it },
+                                onValueChange = { tempApiKey = it.take(256) },
                                 modifier = Modifier.weight(1f),
                                 placeholder = {
                                     Text(
@@ -312,6 +311,11 @@ fun AgentBottomSheet(
                                     )
                                 },
                                 singleLine = true,
+                                visualTransformation = if (showApiKeyText) {
+                                    VisualTransformation.None
+                                } else {
+                                    PasswordVisualTransformation()
+                                },
                                 textStyle = TextStyle(
                                     color = Color.White,
                                     fontFamily = FontFamily.Monospace,
@@ -328,7 +332,6 @@ fun AgentBottomSheet(
 
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            // 1-Tap PASTE Button for API Key
                             Box(
                                 modifier = Modifier
                                     .height(52.dp)
@@ -367,7 +370,7 @@ fun AgentBottomSheet(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Firebase Firestore Status Badge
+                        // Firebase Firestore + Google Auth Status Badge
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -378,16 +381,20 @@ fun AgentBottomSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "CLOUD TELEMETRY",
+                                text = "FIREBASE WORKSPACE",
                                 fontSize = 9.sp,
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                text = "[FIREBASE FIRESTORE: ACTIVE]",
+                                text = if (uiState.isGoogleSignedIn) {
+                                    "[GOOGLE: ${uiState.userEmail?.take(20) ?: "BAĞLI"}]"
+                                } else {
+                                    "[ANONİM BULUT OTURUMU]"
+                                },
                                 fontSize = 9.sp,
-                                color = Color(0xFF69F0AE),
+                                color = if (uiState.isGoogleSignedIn) Color(0xFF69F0AE) else Color(0xFFFFD54F),
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold
                             )
@@ -396,47 +403,20 @@ fun AgentBottomSheet(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "SUPABASE TELEMETRY & CLOUD SYNC (OPSİYONEL)",
-                            fontSize = 10.sp,
+                            text = "GOOGLE WEB CLIENT ID (OPSİYONEL - GOOGLE AUTH İÇİN)",
+                            fontSize = 9.sp,
                             color = Color.White.copy(alpha = 0.6f),
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = tempSupabaseUrl,
-                            onValueChange = { tempSupabaseUrl = it },
+                            value = tempWebClientId,
+                            onValueChange = { tempWebClientId = it },
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = {
                                 Text(
-                                    "https://xxxx.supabase.co",
-                                    color = Color.White.copy(alpha = 0.3f),
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                color = Color.White,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp
-                            ),
-                            shape = RoundedCornerShape(3.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.White,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-                                focusedContainerColor = Color.Black,
-                                unfocusedContainerColor = Color.Black
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = tempSupabaseKey,
-                            onValueChange = { tempSupabaseKey = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = {
-                                Text(
-                                    "Supabase Anon / Public Key...",
+                                    "691832963274-xxxx.apps.googleusercontent.com",
                                     color = Color.White.copy(alpha = 0.3f),
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace
@@ -464,25 +444,16 @@ fun AgentBottomSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (tempApiKey.isNotBlank()) {
-                                    Text(
-                                        text = "[CLEAR KEY]",
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.clickable { tempApiKey = "" }
-                                    )
-                                }
-                                if (uiState.datasetCount > 0) {
-                                    Text(
-                                        text = "[RESET DATASET]",
-                                        color = Color(0xFFFF5252).copy(alpha = 0.7f),
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.clickable { viewModel.clearDataset(context) }
-                                    )
-                                }
+                            if (tempApiKey.isNotBlank()) {
+                                Text(
+                                    text = "[CLEAR KEY]",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.clickable { tempApiKey = "" }
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.width(1.dp))
                             }
 
                             Box(
@@ -490,9 +461,9 @@ fun AgentBottomSheet(
                                     .background(Color.White, RoundedCornerShape(3.dp))
                                     .clickable {
                                         viewModel.onSaveApiKey(tempApiKey)
-                                        viewModel.onSaveSupabaseConfig(tempSupabaseUrl, tempSupabaseKey)
+                                        viewModel.onSaveGoogleWebClientId(tempWebClientId)
                                         showKeyEditor = false
-                                        Toast.makeText(context, "Groq API Anahtarı Kaydedildi", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Yapılandırma Kaydedildi", Toast.LENGTH_SHORT).show()
                                     }
                                     .padding(horizontal = 16.dp, vertical = 7.dp)
                             ) {
@@ -512,14 +483,20 @@ fun AgentBottomSheet(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Quick Directives
+            // Quick Directives for Workspace
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                TarsDirectiveChip("[SETTINGS]") { viewModel.onTaskInputChanged("Ayarlar uygulamasını aç") }
-                TarsDirectiveChip("[SET ALARM]") { viewModel.onTaskInputChanged("Saat uygulamasında 07:30 alarmı kur") }
-                TarsDirectiveChip("[YOUTUBE]") { viewModel.onTaskInputChanged("YouTube'u aç") }
+                TarsDirectiveChip("[+ GÖREV]") {
+                    viewModel.onTaskInputChanged("Yarın saat 15:00'te proje toplantısı var, sunumu hazırla ve raporu gönder")
+                }
+                TarsDirectiveChip("[+ FİKİR]") {
+                    viewModel.onTaskInputChanged("Fikir: Uygulama içine haftalık üretkenlik özeti widget'ı eklenebilir")
+                }
+                TarsDirectiveChip("[ÖZETLE]") {
+                    viewModel.onTaskInputChanged("Bekleyen görevlerimi ve notlarımı özetle")
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -535,7 +512,7 @@ fun AgentBottomSheet(
                     modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
-                            "ENTER DIRECTIVE...",
+                            "Görev, not veya fikir yazın...",
                             color = Color.White.copy(alpha = 0.3f),
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace
@@ -558,7 +535,6 @@ fun AgentBottomSheet(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Paste button for prompt if empty
                 if (uiState.taskInput.isBlank()) {
                     Box(
                         modifier = Modifier
@@ -636,7 +612,7 @@ fun AgentBottomSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "PLAN // HIERARCHICAL STAGES",
+                            text = "PLAN // WORKSPACE PIPELINE",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White.copy(alpha = 0.6f),
@@ -690,7 +666,7 @@ fun AgentBottomSheet(
                 }
             }
 
-            // Terminal Output Header with 1-Tap Copy & Dataset Actions
+            // Terminal Output Header with 1-Tap Copy & Open Workspace Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -716,7 +692,6 @@ fun AgentBottomSheet(
                         )
                     }
 
-                    // 1-Tap COPY ALL LOGS BUTTON
                     Box(
                         modifier = Modifier
                             .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
@@ -739,21 +714,20 @@ fun AgentBottomSheet(
                         )
                     }
 
-                    // 1-Tap EXPORT TRAINING DATASET (.JSONL)
-                    Box(
-                        modifier = Modifier
-                            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
-                            .clickable {
-                                viewModel.exportDataset(context)
-                            }
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "[DATASET: ${uiState.datasetCount}]",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
+                    if (onOpenWorkspace != null) {
+                        Box(
+                            modifier = Modifier
+                                .border(BorderStroke(0.8.dp, Color(0xFF69F0AE).copy(alpha = 0.6f)), RoundedCornerShape(3.dp))
+                                .clickable { onOpenWorkspace() }
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "[WORKSPACE: ${uiState.workspaceCount}]",
+                                color = Color(0xFF69F0AE),
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
                 }
             }
@@ -778,7 +752,7 @@ fun AgentBottomSheet(
             ) {
                 if (uiState.logs.isEmpty()) {
                     Text(
-                        text = "AWAITING USER INSTRUCTION...",
+                        text = "AWAITING WORKSPACE DIRECTIVE...",
                         color = Color.White.copy(alpha = 0.25f),
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
@@ -791,8 +765,8 @@ fun AgentBottomSheet(
                             Text(
                                 text = "> $log",
                                 color = when {
-                                    log.contains("HATA", ignoreCase = true) || log.contains("BAŞARISIZ", ignoreCase = true) -> Color(0xFFFF5252)
-                                    log.contains("BAŞARILI", ignoreCase = true) || log.contains("TAMAMLANDI", ignoreCase = true) -> Color.White
+                                    log.contains("Hata", ignoreCase = true) || log.contains("BAŞARISIZ", ignoreCase = true) -> Color(0xFFFF5252)
+                                    log.contains("Tamamlandı", ignoreCase = true) || log.contains("kaydedildi", ignoreCase = true) -> Color(0xFF69F0AE)
                                     else -> Color.White.copy(alpha = 0.75f)
                                 },
                                 fontSize = 11.sp,
@@ -800,75 +774,6 @@ fun AgentBottomSheet(
                                 lineHeight = 15.sp,
                                 modifier = Modifier.padding(vertical = 1.5.dp)
                             )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Monochromatic Security Clearance Dialog
-        uiState.pendingConfirmation?.let { confirmation ->
-            BasicAlertDialog(
-                onDismissRequest = { viewModel.onConfirmDecision(false) }
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.Black),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "SECURITY // CLEARANCE REQUIRED",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = confirmation.prompt,
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.4f)), RoundedCornerShape(3.dp))
-                                    .clickable { viewModel.onConfirmDecision(false) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "DENY",
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(Color.White, RoundedCornerShape(3.dp))
-                                    .clickable { viewModel.onConfirmDecision(true) }
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "CONFIRM",
-                                    color = Color.Black,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
                         }
                     }
                 }

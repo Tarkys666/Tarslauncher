@@ -63,8 +63,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 37
-        versionName = "1.8.2"
+        versionCode = 38
+        versionName = "1.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -158,10 +158,11 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.gson)
     
-    // Firebase
+    // Firebase & Google Auth
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.auth.ktx)
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     
     testImplementation(libs.junit)

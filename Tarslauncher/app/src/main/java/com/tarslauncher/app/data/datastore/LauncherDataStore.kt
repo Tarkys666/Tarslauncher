@@ -34,7 +34,6 @@ class LauncherDataStore(private val context: Context) {
         val KEY_PWAS_SEEDED = booleanPreferencesKey("pwas_seeded")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
         val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
-        val KEY_NOTES_JSON = stringPreferencesKey("notes_json")
     }
 
     val settingsFlow: Flow<LauncherSettings> = context.dataStore.data
@@ -64,13 +63,6 @@ class LauncherDataStore(private val context: Context) {
             if (exception is IOException) emit(emptyPreferences()) else throw exception
         }
         .map { preferences -> preferences[KEY_PWAS_JSON] }
-        .distinctUntilChanged()
-
-    val notesJsonFlow: Flow<String?> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) emit(emptyPreferences()) else throw exception
-        }
-        .map { preferences -> preferences[KEY_NOTES_JSON] }
         .distinctUntilChanged()
 
     suspend fun updateShowAppDrawer(show: Boolean) {
@@ -129,14 +121,6 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun getPwasJson(): String? {
         return context.dataStore.data.first()[KEY_PWAS_JSON]
-    }
-
-    suspend fun saveNotesJson(json: String) {
-        context.dataStore.edit { it[KEY_NOTES_JSON] = json }
-    }
-
-    suspend fun getNotesJson(): String? {
-        return context.dataStore.data.first()[KEY_NOTES_JSON]
     }
 
     suspend fun isPwasSeeded(): Boolean {

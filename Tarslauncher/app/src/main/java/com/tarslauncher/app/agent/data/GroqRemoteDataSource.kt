@@ -56,39 +56,44 @@ class GroqRemoteDataSource(
                     connectTimeout = 15_000
                     readTimeout = 30_000
                     doOutput = true
+                    instanceFollowRedirects = false
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("Accept", "application/json")
                     setRequestProperty("Authorization", "Bearer $key")
                 }
 
-                connection.outputStream.use { output ->
-                    output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
-                }
-
-                val statusCode = connection.responseCode
-                if (statusCode == 429) {
-                    val headerRetrySec = connection.getHeaderField("retry-after")?.trim()?.toDoubleOrNull()
-                    if (headerRetrySec != null && headerRetrySec > 0) {
-                        retryAfterMs = (headerRetrySec * 1000L).toLong().coerceIn(1500L, 12_000L)
+                try {
+                    connection.outputStream.use { output ->
+                        output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
                     }
-                }
 
-                val inputStream: InputStream = if (statusCode in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
-                }
-
-                val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-
-                if (statusCode !in 200..299) {
-                    if (statusCode == 429 && retryAfterMs == 0L) {
-                        retryAfterMs = parseRetryDelayMs(responseText, attempt)
+                    val statusCode = connection.responseCode
+                    if (statusCode == 429) {
+                        val headerRetrySec = connection.getHeaderField("retry-after")?.trim()?.toDoubleOrNull()
+                        if (headerRetrySec != null && headerRetrySec > 0) {
+                            retryAfterMs = (headerRetrySec * 1000L).toLong().coerceIn(1500L, 12_000L)
+                        }
                     }
-                    throw RuntimeException("Groq API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
-                }
 
-                extractTextFromResponse(responseText)
+                    val inputStream: InputStream = if (statusCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
+                    }
+
+                    val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+
+                    if (statusCode !in 200..299) {
+                        if (statusCode == 429 && retryAfterMs == 0L) {
+                            retryAfterMs = parseRetryDelayMs(responseText, attempt)
+                        }
+                        throw RuntimeException("Groq API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
+                    }
+
+                    extractTextFromResponse(responseText)
+                } finally {
+                    connection.disconnect()
+                }
             }
 
             if (callResult.isSuccess) {

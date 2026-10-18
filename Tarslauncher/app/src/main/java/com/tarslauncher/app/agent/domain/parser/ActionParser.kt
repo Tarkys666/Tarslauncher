@@ -4,6 +4,8 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.tarslauncher.app.agent.domain.model.AgentAction
+import com.tarslauncher.app.data.model.WorkspaceItemType
+import com.tarslauncher.app.data.model.WorkspacePriority
 
 object ActionParser {
 
@@ -43,6 +45,7 @@ object ActionParser {
                 rootObj.get("action")?.asString
                     ?: rootObj.get("tool")?.asString
                     ?: rootObj.get("name")?.asString
+                    ?: rootObj.get("command")?.asString
             )?.trim()?.lowercase() ?: return null
 
             val args = rootObj.getAsJsonObject("args")
@@ -80,14 +83,14 @@ object ActionParser {
         }.getOrNull()
     }
 
-    private fun extractStringList(element: JsonElement): List<String> {
-        if (!element.isJsonArray) return emptyList()
+    private fun extractStringList(element: JsonElement?): List<String> {
+        if (element == null || !element.isJsonArray) return emptyList()
         return element.asJsonArray.mapNotNull { item ->
             when {
                 item.isJsonPrimitive -> item.asString.trim().takeIf { it.isNotBlank() }
                 item.isJsonObject -> {
                     val obj = item.asJsonObject
-                    (obj.get("title")?.asString ?: obj.get("step")?.asString ?: obj.get("description")?.asString)
+                    (obj.get("title")?.asString ?: obj.get("text")?.asString ?: obj.get("step")?.asString ?: obj.get("description")?.asString)
                         ?.trim()
                         ?.takeIf { it.isNotBlank() }
                 }
@@ -140,175 +143,100 @@ object ActionParser {
 
     private fun mapToAction(thought: String, actionName: String, args: JsonObject, stepIndex: Int): AgentAction {
         return when (actionName) {
-            "open_app", "launch_app" -> {
-                val appName = args.get("name")?.asString
-                    ?: args.get("app")?.asString
-                    ?: args.get("app_name")?.asString.orEmpty()
-                AgentAction.OpenApp(thought, appName, stepIndex)
-            }
-
-            "open_url", "browse", "url" -> {
-                val url = args.get("url")?.asString
-                    ?: args.get("link")?.asString
-                    ?: args.get("uri")?.asString.orEmpty()
-                AgentAction.OpenUrl(thought, url, stepIndex)
-            }
-
-            "search", "web_search", "search_web", "youtube_search" -> {
-                val query = args.get("query")?.asString
-                    ?: args.get("q")?.asString
-                    ?: args.get("text")?.asString.orEmpty()
-                val platform = if (actionName == "youtube_search") {
-                    "youtube"
-                } else {
-                    (args.get("platform")?.asString ?: args.get("engine")?.asString ?: "google").lowercase()
+            "create", "add", "save", "note", "task", "idea", "todo",
+            "add_task", "add_note", "add_idea", "create_task", "create_note", "create_idea",
+            "not", "not_al", "not_ekle", "gorev_ekle", "fikir_ekle" -> {
+                val subAction = (args.get("action")?.asString ?: args.get("mode")?.asString).orEmpty().lowercase().trim()
+                if (subAction in listOf("delete", "remove", "sil", "kaldır")) {
+                    val target = extractTarget(args)
+                    return AgentAction.DeleteWorkspaceItem(thought, target, stepIndex)
                 }
-                AgentAction.SearchWeb(thought, query, platform, stepIndex)
-            }
-
-            "tap", "click" -> {
-                val id = args.getSafeInt("id", "target_id", fallback = -1)
-                AgentAction.Tap(thought, id, stepIndex)
-            }
-
-            "long_press", "long_click", "hold" -> {
-                val id = args.getSafeInt("id", "target_id", fallback = -1)
-                AgentAction.LongPress(thought, id, stepIndex)
-            }
-
-            "type", "type_text", "input" -> {
-                val id = args.getSafeInt("id", "target_id", fallback = -1)
-                val text = args.get("text")?.asString
-                    ?: args.get("value")?.asString.orEmpty()
-                val pressEnter = args.getSafeBoolean("enter", "press_enter", fallback = true)
-                AgentAction.TypeText(thought, id, text, pressEnter, stepIndex)
-            }
-
-            "scroll", "swipe" -> {
-                val dirString = args.get("direction")?.asString.orEmpty()
-                AgentAction.Scroll(thought, AgentAction.Scroll.Direction.fromString(dirString), stepIndex)
-            }
-
-            "back", "navigate_back" -> AgentAction.Back(thought, stepIndex)
-
-            "home", "go_home" -> AgentAction.Home(thought, stepIndex)
-
-            "recents", "recent_apps" -> AgentAction.Recents(thought, stepIndex)
-
-            "notifications", "open_notifications" -> AgentAction.Notifications(thought, stepIndex)
-
-            "quick_settings" -> AgentAction.QuickSettings(thought, stepIndex)
-
-            "set_volume", "volume" -> {
-                val level = args.getSafeInt("level", "percent", fallback = -1)
-                val mode = (
-                    args.get("mode")?.asString
-                        ?: args.get("direction")?.asString
-                        ?: if (level >= 0) "set" else "down"
-                ).lowercase().trim()
-                AgentAction.SetVolume(thought, mode, level, stepIndex)
-            }
-
-            "media_control", "media" -> {
-                val cmd = (
-                    args.get("command")?.asString
-                        ?: args.get("mode")?.asString
-                        ?: args.get("action")?.asString
-                        ?: "toggle"
-                ).lowercase().trim()
-                AgentAction.MediaControl(thought, cmd, stepIndex)
-            }
-
-            "flashlight", "torch" -> {
-                val stateStr = (args.get("state")?.asString ?: args.get("mode")?.asString).orEmpty().lowercase()
-                val enabled = when {
-                    stateStr == "off" || stateStr == "false" || stateStr == "kapat" -> false
-                    else -> args.getSafeBoolean("enabled", "on", fallback = true)
+                if (subAction in listOf("complete", "done", "finish", "tamamla", "bitir")) {
+                    val target = extractTarget(args)
+                    return AgentAction.CompleteWorkspaceItem(thought, target, stepIndex)
                 }
-                AgentAction.Flashlight(thought, enabled, stepIndex)
-            }
+                if (subAction in listOf("list", "query", "show", "get", "listele", "göster", "özetle")) {
+                    val filter = (args.get("type")?.asString ?: args.get("filter")?.asString ?: "ALL").uppercase()
+                    val summary = extractSummaryOrText(args)
+                    return AgentAction.QueryWorkspace(thought, filter, summary, stepIndex)
+                }
+                if (subAction in listOf("clear", "temizle", "hepsini_sil")) {
+                    return AgentAction.ClearAllWorkspace(thought, stepIndex)
+                }
 
-            "screenshot", "take_screenshot" -> AgentAction.TakeScreenshot(thought, stepIndex)
+                val inferredTypeStr = when {
+                    actionName.contains("task") || actionName.contains("todo") || actionName.contains("gorev") -> "TASK"
+                    actionName.contains("idea") || actionName.contains("fikir") -> "IDEA"
+                    else -> args.get("type")?.asString
+                        ?: args.get("category")?.asString
+                        ?: args.get("kind")?.asString
+                        ?: "NOTE"
+                }
+                val itemType = WorkspaceItemType.fromString(inferredTypeStr)
+                val priority = WorkspacePriority.fromString(
+                    args.get("priority")?.asString ?: args.get("oncelik")?.asString
+                )
 
-            "lock_screen", "lock" -> AgentAction.LockScreen(thought, stepIndex)
-
-            "open_settings", "settings" -> {
-                val section = (
-                    args.get("section")?.asString
-                        ?: args.get("page")?.asString
+                val title = (
+                    args.get("title")?.asString
+                        ?: args.get("baslik")?.asString
                         ?: args.get("name")?.asString
-                        ?: "main"
-                ).lowercase().trim()
-                AgentAction.OpenSettings(thought, section, stepIndex)
-            }
+                        ?: args.get("subject")?.asString
+                        ?: args.get("konu")?.asString
+                )?.trim().orEmpty()
 
-            "set_alarm", "alarm" -> {
-                val hour = args.getSafeInt("hour", fallback = 8)
-                val minute = args.getSafeInt("minute", "minutes", fallback = 0)
-                val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
-                AgentAction.SetAlarm(thought, hour.coerceIn(0, 23), minute.coerceIn(0, 59), message, stepIndex)
-            }
+                val content = (
+                    args.get("content")?.asString
+                        ?: args.get("text")?.asString
+                        ?: args.get("description")?.asString
+                        ?: args.get("icerik")?.asString
+                        ?: args.get("not_metni")?.asString
+                        ?: args.get("body")?.asString
+                        ?: args.get("note")?.asString
+                        ?: args.get("message")?.asString
+                )?.trim().orEmpty()
 
-            "set_timer", "timer" -> {
-                val seconds = args.getSafeInt("seconds", fallback = -1).let { sec ->
-                    if (sec > 0) sec else (args.getSafeInt("minutes", fallback = 1) * 60)
-                }
-                val message = args.get("message")?.asString ?: args.get("label")?.asString.orEmpty()
-                AgentAction.SetTimer(thought, seconds.coerceIn(1, 86_400), message, stepIndex)
-            }
+                val checklist = extractStringList(args.get("checklist") ?: args.get("subtasks") ?: args.get("items") ?: args.get("steps"))
+                val tags = extractStringList(args.get("tags") ?: args.get("labels") ?: args.get("etiketler"))
 
-            "clipboard_set", "copy" -> {
-                val text = args.get("text")?.asString
-                    ?: args.get("content")?.asString.orEmpty()
-                AgentAction.ClipboardSet(thought, text, stepIndex)
-            }
-
-            "note", "take_note", "save_note", "create_note", "add_note", "record_note", "write_note", "not", "not_al", "not_ekle", "not_kaydet" -> {
-                val rawAct = (
-                    args.get("action")?.asString
-                        ?: args.get("mode")?.asString
-                        ?: args.get("command")?.asString
-                        ?: args.get("type")?.asString
-                        ?: "add"
-                ).lowercase().trim()
-
-                val act = when (rawAct) {
-                    "add", "create", "save", "ekle", "kaydet", "yaz", "yeni", "new" -> "add"
-                    "list", "get", "show", "read", "listele", "göster", "oku" -> "list"
-                    "delete", "remove", "del", "sil", "kaldır" -> "delete"
-                    "clear", "clean", "temizle", "hepsini_sil" -> "clear"
-                    else -> "add"
+                val finalTitle = title.ifBlank {
+                    content.lineSequence().firstOrNull()?.take(40) ?: itemType.labelTr
                 }
 
-                val text = args.get("text")?.asString
-                    ?: args.get("content")?.asString
-                    ?: args.get("note")?.asString
-                    ?: args.get("message")?.asString
-                    ?: args.get("icerik")?.asString
-                    ?: args.get("not_metni")?.asString
-                    ?: args.get("body")?.asString.orEmpty()
-
-                val title = args.get("title")?.asString
-                    ?: args.get("baslik")?.asString
-                    ?: args.get("label")?.asString
-                    ?: args.get("konu")?.asString
-                    ?: args.get("subject")?.asString
-                    ?: args.get("header")?.asString.orEmpty()
-
-                val noteId = args.get("id")?.asString
-                    ?: args.get("target")?.asString
-                    ?: args.get("note_id")?.asString.orEmpty()
-
-                AgentAction.NoteAction(thought, act, text, title, noteId, stepIndex)
+                AgentAction.CreateWorkspaceItem(
+                    thought = thought,
+                    itemType = itemType,
+                    title = finalTitle,
+                    content = content,
+                    priority = priority,
+                    checklist = checklist,
+                    tags = tags,
+                    stepIndex = stepIndex
+                )
             }
 
-            "wait", "sleep" -> {
-                val msFromSec = (args.get("seconds")?.asLong ?: args.get("sec")?.asLong)?.times(1000L)
-                val ms = msFromSec
-                    ?: args.get("ms")?.asLong
-                    ?: args.get("duration")?.asLong
-                    ?: 1000L
-                AgentAction.Wait(thought, ms.coerceIn(200L, 15_000L), stepIndex)
+            "complete", "complete_task", "mark_done", "tamamla", "bitir" -> {
+                val target = extractTarget(args)
+                AgentAction.CompleteWorkspaceItem(thought, target, stepIndex)
+            }
+
+            "delete", "remove", "delete_item", "delete_note", "delete_task", "sil", "kaldır" -> {
+                val target = extractTarget(args)
+                AgentAction.DeleteWorkspaceItem(thought, target, stepIndex)
+            }
+
+            "clear_completed", "clean_completed", "tamamlananlari_sil" -> {
+                AgentAction.ClearCompletedTasks(thought, stepIndex)
+            }
+
+            "clear_all", "clear", "temizle" -> {
+                AgentAction.ClearAllWorkspace(thought, stepIndex)
+            }
+
+            "query", "list", "search", "summarize", "listele", "göster", "özetle" -> {
+                val filter = (args.get("type")?.asString ?: args.get("filter")?.asString ?: "ALL").uppercase()
+                val summary = extractSummaryOrText(args)
+                AgentAction.QueryWorkspace(thought, filter, summary, stepIndex)
             }
 
             "ask_user", "ask" -> {
@@ -317,10 +245,8 @@ object ActionParser {
                 AgentAction.AskUser(thought, question, stepIndex)
             }
 
-            "done", "finish", "complete" -> {
-                val summary = args.get("message")?.asString
-                    ?: args.get("summary")?.asString
-                    ?: "Görev başarıyla tamamlandı."
+            "done", "finish" -> {
+                val summary = extractSummaryOrText(args).ifBlank { "İşlem başarıyla tamamlandı." }
                 AgentAction.Done(thought, summary, stepIndex)
             }
 
@@ -328,40 +254,25 @@ object ActionParser {
         }
     }
 
-    private fun JsonObject.getSafeInt(vararg keys: String, fallback: Int = -1): Int {
-        for (k in keys) {
-            val el = get(k) ?: continue
-            if (el.isJsonNull) continue
-            val num = runCatching {
-                if (el.isJsonPrimitive && el.asJsonPrimitive.isNumber) {
-                    el.asInt
-                } else {
-                    el.asString.filter { it.isDigit() || it == '-' }.toIntOrNull()
-                }
-            }.getOrNull()
-            if (num != null) return num
-        }
-        return fallback
+    private fun extractTarget(args: JsonObject): String {
+        return (
+            args.get("target")?.asString
+                ?: args.get("id")?.asString
+                ?: args.get("title")?.asString
+                ?: args.get("query")?.asString
+                ?: args.get("text")?.asString
+                ?: args.get("note_id")?.asString
+        )?.trim().orEmpty()
     }
 
-    private fun JsonObject.getSafeBoolean(vararg keys: String, fallback: Boolean = false): Boolean {
-        for (k in keys) {
-            val el = get(k) ?: continue
-            if (el.isJsonNull) continue
-            val bool = runCatching {
-                if (el.isJsonPrimitive && el.asJsonPrimitive.isBoolean) {
-                    el.asBoolean
-                } else {
-                    when (el.asString.trim().lowercase()) {
-                        "true", "1", "on", "yes", "açık" -> true
-                        "false", "0", "off", "no", "kapalı" -> false
-                        else -> null
-                    }
-                }
-            }.getOrNull()
-            if (bool != null) return bool
-        }
-        return fallback
+    private fun extractSummaryOrText(args: JsonObject): String {
+        return (
+            args.get("summary")?.asString
+                ?: args.get("message")?.asString
+                ?: args.get("answer")?.asString
+                ?: args.get("response")?.asString
+                ?: args.get("text")?.asString
+                ?: args.get("content")?.asString
+        )?.trim().orEmpty()
     }
 }
-

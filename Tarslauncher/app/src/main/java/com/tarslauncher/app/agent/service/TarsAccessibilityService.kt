@@ -1,22 +1,19 @@
 package com.tarslauncher.app.agent.service
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
-import java.lang.ref.WeakReference
 import com.tarslauncher.app.agent.data.AgentPreferences
 import com.tarslauncher.app.agent.data.GroqAgentBrain
 import com.tarslauncher.app.agent.data.GroqRemoteDataSource
-import com.tarslauncher.app.agent.data.logging.AgentDatasetCollector
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
-import com.tarslauncher.app.agent.domain.model.ScreenDump
 import com.tarslauncher.app.agent.runner.AgentLoopRunner
 import com.tarslauncher.app.agent.ui.AgentViewModel
+import java.lang.ref.WeakReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,14 +25,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Hosts the Dynamic Island overlay capsule (`TYPE_ACCESSIBILITY_OVERLAY`) and
+ * routes quick workspace prompts to the TARS Workspace + LLM engine.
+ */
 class TarsAccessibilityService : AccessibilityService() {
 
-    val treeParser = AccessibilityTreeParser()
-    val gestureDispatcher = GestureDispatcher { this }
     val overlayNotch: AgentOverlayNotchManager by lazy { AgentOverlayNotchManager(this) }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var activeOverlayJob: Job? = null
+    private var fullscreenCheckJob: Job? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -45,8 +45,7 @@ class TarsAccessibilityService : AccessibilityService() {
         try {
             val info = serviceInfo ?: android.accessibilityservice.AccessibilityServiceInfo()
             info.flags = info.flags or
-                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             serviceInfo = info
         } catch (e: Exception) {
             Log.w("TarsAccessibility", "Could not configure serviceInfo flags", e)
@@ -82,11 +81,8 @@ class TarsAccessibilityService : AccessibilityService() {
         overlayNotch.destroyImmediately()
         currentInstance = null
         _isServiceActive.value = false
-        treeParser.clear()
         return super.onUnbind(intent)
     }
-
-    private var fullscreenCheckJob: kotlinx.coroutines.Job? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         when (event?.eventType) {
@@ -144,9 +140,7 @@ class TarsAccessibilityService : AccessibilityService() {
         return dm.widthPixels to dm.heightPixels
     }
 
-    override fun onInterrupt() {
-        treeParser.clear()
-    }
+    override fun onInterrupt() = Unit
 
     override fun onDestroy() {
         stopAgentTask()
@@ -155,15 +149,6 @@ class TarsAccessibilityService : AccessibilityService() {
         super.onDestroy()
         currentInstance = null
         _isServiceActive.value = false
-        treeParser.clear()
-    }
-
-    fun captureScreenDump(): ScreenDump {
-        if (!AgentPreferences(this).isAgentEnabled()) {
-            return ScreenDump(packageName = "", formattedContent = "", elementCount = 0)
-        }
-        val root = rootInActiveWindow
-        return treeParser.parseScreenTree(root)
     }
 
     fun startAgentTaskFromOverlay(prompt: String) {
@@ -189,14 +174,9 @@ class TarsAccessibilityService : AccessibilityService() {
             preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
         )
         val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL)
-        val collector = AgentDatasetCollector(applicationContext)
-
         val runner = AgentLoopRunner(
             context = applicationContext,
-            agentBrain = brain,
-            datasetCollector = collector,
-            providerName = "GROQ",
-            modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+            agentBrain = brain
         )
 
         activeOverlayJob = serviceScope.launch {
@@ -209,7 +189,6 @@ class TarsAccessibilityService : AccessibilityService() {
     fun stopAgentTask() {
         activeOverlayJob?.cancel()
         activeOverlayJob = null
-        treeParser.clear()
         AgentViewModel.getInstance()?.stopTask()
         if (AgentPreferences(this).isAgentEnabled()) {
             overlayNotch.showIdle()

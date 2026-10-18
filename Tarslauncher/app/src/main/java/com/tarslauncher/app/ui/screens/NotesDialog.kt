@@ -4,8 +4,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -21,49 +26,86 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.tarslauncher.app.data.model.NoteItem
-import com.tarslauncher.app.data.notes.NoteManager
-import kotlinx.coroutines.launch
+import androidx.compose.ui.window.DialogProperties
+import com.tarslauncher.app.data.model.ChecklistItem
+import com.tarslauncher.app.data.model.WorkspaceItem
+import com.tarslauncher.app.data.model.WorkspaceItemType
+import com.tarslauncher.app.data.model.WorkspacePriority
+import com.tarslauncher.app.data.sync.GoogleAuthManager
+import com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageNotesDialog(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenAgentSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val noteManager = remember { NoteManager(context) }
-    val notes by noteManager.notesFlow.collectAsState(initial = emptyList())
+    val authManager = remember { GoogleAuthManager(context) }
+    val workspaceRepo = remember { FirebaseWorkspaceRepository(context, authManager) }
 
-    var isAddingNote by remember { mutableStateOf(false) }
+    val items by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
+    val currentUser by authManager.authUserFlow.collectAsState(initial = authManager.currentUser)
+
+    var selectedFilter by remember { mutableStateOf<WorkspaceItemType?>(null) }
+    var isAddingItem by remember { mutableStateOf(false) }
+    var newType by remember { mutableStateOf(WorkspaceItemType.TASK) }
+    var newPriority by remember { mutableStateOf(WorkspacePriority.MEDIUM) }
     var newTitle by remember { mutableStateOf("") }
     var newContent by remember { mutableStateOf("") }
+    var newChecklistRaw by remember { mutableStateOf("") }
 
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        coroutineScope.launch {
+            val authRes = authManager.handleGoogleSignInResult(result.data)
+            if (authRes.isSuccess) {
+                val email = authRes.getOrNull()?.email ?: "Google Hesabı"
+                Toast.makeText(context, "Giriş başarılı: $email", Toast.LENGTH_SHORT).show()
+            } else {
+                val err = authRes.exceptionOrNull()?.message ?: "Google girişi başarısız"
+                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
-    Dialog(onDismissRequest = onDismiss) {
+    val filteredItems = remember(items, selectedFilter) {
+        if (selectedFilter == null) items else items.filter { it.type == selectedFilter }
+    }
+
+    val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.forLanguageTag("tr-TR")) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.95f)
+                containerColor = Color.Black.copy(alpha = 0.97f)
             ),
-            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)),
+            border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.25f)),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.85f)
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.88f)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(18.dp)
             ) {
                 // Header
                 Row(
@@ -73,49 +115,207 @@ fun ManageNotesDialog(
                 ) {
                     Column {
                         Text(
-                            text = "TARS NOT DEFTERİ",
+                            text = "TARS // WORKSPACE",
                             color = Color.White,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.5.sp
                         )
                         Text(
-                            text = "${notes.size} kayıtlı not",
+                            text = "${items.size} kayıt · Firebase Bulut Senkronizasyonu",
                             color = Color.Gray,
-                            fontSize = 12.sp
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
 
                     IconButton(
-                        onClick = { isAddingNote = !isAddingNote }
+                        onClick = { isAddingItem = !isAddingItem }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Yeni Not Ekle",
-                            tint = if (isAddingNote) Color.Cyan else Color.White
+                            contentDescription = "Yeni Kayıt Ekle",
+                            tint = if (isAddingItem) Color(0xFF69F0AE) else Color.White
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // New note input row if expanded
-                if (isAddingNote) {
+                // Google Auth Banner
+                val isGoogleLinked = currentUser != null && currentUser?.isAnonymous == false
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0E0E11), RoundedCornerShape(6.dp))
+                        .border(
+                            BorderStroke(
+                                0.8.dp,
+                                if (isGoogleLinked) Color(0xFF69F0AE).copy(alpha = 0.4f) else Color.White.copy(alpha = 0.25f)
+                            ),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isGoogleLinked) {
+                                "GOOGLE HESABI BAĞLI"
+                            } else {
+                                "VERİ KORUMASI // GOOGLE AUTH"
+                            },
+                            color = if (isGoogleLinked) Color(0xFF69F0AE) else Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = if (isGoogleLinked) {
+                                currentUser?.email ?: "Bulut senkronizasyonu aktif"
+                            } else {
+                                "Verilerinizin kaybolmaması için Google ile giriş yapın"
+                            },
+                            color = Color.Gray,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    if (isGoogleLinked) {
+                        Box(
+                            modifier = Modifier
+                                .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(4.dp))
+                                .clickable {
+                                    coroutineScope.launch {
+                                        authManager.signOut()
+                                        Toast.makeText(context, "Google oturumu kapatıldı", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "ÇIKIŞ",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(Color.White, RoundedCornerShape(4.dp))
+                                .clickable {
+                                    val client = authManager.getGoogleSignInClient()
+                                    if (client != null) {
+                                        googleSignInLauncher.launch(client.signInIntent)
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Google Web Client ID tanımlı değil. Agent ayarlarından veya google-services.json ile ekleyin.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        onOpenAgentSettings?.invoke()
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "GOOGLE GİRİŞ",
+                                color = Color.Black,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Filter Tabs (Tümü | Görevler | Notlar | Fikirler)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    WorkspaceFilterTab(
+                        label = "TÜMÜ (${items.size})",
+                        selected = selectedFilter == null,
+                        onClick = { selectedFilter = null }
+                    )
+                    WorkspaceFilterTab(
+                        label = "GÖREV (${items.count { it.type == WorkspaceItemType.TASK }})",
+                        selected = selectedFilter == WorkspaceItemType.TASK,
+                        onClick = { selectedFilter = WorkspaceItemType.TASK }
+                    )
+                    WorkspaceFilterTab(
+                        label = "NOT (${items.count { it.type == WorkspaceItemType.NOTE }})",
+                        selected = selectedFilter == WorkspaceItemType.NOTE,
+                        onClick = { selectedFilter = WorkspaceItemType.NOTE }
+                    )
+                    WorkspaceFilterTab(
+                        label = "FİKİR (${items.count { it.type == WorkspaceItemType.IDEA }})",
+                        selected = selectedFilter == WorkspaceItemType.IDEA,
+                        onClick = { selectedFilter = WorkspaceItemType.IDEA }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Manual New Workspace Item Form
+                if (isAddingItem) {
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF161618)
-                        ),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF121215)),
+                        border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.2f)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp)
+                            .padding(bottom = 10.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
+                            // Type Selector Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                WorkspaceItemType.entries.forEach { t ->
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .background(
+                                                if (newType == t) Color.White else Color.Black,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                BorderStroke(0.8.dp, Color.White.copy(alpha = 0.3f)),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable { newType = t }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = t.badgeText,
+                                            color = if (newType == t) Color.Black else Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             OutlinedTextField(
                                 value = newTitle,
                                 onValueChange = { newTitle = it },
-                                label = { Text("Başlık (Opsiyonel)", color = Color.Gray, fontSize = 12.sp) },
+                                label = { Text("Başlık", color = Color.Gray, fontSize = 11.sp) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -126,14 +326,14 @@ fun ManageNotesDialog(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             OutlinedTextField(
                                 value = newContent,
                                 onValueChange = { newContent = it },
-                                label = { Text("Not İçeriği", color = Color.Gray, fontSize = 12.sp) },
+                                label = { Text("Detay / İçerik", color = Color.Gray, fontSize = 11.sp) },
                                 minLines = 2,
-                                maxLines = 4,
+                                maxLines = 3,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
@@ -143,6 +343,23 @@ fun ManageNotesDialog(
                                 )
                             )
 
+                            if (newType == WorkspaceItemType.TASK) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = newChecklistRaw,
+                                    onValueChange = { newChecklistRaw = it },
+                                    label = { Text("Alt Maddeler (virgülle ayırın - opsiyonel)", color = Color.Gray, fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color.White,
+                                        unfocusedBorderColor = Color.Gray
+                                    )
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Row(
@@ -150,9 +367,10 @@ fun ManageNotesDialog(
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 TextButton(onClick = {
-                                    isAddingNote = false
+                                    isAddingItem = false
                                     newTitle = ""
                                     newContent = ""
+                                    newChecklistRaw = ""
                                 }) {
                                     Text("İptal", color = Color.Gray, fontSize = 12.sp)
                                 }
@@ -161,13 +379,29 @@ fun ManageNotesDialog(
 
                                 Button(
                                     onClick = {
-                                        if (newContent.isNotBlank()) {
+                                        val finalTitle = newTitle.trim().ifBlank { newContent.trim().take(30) }
+                                        if (finalTitle.isNotBlank()) {
+                                            val checklist = if (newType == WorkspaceItemType.TASK && newChecklistRaw.isNotBlank()) {
+                                                newChecklistRaw.split(",", "\n")
+                                                    .map { it.trim() }
+                                                    .filter { it.isNotBlank() }
+                                                    .map { ChecklistItem(text = it) }
+                                            } else emptyList()
+
+                                            val item = WorkspaceItem(
+                                                type = newType,
+                                                title = finalTitle,
+                                                content = newContent.trim(),
+                                                checklist = checklist,
+                                                priority = newPriority
+                                            )
                                             coroutineScope.launch {
-                                                noteManager.addNote(newContent, newTitle)
+                                                workspaceRepo.addItem(item)
                                                 newTitle = ""
                                                 newContent = ""
-                                                isAddingNote = false
-                                                Toast.makeText(context, "Not kaydedildi", Toast.LENGTH_SHORT).show()
+                                                newChecklistRaw = ""
+                                                isAddingItem = false
+                                                Toast.makeText(context, "${newType.labelTr} Firebase'e kaydedildi", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
@@ -181,8 +415,8 @@ fun ManageNotesDialog(
                     }
                 }
 
-                // Notes List
-                if (notes.isEmpty()) {
+                // Workspace Items List
+                if (filteredItems.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -190,9 +424,9 @@ fun ManageNotesDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Henüz kayıtlı notunuz yok.\nTARS Ajanı'na 'Bunu not al...' diyebilir veya yukarıdaki '+' butonuyla not ekleyebilirsiniz.",
+                            text = "Bu görünümde henüz kayıt yok.\nDynamic Island'dan veya TARS Agent konsolundan doğal dille görev, not ve fikir ekleyebilirsiniz.",
                             color = Color.Gray,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
@@ -202,19 +436,29 @@ fun ManageNotesDialog(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(notes, key = { it.id }) { note ->
-                            NoteCardItem(
-                                note = note,
-                                formattedDate = dateFormat.format(Date(note.createdAt)),
+                        items(filteredItems, key = { it.id }) { item ->
+                            WorkspaceCardItem(
+                                item = item,
+                                formattedDate = dateFormat.format(Date(item.createdAt)),
+                                onToggleComplete = { completed ->
+                                    coroutineScope.launch {
+                                        workspaceRepo.toggleItemCompleted(item.id, completed)
+                                    }
+                                },
+                                onToggleSubItem = { subId, done ->
+                                    coroutineScope.launch {
+                                        workspaceRepo.toggleChecklistSubItem(item.id, subId, done)
+                                    }
+                                },
                                 onCopy = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText(note.title, note.content))
-                                    Toast.makeText(context, "Not kopyalandı", Toast.LENGTH_SHORT).show()
+                                    clipboard.setPrimaryClip(ClipData.newPlainText(item.title, "${item.title}\n${item.content}"))
+                                    Toast.makeText(context, "Panoya kopyalandı", Toast.LENGTH_SHORT).show()
                                 },
                                 onDelete = {
                                     coroutineScope.launch {
-                                        noteManager.deleteNote(note.id)
-                                        Toast.makeText(context, "Not silindi", Toast.LENGTH_SHORT).show()
+                                        workspaceRepo.deleteByQuery(item.id)
+                                        Toast.makeText(context, "Kayıt silindi", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -222,7 +466,7 @@ fun ManageNotesDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Footer
                 Row(
@@ -230,16 +474,22 @@ fun ManageNotesDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (notes.isNotEmpty()) {
+                    val completedTasksCount = items.count { it.type == WorkspaceItemType.TASK && it.isCompleted }
+                    if (completedTasksCount > 0) {
                         TextButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    noteManager.clearNotes()
-                                    Toast.makeText(context, "Tüm notlar temizlendi", Toast.LENGTH_SHORT).show()
+                                    workspaceRepo.clearCompletedTasks()
+                                    Toast.makeText(context, "Tamamlanan görevler temizlendi", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         ) {
-                            Text("Tümünü Temizle", color = Color.Red.copy(alpha = 0.8f), fontSize = 12.sp)
+                            Text(
+                                text = "Bitenleri Temizle ($completedTasksCount)",
+                                color = Color(0xFFFF5252),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
                         }
                     } else {
                         Spacer(modifier = Modifier.width(1.dp))
@@ -249,7 +499,7 @@ fun ManageNotesDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(4.dp)
                     ) {
-                        Text("Kapat", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("KAPAT", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                 }
             }
@@ -258,15 +508,52 @@ fun ManageNotesDialog(
 }
 
 @Composable
-private fun NoteCardItem(
-    note: NoteItem,
+private fun WorkspaceFilterTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .background(
+                if (selected) Color.White else Color(0xFF101014),
+                RoundedCornerShape(4.dp)
+            )
+            .border(
+                BorderStroke(0.8.dp, if (selected) Color.White else Color.White.copy(alpha = 0.2f)),
+                RoundedCornerShape(4.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.Black else Color.White.copy(alpha = 0.8f),
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+@Composable
+private fun WorkspaceCardItem(
+    item: WorkspaceItem,
     formattedDate: String,
+    onToggleComplete: (Boolean) -> Unit,
+    onToggleSubItem: (String, Boolean) -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val badgeColor = when (item.type) {
+        WorkspaceItemType.TASK -> Color(0xFF10B981)
+        WorkspaceItemType.NOTE -> Color(0xFF38BDF8)
+        WorkspaceItemType.IDEA -> Color(0xFFF59E0B)
+    }
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF141416)),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121215)),
+        border = BorderStroke(0.6.dp, Color.White.copy(alpha = if (item.isCompleted) 0.08f else 0.18f)),
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -280,56 +567,165 @@ private fun NoteCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = note.title.ifBlank { "Not" },
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    if (item.type == WorkspaceItemType.TASK) {
+                        Icon(
+                            imageVector = if (item.isCompleted) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                            contentDescription = "Tamamla",
+                            tint = if (item.isCompleted) Color(0xFF10B981) else Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable { onToggleComplete(!item.isCompleted) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+
+                    // Type Badge
+                    Box(
+                        modifier = Modifier
+                            .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(3.dp))
+                            .border(BorderStroke(0.6.dp, badgeColor.copy(alpha = 0.6f)), RoundedCornerShape(3.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = item.type.badgeText,
+                            color = badgeColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    if (item.type == WorkspaceItemType.TASK && item.priority == WorkspacePriority.HIGH) {
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFF5252).copy(alpha = 0.15f), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "ACİL",
+                                color = Color(0xFFFF5252),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = item.title,
+                        color = if (item.isCompleted) Color.Gray else Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 Row {
                     IconButton(
                         onClick = onCopy,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Kopyala",
                             tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Sil",
-                            tint = Color.Red.copy(alpha = 0.7f),
-                            modifier = Modifier.size(16.dp)
+                            tint = Color(0xFFFF5252).copy(alpha = 0.75f),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
             }
 
-            Text(
-                text = formattedDate,
-                color = Color.Gray,
-                fontSize = 10.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
+            if (item.content.isNotBlank() && item.content != item.title) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = item.content,
+                    color = if (item.isCompleted) Color.DarkGray else Color.LightGray,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
 
-            Text(
-                text = note.content,
-                color = Color.LightGray,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
+            // Sub-checklist items
+            if (item.checklist.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        .padding(8.dp)
+                ) {
+                    item.checklist.forEach { sub ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleSubItem(sub.id, !sub.isDone) }
+                        ) {
+                            Text(
+                                text = if (sub.isDone) "[✓]" else "[ ]",
+                                color = if (sub.isDone) Color(0xFF10B981) else Color.Gray,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = sub.text,
+                                color = if (sub.isDone) Color.Gray else Color.White.copy(alpha = 0.9f),
+                                fontSize = 12.sp,
+                                textDecoration = if (sub.isDone) TextDecoration.LineThrough else null
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    item.tags.take(3).forEach { tag ->
+                        Text(
+                            text = "#$tag",
+                            color = Color.Gray,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Text(
+                    text = formattedDate,
+                    color = Color.DarkGray,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
         }
     }
 }

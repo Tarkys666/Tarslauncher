@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User workspace & launcher backup document: strict owner-only access
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().size() <= 20;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Default deny all other collections (including legacy agent_sessions / agent_skills)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

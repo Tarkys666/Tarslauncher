@@ -1,29 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Strict security configuration -->
+    <!-- Strict HTTPS-only security configuration trusting only system CAs in release builds -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
-            <!-- Only trust system certificates -->
             <certificates src="system"/>
         </trust-anchors>
     </base-config>
-    
-    <!-- Certificate pinning for critical domains -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">play.google.com</domain>
-        <domain includeSubdomains="true">android.googleapis.com</domain>
-        <pin-set expiration="2025-12-31">
-            <!-- Google Play Store certificate pins -->
-            <pin digest="SHA-256">YLh1dUR9y6Kja30RrAn7JKnbQG/uEtLMkBgFF2fuihg=</pin>
-            <pin digest="SHA-256">sRHdihwgkaib1P1gxX8HFszlD+7/gTfNvuAybgLPNis=</pin>
-        </pin-set>
-    </domain-config>
-    
-    <!-- Block all user-added CAs in production -->
+
+    <!-- Block all user-added CAs in production; allow only in debug builds -->
     <debug-overrides>
         <trust-anchors>
             <certificates src="system"/>
-            <!-- Only allow user CAs in debug builds -->
             <certificates src="user"/>
         </trust-anchors>
     </debug-overrides>

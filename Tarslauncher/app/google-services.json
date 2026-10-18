@@ -12,7 +12,28 @@
           "package_name": "com.tarslauncher.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "691832963274-dfka4hjkv846r56j0ka9s3h6403rm4vc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tarslauncher.app",
+            "certificate_hash": "1dd173e9e7e5f7b51625dfd88e8707fa0c9f69e8"
+          }
+        },
+        {
+          "client_id": "691832963274-p1ek3ss40cni0t5vi14v4as12h970qjb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tarslauncher.app",
+            "certificate_hash": "6ddb8bf3a9e6a46d843a7bff9750a9e26ce4d296"
+          }
+        },
+        {
+          "client_id": "691832963274-f6mn8av1khpvfbpgm30gs0rff45518e2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyACUUt9EQ6aQAhabH4PlbBUppReoTNENcc"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "691832963274-f6mn8av1khpvfbpgm30gs0rff45518e2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

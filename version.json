@@ -1,7 +1,7 @@
 {
-  "versionCode": 37,
-  "versionName": "1.8.2",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.2/TarsLauncher-release.apk",
-  "apkSize": 11085864,
-  "releaseNotes": "TARS v1.8.2: 21st.dev Tasarımlı Minimalist Dynamic Island & Erişilebilirlik Optimizasyonu — Saf siyah, yazısız ve kompakt (88x28dp) Dynamic Island çentiği, 21st.dev tarzı zarif açılır kontrol arayüzü, tam ekran uygulamalarda otomatik gizleme, yerleşik not defteri aracı, güvenlik/gizlilik korumaları ve erişilebilirlik servisi performans/pil optimizasyonları."
+  "versionCode": 38,
+  "versionName": "1.8.3",
+  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.3/TarsLauncher-release.apk",
+  "apkSize": 11520000,
+  "releaseNotes": "TARS v1.8.3: Notion Tarzı Bulut Çalışma Alanı (Görev, Not, Fikir) & Groq LLM Entegrasyonu — Doğal dil girdilerini otomatik olarak Görev, Alt Maddeli Checklist, Not ve Fikir olarak yapılandıran yeni TARS Workspace motoru, Google Hesabı ile Firebase Firestore gerçek zamanlı bulut senkronizasyonu, Android Keystore (AES-256-GCM) API anahtarı şifrelemesi, ölü kod temizliği ve güvenlik sıkılaştırmaları."
 }
