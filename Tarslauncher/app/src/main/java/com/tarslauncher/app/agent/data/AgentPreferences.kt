@@ -27,7 +27,7 @@ class AgentPreferences(context: Context) {
      * When false (default), uses OpenRouter (`dots-studio/dots-3-note-preview:free`).
      */
     fun isQwenEnabled(): Boolean {
-        return prefs.getBoolean(KEY_QWEN_ENABLED, false)
+        return prefs.getBoolean(KEY_QWEN_ENABLED, true)
     }
 
     fun setQwenEnabled(enabled: Boolean) {

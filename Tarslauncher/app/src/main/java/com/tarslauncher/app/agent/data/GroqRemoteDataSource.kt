@@ -24,13 +24,13 @@ class GroqRemoteDataSource(
     private val userIdProvider: () -> String = { "" }
 ) {
     companion object {
-        const val DEFAULT_OPENROUTER_MODEL = "dots-studio/dots-3-note-preview:free"
+        const val DEFAULT_OPENROUTER_MODEL = "cohere/north-mini-code:free"
         const val DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
         private const val MAX_RETRIES = 3
     }
 
     @Volatile
-    var lastUsedModel: String = DEFAULT_OPENROUTER_MODEL
+    var lastUsedModel: String = DEFAULT_GROQ_MODEL
         private set
 
     suspend fun generateContent(

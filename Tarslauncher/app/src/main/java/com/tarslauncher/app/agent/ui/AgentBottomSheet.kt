@@ -200,7 +200,7 @@ fun AgentBottomSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (uiState.isQwenEnabled) "- Qwen Modeli (qwen3.8-27b)" else "- Qwen Modeli (Dots3-Note Aktif)",
+                        text = if (uiState.isQwenEnabled) "- Qwen Modeli (qwen3.8-27b)" else "- Qwen Modeli (Cohere OpenRouter)",
                         color = TarsWhite,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Light

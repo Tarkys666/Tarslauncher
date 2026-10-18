@@ -343,7 +343,7 @@ fun SettingsScreen(
                 ),
                 SettingsItem.Setting(
                     title = "Qwen Modeli",
-                    description = if (isQwenEnabled) "Açık: Qwen 3.8-27B aktif" else "Kapalı: Dots3-Note Preview (Free) aktif",
+                    description = if (isQwenEnabled) "Açık: Qwen 3.8-27B (Groq) aktif" else "Kapalı: Cohere North Mini (OpenRouter) aktif",
                     type = SettingType.TOGGLE,
                     currentValue = isQwenEnabled,
                     onValueChange = { newValue ->
