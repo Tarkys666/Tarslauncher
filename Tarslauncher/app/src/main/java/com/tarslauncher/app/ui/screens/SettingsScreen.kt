@@ -141,10 +141,15 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showNotesDialog by remember { mutableStateOf(false) }
+    var showAuthDialog by remember { mutableStateOf(false) }
     var showAgentSheet by remember { mutableStateOf(false) }
 
-    val workspaceRepo = remember { com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository(context) }
+    val authManager = remember { com.tarslauncher.app.data.sync.GoogleAuthManager(context) }
+    val workspaceRepo = remember { com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository(context, authManager) }
     val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
+    val currentUser by authManager.authUserFlow.collectAsState(initial = authManager.currentUser)
+    val isGoogleLinked = currentUser != null && currentUser?.isAnonymous == false
+    val googleUserLabel = currentUser?.email ?: currentUser?.displayName ?: "Google Hesabı"
     
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -161,7 +166,9 @@ fun SettingsScreen(
         appVersion,
         isSyncing,
         lastBackupTime,
-        workspaceItems.size
+        workspaceItems.size,
+        isGoogleLinked,
+        googleUserLabel
     ) {
         listOf(
             SettingsItem.Category(
@@ -297,6 +304,18 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
+            title = "ACCOUNT & AUTH (GOOGLE)",
+            icon = "",
+            children = listOf(
+                SettingsItem.Setting(
+                    title = "Google Auth & Bulut Hesap",
+                    description = if (isGoogleLinked) "Bağlı: $googleUserLabel" else "Anonim oturum — Google ile bağlamak için açın",
+                    type = SettingType.BUTTON,
+                    onClick = { showAuthDialog = true }
+                )
+            )
+        ),
+        SettingsItem.Category(
             title = "TARS AGENT & WORKSPACE",
             icon = "",
             children = listOf(
@@ -307,8 +326,8 @@ fun SettingsScreen(
                     onClick = { showAgentSheet = true }
                 ),
                 SettingsItem.Setting(
-                    title = "TARS Workspace (Görev / Not / Fikir)",
-                    description = if (workspaceItems.isEmpty()) "Henüz kayıt yok (Google Auth & Firebase)" else "${workspaceItems.size} bulut kaydı (Görev, Not ve Fikirleri Yönet)",
+                    title = "Notlarım",
+                    description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
                     type = SettingType.BUTTON,
                     onClick = { showNotesDialog = true }
                 )
@@ -636,6 +655,12 @@ fun SettingsScreen(
                 showNotesDialog = false
                 showAgentSheet = true
             }
+        )
+    }
+
+    if (showAuthDialog) {
+        ManageAuthDialog(
+            onDismiss = { showAuthDialog = false }
         )
     }
 

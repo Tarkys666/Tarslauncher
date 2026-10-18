@@ -108,23 +108,26 @@ class AgentLoopRunner(
             emit(AgentEvent.StatusLog("Analiz: ${action.thought}"))
         }
 
-        // Eğer LLM ek soru sorduysa (AskUser)
-        if (action is AgentAction.AskUser) {
-            service?.overlayNotch?.showOrUpdate(
-                stepNumber = 1,
-                plan = currentPlan,
-                liveDetail = "? ${action.question}",
-                state = AgentOverlayNotchManager.NotchState.THINKING
-            )
+        // Eğer LLM ek soru sorduysa (AskUser) - Dynamic Island üzerinden etkileşimli soru-cevap
+        var questionTurn = 0
+        while (action is AgentAction.AskUser && questionTurn < 3) {
+            questionTurn++
+            val askAction = action as AgentAction.AskUser
             val answerDeferred = CompletableDeferred<String?>()
-            emit(AgentEvent.QuestionToUser(action.question, answerDeferred))
 
-            val userReply = withTimeoutOrNull(60_000L) {
+            service?.overlayNotch?.promptUserQuestion(askAction.question) { reply ->
+                if (!answerDeferred.isCompleted) {
+                    answerDeferred.complete(reply)
+                }
+            }
+            emit(AgentEvent.QuestionToUser(askAction.question, answerDeferred))
+
+            val userReply = withTimeoutOrNull(90_000L) {
                 answerDeferred.await()
             }?.trim()
 
             if (userReply.isNullOrBlank()) {
-                val cancelMsg = "Kullanıcı soruyu yanıtlamadı veya süre aşıldı."
+                val cancelMsg = "Soru yanıtlanmadı veya iptal edildi."
                 service?.overlayNotch?.showOrUpdate(
                     stepNumber = 1,
                     plan = currentPlan,
@@ -136,12 +139,19 @@ class AgentLoopRunner(
             }
 
             emit(AgentEvent.StatusLog("Kullanıcı yanıtı: \"$userReply\""))
-            history.add(ChatMessage(ChatMessage.Role.MODEL, "SORU: ${action.question}"))
+            history.add(ChatMessage(ChatMessage.Role.MODEL, "SORU: ${askAction.question}"))
             history.add(ChatMessage(ChatMessage.Role.USER, "YANIT: $userReply"))
 
-            val secondDecision = agentBrain.decideNextAction(systemPrompt, history)
-            if (secondDecision.isFailure) {
-                val err = secondDecision.exceptionOrNull()?.message ?: "Model hatası"
+            service?.overlayNotch?.showOrUpdate(
+                stepNumber = 2,
+                plan = currentPlan,
+                liveDetail = "Düşünüyor",
+                state = AgentOverlayNotchManager.NotchState.THINKING
+            )
+
+            val nextDecision = agentBrain.decideNextAction(systemPrompt, history)
+            if (nextDecision.isFailure) {
+                val err = nextDecision.exceptionOrNull()?.message ?: "Model hatası"
                 service?.overlayNotch?.showOrUpdate(
                     stepNumber = 2,
                     plan = currentPlan,
@@ -151,7 +161,7 @@ class AgentLoopRunner(
                 emit(AgentEvent.Failure(err))
                 return@flow
             }
-            action = secondDecision.getOrThrow().action
+            action = nextDecision.getOrThrow().action
         }
 
         // 3. Firebase Workspace İşlemini Uygula
@@ -347,6 +357,7 @@ class AgentLoopRunner(
                 }
                 currentPlan = currentPlan.markAllCompleted()
                 emit(AgentEvent.PlanStepUpdated(currentPlan))
+                service?.overlayNotch?.showAgentReply(summary)
                 service?.overlayNotch?.showOrUpdate(
                     stepNumber = 2,
                     plan = currentPlan,
@@ -359,6 +370,7 @@ class AgentLoopRunner(
             is AgentAction.Done -> {
                 currentPlan = currentPlan.markAllCompleted()
                 emit(AgentEvent.PlanStepUpdated(currentPlan))
+                service?.overlayNotch?.showAgentReply(finalAction.summary)
                 service?.overlayNotch?.showOrUpdate(
                     stepNumber = 2,
                     plan = currentPlan,

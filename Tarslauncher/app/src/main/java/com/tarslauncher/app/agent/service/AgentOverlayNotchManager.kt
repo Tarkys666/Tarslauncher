@@ -71,6 +71,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     // Expanded view elements
     private var expandedContainerView: LinearLayout? = null
+    private var agentMessageView: TextView? = null
     private var inputEditText: EditText? = null
     private var stopButtonView: TextView? = null
     private var startButtonView: TextView? = null
@@ -81,6 +82,12 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     @Volatile
     var onTaskSubmitted: ((String) -> Unit)? = null
+
+    @Volatile
+    private var pendingQuestionCallback: ((String) -> Unit)? = null
+
+    private var activeQuestionText: String? = null
+    private var activeReplyText: String? = null
 
     private var currentPlan: AgentPlan? = null
     private var currentStepNum: Int = 1
@@ -185,7 +192,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
                 val toIdleTask = Runnable {
-                    if (!isExpanded) {
+                    if (!isExpanded && pendingQuestionCallback == null) {
                         showIdle()
                     }
                 }
@@ -195,12 +202,63 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
     }
 
+    /**
+     * Expands the Dynamic Island to ask the user a question from the LLM and waits for their reply.
+     */
+    fun promptUserQuestion(question: String, onAnswer: (String) -> Unit) {
+        mainHandler.post {
+            autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
+                onAnswer("")
+                return@post
+            }
+            if (rootContainer == null) {
+                createAndAttachOverlay()
+            }
+            pendingQuestionCallback = onAnswer
+            activeQuestionText = question
+            activeReplyText = null
+            currentState = NotchState.THINKING
+
+            updateUiContent(currentStepNum, currentPlan, "Soru", NotchState.THINKING)
+            if (!isExpanded) {
+                expandIsland()
+            } else {
+                updateExpandedState()
+                inputEditText?.requestFocus()
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                inputEditText?.let { imm?.showSoftInput(it, InputMethodManager.SHOW_IMPLICIT) }
+            }
+        }
+    }
+
+    /**
+     * Displays an AI reply/summary directly inside the Dynamic Island.
+     */
+    fun showAgentReply(reply: String) {
+        mainHandler.post {
+            if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) return@post
+            if (rootContainer == null) {
+                createAndAttachOverlay()
+            }
+            activeReplyText = reply
+            activeQuestionText = null
+            pendingQuestionCallback = null
+            updateExpandedState()
+        }
+    }
+
     fun hide() {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
             autoIdleRunnable = null
             unregisterScreenStateReceiver()
             stopPulseAnimation()
+
+            pendingQuestionCallback?.invoke("")
+            pendingQuestionCallback = null
+            activeQuestionText = null
+            activeReplyText = null
 
             val view = rootContainer ?: return@post
             rootContainer = null
@@ -228,6 +286,11 @@ class AgentOverlayNotchManager(private val context: Context) {
             unregisterScreenStateReceiver()
             stopPulseAnimation()
 
+            pendingQuestionCallback?.invoke("")
+            pendingQuestionCallback = null
+            activeQuestionText = null
+            activeReplyText = null
+
             val view = rootContainer
             rootContainer = null
             compactRowView = null
@@ -235,6 +298,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             statusWordView = null
             stageBadgeView = null
             expandedContainerView = null
+            agentMessageView = null
             inputEditText = null
             stopButtonView = null
             startButtonView = null
@@ -473,11 +537,34 @@ class AgentOverlayNotchManager(private val context: Context) {
             background = controlBackground(Color.parseColor("#18181B"), 14)
             contentDescription = "Kapat"
             isFocusable = true
-            setOnClickListener { collapseIsland() }
+            setOnClickListener {
+                pendingQuestionCallback?.invoke("")
+                pendingQuestionCallback = null
+                activeQuestionText = null
+                activeReplyText = null
+                collapseIsland()
+            }
         }
         header.addView(closeBtn)
 
         expanded.addView(header)
+
+        // --- Agent Question / Reply Bubble inside Dynamic Island ---
+        val messageBox = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            }
+            background = roundedSurface(Color.parseColor("#141418"), 12, Color.parseColor("#2E2E36"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setTextColor(Color.parseColor("#FAFAFA"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            maxLines = 6
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        agentMessageView = messageBox
+        expanded.addView(messageBox)
 
         // --- 21st.dev Style Integrated Input Card ---
         val inputCard = LinearLayout(c).apply {
@@ -741,9 +828,21 @@ class AgentOverlayNotchManager(private val context: Context) {
     private fun submitTaskFromInput() {
         val taskText = inputEditText?.text?.toString()?.trim().orEmpty()
         if (taskText.isNotBlank()) {
-            collapseIsland()
             inputEditText?.setText("")
-            onTaskSubmitted?.invoke(taskText)
+            val questionCb = pendingQuestionCallback
+            if (questionCb != null) {
+                pendingQuestionCallback = null
+                activeQuestionText = null
+                activeReplyText = null
+                updateExpandedState()
+                collapseIsland()
+                questionCb.invoke(taskText)
+            } else {
+                activeReplyText = null
+                updateExpandedState()
+                collapseIsland()
+                onTaskSubmitted?.invoke(taskText)
+            }
         }
     }
 
@@ -771,12 +870,31 @@ class AgentOverlayNotchManager(private val context: Context) {
     private fun updateExpandedState() {
         val isRunning = currentState == NotchState.ACTIVE || currentState == NotchState.THINKING
         stopButtonView?.visibility = if (isRunning) View.VISIBLE else View.GONE
-        expandedStatusView?.text = when (currentState) {
-            NotchState.IDLE -> "Bir sonraki adım sende."
-            NotchState.THINKING -> "Görevin üzerinde düşünüyorum…"
-            NotchState.ACTIVE -> "Görevin üzerinde çalışıyorum…"
-            NotchState.COMPLETED -> "Görev tamamlandı."
-            NotchState.FAILED -> "Görev durduruldu."
+
+        val question = activeQuestionText
+        val reply = activeReplyText
+
+        if (!question.isNullOrBlank()) {
+            expandedStatusView?.text = "Yanıtınız bekleniyor…"
+            agentMessageView?.text = question
+            agentMessageView?.visibility = View.VISIBLE
+            inputEditText?.hint = "Yanıtınızı yazın..."
+        } else if (!reply.isNullOrBlank()) {
+            expandedStatusView?.text = "TARS Yanıtı"
+            agentMessageView?.text = reply
+            agentMessageView?.visibility = View.VISIBLE
+            inputEditText?.hint = "Mesajınızı yazın veya bir görev verin..."
+        } else {
+            agentMessageView?.visibility = View.GONE
+            agentMessageView?.text = ""
+            inputEditText?.hint = "Mesajınızı yazın veya bir görev verin..."
+            expandedStatusView?.text = when (currentState) {
+                NotchState.IDLE -> "Bir sonraki adım sende."
+                NotchState.THINKING -> "Görevin üzerinde düşünüyorum…"
+                NotchState.ACTIVE -> "Görevin üzerinde çalışıyorum…"
+                NotchState.COMPLETED -> "Görev tamamlandı."
+                NotchState.FAILED -> "Görev durduruldu."
+            }
         }
     }
 
