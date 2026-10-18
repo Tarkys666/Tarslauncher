@@ -337,7 +337,7 @@ fun SettingsScreen(
             children = listOf(
                 SettingsItem.Setting(
                     title = "TARS Agent Konsolu",
-                    description = "API anahtarı, Dynamic Island ve komut konsolu",
+                    description = "Dynamic Island ve komut konsolu",
                     type = SettingType.BUTTON,
                     onClick = { showAgentSheet = true }
                 ),

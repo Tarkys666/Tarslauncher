@@ -146,7 +146,6 @@ class AgentViewModel(
         }
 
         val remoteDataSource = GroqRemoteDataSource(
-            apiKeyProvider = { preferences.getActiveApiKey() },
             preferredModelProvider = { preferences.getActiveModel() },
             userIdProvider = { authManager.currentUser?.uid.orEmpty() }
         )

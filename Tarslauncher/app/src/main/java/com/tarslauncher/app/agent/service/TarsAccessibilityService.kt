@@ -158,7 +158,6 @@ class TarsAccessibilityService : AccessibilityService() {
 
         val authManager = com.tarslauncher.app.data.sync.GoogleAuthManager(applicationContext)
         val remoteDataSource = GroqRemoteDataSource(
-            apiKeyProvider = { prefs.getActiveApiKey() },
             preferredModelProvider = { prefs.getActiveModel() },
             userIdProvider = { authManager.currentUser?.uid.orEmpty() }
         )

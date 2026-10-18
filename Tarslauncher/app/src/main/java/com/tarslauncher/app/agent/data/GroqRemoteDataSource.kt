@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
  * and secret lookups (`public.agent_secrets`) execute on the Supabase Edge Function.
  */
 class GroqRemoteDataSource(
-    private val apiKeyProvider: () -> String,
+    private val apiKeyProvider: () -> String = { "" },
     private val preferredModelProvider: () -> String = { DEFAULT_OPENROUTER_MODEL },
     private val userIdProvider: () -> String = { "" }
 ) {
@@ -84,7 +84,7 @@ class GroqRemoteDataSource(
                     RuntimeException("Zaman Aşımı: Supabase Edge Function yanıt süresi aşıldı.")
                 }
                 msg.contains("401") || msg.contains("invalid_api_key", ignoreCase = true) -> {
-                    RuntimeException("API Anahtarı Eksik veya Geçersiz: Lütfen TARS Agent konsolundan API anahtarınızı kaydedin.")
+                    RuntimeException("API Hatası: Model API anahtarı geçersiz veya sunucu tarafında yapılandırılmamış.")
                 }
                 isRateLimit -> {
                     RuntimeException("Hız Limiti (429): Lütfen birkaç saniye bekleyip tekrar deneyin.")

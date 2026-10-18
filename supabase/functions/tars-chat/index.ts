@@ -3,9 +3,14 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 /**
  * TARS Launcher - AI Chat Proxy Edge Function
  * Routes client prompts to OpenRouter (`dots-studio/dots-3-note-preview:free`) or Groq (`qwen/qwen3.8-27b`).
- * Client passes { model, messages, apiKey, qwenEnabled, temperature, top_p }.
- * Uses client-provided key, or falls back to backend secrets (OPENROUTER_API_KEY / GROQ_API_KEY).
+ * Client only passes { model, messages, qwenEnabled, temperature, top_p }.
+ * Uses direct server-side API keys or backend environment secrets.
  */
+
+// DIRECT MODEL API KEYS (Server-Side)
+// Telefon üzerinden API anahtarı girme zorunluluğunu ortadan kaldırmak için doğrudan Edge Function içinde kullanılır.
+const DIRECT_OPENROUTER_API_KEY = ""; // OpenRouter API Key (sk-or-...)
+const DIRECT_GROQ_API_KEY = "";       // Groq Cloud API Key (gsk_...)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,15 +34,20 @@ Deno.serve(async (req) => {
     } = body;
 
     const isOpenRouterModel = !qwenEnabled || model.endsWith(":free") || model.startsWith("dots-studio/");
-    const resolvedKey = (apiKey && apiKey.trim()) ||
-      (isOpenRouterModel ? Deno.env.get("OPENROUTER_API_KEY") : Deno.env.get("GROQ_API_KEY")) ||
+    const resolvedKey =
+      (isOpenRouterModel
+        ? (DIRECT_OPENROUTER_API_KEY || Deno.env.get("OPENROUTER_API_KEY"))
+        : (DIRECT_GROQ_API_KEY || Deno.env.get("GROQ_API_KEY"))) ||
+      DIRECT_OPENROUTER_API_KEY ||
+      DIRECT_GROQ_API_KEY ||
       Deno.env.get("OPENROUTER_API_KEY") ||
       Deno.env.get("GROQ_API_KEY") ||
+      (apiKey && apiKey.trim()) ||
       "";
 
     if (!resolvedKey) {
       return new Response(
-        JSON.stringify({ error: { message: "API anahtarı bulunamadı (Supabase Secret veya istemci anahtarı gerekli)." } }),
+        JSON.stringify({ error: { message: "API anahtarı yapılandırılmamış (DIRECT_OPENROUTER_API_KEY / DIRECT_GROQ_API_KEY veya Supabase Secret gerekli)." } }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

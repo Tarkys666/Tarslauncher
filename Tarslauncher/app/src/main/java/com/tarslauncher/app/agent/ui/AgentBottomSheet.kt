@@ -2,7 +2,6 @@ package com.tarslauncher.app.agent.ui
 
 import android.content.Intent
 import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -74,11 +72,7 @@ fun AgentBottomSheet(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
-
-    var showKeyEditor by remember { mutableStateOf(uiState.groqApiKey.isBlank()) }
-    var tempApiKey by remember(uiState.groqApiKey, uiState.isQwenEnabled) { mutableStateOf(uiState.groqApiKey) }
 
     val logListState = rememberLazyListState()
     LaunchedEffect(uiState.logs.size) {
@@ -219,121 +213,6 @@ fun AgentBottomSheet(
                         fontWeight = FontWeight.Light,
                         letterSpacing = 2.sp
                     )
-                }
-
-                HorizontalDivider(thickness = 1.dp, color = TarsLine)
-
-                // Row C: API Key (OpenRouter sk-or-... / Groq gsk_...)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showKeyEditor = !showKeyEditor },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "- API Anahtarı",
-                            color = TarsWhite,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Light
-                        )
-
-                        Text(
-                            text = if (uiState.groqApiKey.isNotBlank() && !showKeyEditor) {
-                                "KAYITLI"
-                            } else if (showKeyEditor) {
-                                "GİZLE"
-                            } else {
-                                "GİR"
-                            },
-                            color = if (uiState.groqApiKey.isNotBlank()) TarsMuted else TarsWhite,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Light,
-                            letterSpacing = 2.sp
-                        )
-                    }
-
-                    AnimatedVisibility(visible = showKeyEditor) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "- ",
-                                    color = TarsDim,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Light
-                                )
-
-                                Box(modifier = Modifier.weight(1f)) {
-                                    if (tempApiKey.isEmpty()) {
-                                        Text(
-                                            text = if (uiState.isQwenEnabled) "gsk_..." else "sk-or-...",
-                                            color = TarsDim,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Light
-                                        )
-                                    }
-                                    BasicTextField(
-                                        value = tempApiKey,
-                                        onValueChange = { tempApiKey = it },
-                                        singleLine = true,
-                                        textStyle = TextStyle(
-                                            color = TarsWhite,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Light
-                                        ),
-                                        cursorBrush = SolidColor(TarsWhite),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Text(
-                                    text = "YAPIŞTIR",
-                                    color = TarsMuted,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Light,
-                                    letterSpacing = 1.5.sp,
-                                    modifier = Modifier
-                                        .clickable {
-                                            val clip = clipboardManager.getText()?.text?.trim().orEmpty()
-                                            if (clip.isNotBlank()) {
-                                                tempApiKey = clip
-                                            }
-                                        }
-                                        .padding(horizontal = 4.dp, vertical = 4.dp)
-                                )
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Text(
-                                    text = "KAYDET",
-                                    color = TarsWhite,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    letterSpacing = 1.5.sp,
-                                    modifier = Modifier
-                                        .clickable {
-                                            viewModel.onSaveApiKey(tempApiKey)
-                                            showKeyEditor = false
-                                            focusManager.clearFocus()
-                                            Toast.makeText(context, "Kaydedildi", Toast.LENGTH_SHORT).show()
-                                        }
-                                        .padding(horizontal = 4.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
                 }
 
                 HorizontalDivider(thickness = 1.dp, color = TarsLine)
