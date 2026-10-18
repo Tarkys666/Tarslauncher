@@ -145,7 +145,8 @@ object ActionParser {
         return when (actionName) {
             "create", "add", "save", "note", "task", "idea", "todo",
             "add_task", "add_note", "add_idea", "create_task", "create_note", "create_idea",
-            "not", "not_al", "not_ekle", "gorev_ekle", "fikir_ekle" -> {
+            "not", "not_al", "not_ekle", "gorev_ekle", "fikir_ekle",
+            "set_alarm", "alarm", "reminder", "timer", "hatirlat", "alarm_kur" -> {
                 val subAction = (args.get("action")?.asString ?: args.get("mode")?.asString).orEmpty().lowercase().trim()
                 if (subAction in listOf("delete", "remove", "sil", "kaldır")) {
                     val target = extractTarget(args)
@@ -165,7 +166,7 @@ object ActionParser {
                 }
 
                 val inferredTypeStr = when {
-                    actionName.contains("task") || actionName.contains("todo") || actionName.contains("gorev") -> "TASK"
+                    actionName.contains("task") || actionName.contains("todo") || actionName.contains("gorev") || actionName.contains("alarm") || actionName.contains("reminder") || actionName.contains("hatirlat") -> "TASK"
                     actionName.contains("idea") || actionName.contains("fikir") -> "IDEA"
                     else -> args.get("type")?.asString
                         ?: args.get("category")?.asString
@@ -199,6 +200,37 @@ object ActionParser {
                 val checklist = extractStringList(args.get("checklist") ?: args.get("subtasks") ?: args.get("items") ?: args.get("steps"))
                 val tags = extractStringList(args.get("tags") ?: args.get("labels") ?: args.get("etiketler"))
 
+                var alarmHour = runCatching {
+                    (args.get("alarm_hour") ?: args.get("hour") ?: args.get("saat"))?.asInt
+                }.getOrNull()
+                var alarmMinute = runCatching {
+                    (args.get("alarm_minute") ?: args.get("minute") ?: args.get("dakika"))?.asInt
+                }.getOrNull()
+
+                val timeStr = runCatching {
+                    (args.get("alarm_time") ?: args.get("time"))?.asString?.trim()
+                }.getOrNull()
+                if (alarmHour == null && !timeStr.isNullOrBlank()) {
+                    val parts = timeStr.split(":", ".")
+                    val h = parts.getOrNull(0)?.trim()?.toIntOrNull()
+                    val m = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
+                    if (h != null && h in 0..23 && m in 0..59) {
+                        alarmHour = h
+                        alarmMinute = m
+                    }
+                }
+                if (alarmHour != null && alarmMinute == null) {
+                    alarmMinute = 0
+                }
+
+                val durationSeconds = runCatching {
+                    (args.get("duration_seconds") ?: args.get("seconds"))?.asLong
+                }.getOrNull()
+
+                val isTomorrow = runCatching {
+                    (args.get("is_tomorrow") ?: args.get("tomorrow") ?: args.get("yarin"))?.asBoolean
+                }.getOrNull() ?: false
+
                 val finalTitle = title.ifBlank {
                     content.lineSequence().firstOrNull()?.take(40) ?: itemType.labelTr
                 }
@@ -211,6 +243,10 @@ object ActionParser {
                     priority = priority,
                     checklist = checklist,
                     tags = tags,
+                    alarmHour = alarmHour?.takeIf { it in 0..23 },
+                    alarmMinute = alarmMinute?.takeIf { it in 0..59 },
+                    durationSeconds = durationSeconds?.takeIf { it > 0L },
+                    isTomorrow = isTomorrow,
                     stepIndex = stepIndex
                 )
             }

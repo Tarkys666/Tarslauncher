@@ -57,8 +57,7 @@ private val MonoDisabledBg = Color(0xFF141414)
 
 /**
  * Ultra-minimal, full-monochrome, zero-corner (`RectangleShape`), pitch-black (`#000000`) Notes screen.
- * - Lists ONLY notes separated by `-` lines.
- * - Bottom input bar with `↑` arrow button summarizes the note via LLM and saves it to the Firebase server.
+ * Lists ONLY saved notes/messages separated by `-` lines.
  */
 @Composable
 fun ManageNotesDialog(
@@ -66,66 +65,14 @@ fun ManageNotesDialog(
     onOpenAgentSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
     val authManager = remember { GoogleAuthManager(context) }
     val workspaceRepo = remember { FirebaseWorkspaceRepository(context, authManager) }
-    val agentPrefs = remember { AgentPreferences(context) }
     val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
-
-    var noteInput by remember { mutableStateOf("") }
-    var isSending by remember { mutableStateOf(false) }
-    var statusText by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         authManager.ensureSessionUid()
-    }
-
-    fun submitAndSummarizeNote() {
-        val rawText = noteInput.trim()
-        if (rawText.isBlank() || isSending) return
-
-        noteInput = ""
-        focusManager.clearFocus()
-        isSending = true
-        statusText = "ÖZETLENİYOR VE SUNUCUYA GÖNDERİLİYOR..."
-
-        coroutineScope.launch {
-            val apiKey = agentPrefs.getGroqApiKey().trim()
-            val summarizedText = if (apiKey.isNotBlank()) {
-                val remote = GroqRemoteDataSource(
-                    apiKeyProvider = { apiKey },
-                    preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
-                )
-                val llmRes = remote.generateContent(
-                    systemInstruction = AgentPromptProvider.NOTE_SUMMARIZER_SYSTEM_PROMPT,
-                    messages = listOf(ChatMessage(ChatMessage.Role.USER, rawText))
-                )
-                llmRes.getOrNull()
-                    ?.replace(Regex("""<think>.*?</think>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-                    ?.trim()
-                    ?.removeSurrounding("\"")
-                    ?.takeIf { it.isNotBlank() }
-                    ?: rawText
-            } else {
-                rawText
-            }
-
-            val newItem = WorkspaceItem(
-                type = WorkspaceItemType.NOTE,
-                title = summarizedText.take(WorkspaceItem.MAX_TITLE_LENGTH),
-                content = ""
-            )
-
-            val saveRes = workspaceRepo.addItem(newItem)
-            statusText = if (saveRes.isSuccess) {
-                null
-            } else {
-                "SUNUCU HATASI: ${saveRes.exceptionOrNull()?.localizedMessage ?: "Kaydedilemedi"}"
-            }
-            isSending = false
-        }
     }
 
     Dialog(
@@ -146,7 +93,6 @@ fun ManageNotesDialog(
                     .background(MonoBlack)
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .imePadding()
             ) {
                 // ─── 1. ULTRA-MINIMAL HEADER ─────────────────────────────────
                 Row(
@@ -231,94 +177,6 @@ fun ManageNotesDialog(
                                 )
                             }
                         }
-                    }
-                }
-
-                // ─── 3. STATUS LINE (IF SUMMARIZING OR ERROR) ────────────────
-                if (!statusText.isNullOrBlank()) {
-                    HorizontalDivider(thickness = 1.dp, color = MonoLine)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MonoBlack)
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = statusText.orEmpty(),
-                            color = MonoMuted,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                    }
-                }
-
-                // ─── 4. BOTTOM INPUT BAR WITH ARROW ('↑') SEND BUTTON ────────
-                HorizontalDivider(thickness = 1.dp, color = MonoBorder)
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MonoBlack)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = noteInput,
-                        onValueChange = { noteInput = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        textStyle = TextStyle(
-                            color = MonoWhite,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                            lineHeight = 20.sp
-                        ),
-                        cursorBrush = SolidColor(MonoWhite),
-                        maxLines = 4,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                            imeAction = ImeAction.Send
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onSend = { submitAndSummarizeNote() }
-                        ),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (noteInput.isEmpty()) {
-                                    Text(
-                                        text = "Not yaz (özetlenip sunucuya gönderilir)...",
-                                        color = MonoDim,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Light
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        }
-                    )
-
-                    val canSend = noteInput.isNotBlank() && !isSending
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(if (canSend) MonoWhite else MonoDisabledBg, RectangleShape)
-                            .border(BorderStroke(1.dp, if (canSend) MonoWhite else MonoBorder), RectangleShape)
-                            .clickable(enabled = canSend) { submitAndSummarizeNote() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (isSending) "…" else "↑",
-                            color = if (canSend) MonoBlack else MonoDim,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }

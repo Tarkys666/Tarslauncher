@@ -31,6 +31,10 @@ sealed interface AgentAction {
         val priority: WorkspacePriority = WorkspacePriority.MEDIUM,
         val checklist: List<String> = emptyList(),
         val tags: List<String> = emptyList(),
+        val alarmHour: Int? = null,
+        val alarmMinute: Int? = null,
+        val durationSeconds: Long? = null,
+        val isTomorrow: Boolean = false,
         override val stepIndex: Int = -1
     ) : AgentAction
 

@@ -16,16 +16,20 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.util.Log
-import android.util.TypedValue
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
-import android.text.Editable
+import android.util.Log
+import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.KeyEvent
@@ -40,10 +44,13 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.tarslauncher.app.agent.domain.model.AgentPlan
+import java.util.Locale
 
 /**
- * OLED-black task capsule powered by TYPE_ACCESSIBILITY_OVERLAY.
- * Expands into a focused task composer with accessible native controls.
+ * OLED-black Dynamic Island capsule powered by TYPE_ACCESSIBILITY_OVERLAY.
+ * - Compact pill at the top center (shows live ticking countdown when an alarm is scheduled).
+ * - Expands into an ultra-minimal, pure monochrome, zero-corner AI conversation & countdown card
+ *   matching the rest of TARS Launcher.
  */
 class AgentOverlayNotchManager(private val context: Context) {
 
@@ -66,12 +73,18 @@ class AgentOverlayNotchManager(private val context: Context) {
     private var statusWordView: TextView? = null
     private var stageBadgeView: TextView? = null
     private var pulseAnimator: ObjectAnimator? = null
+    private var borderPulseAnimator: ValueAnimator? = null
     private var autoIdleRunnable: Runnable? = null
     private var screenStateReceiver: BroadcastReceiver? = null
 
-    // Expanded view elements
+    // Expanded view elements (Ultra-Minimal Monochrome)
     private var expandedContainerView: LinearLayout? = null
+    private var countdownRowView: LinearLayout? = null
+    private var countdownTextView: TextView? = null
+    private var countdownCancelBtn: TextView? = null
     private var agentMessageView: TextView? = null
+    private var alarmDismissBtn: TextView? = null
+    private var inputCardView: LinearLayout? = null
     private var inputEditText: EditText? = null
     private var stopButtonView: TextView? = null
     private var startButtonView: TextView? = null
@@ -88,6 +101,13 @@ class AgentOverlayNotchManager(private val context: Context) {
 
     private var activeQuestionText: String? = null
     private var activeReplyText: String? = null
+
+    // Live Alarm / Countdown state
+    private var countdownTargetMs: Long = 0L
+    private var countdownLabel: String = ""
+    private var countdownTimeFormatted: String = ""
+    private var isAlarmRinging: Boolean = false
+    private var countdownTicker: Runnable? = null
 
     private var currentPlan: AgentPlan? = null
     private var currentStepNum: Int = 1
@@ -126,7 +146,7 @@ class AgentOverlayNotchManager(private val context: Context) {
                         .withEndAction(null)
                         .start()
 
-                    if (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING) {
+                    if (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING || countdownTargetMs > System.currentTimeMillis()) {
                         startPulseAnimation()
                     }
                 }
@@ -183,7 +203,6 @@ class AgentOverlayNotchManager(private val context: Context) {
             updateUiContent(stepNumber, currentPlan, liveDetail, state)
             updateExpandedState()
 
-            // Update stop button state in expanded view if visible
             stopButtonView?.visibility = if (state == NotchState.ACTIVE || state == NotchState.THINKING) {
                 View.VISIBLE
             } else {
@@ -192,13 +211,165 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             if (state == NotchState.COMPLETED || state == NotchState.FAILED) {
                 val toIdleTask = Runnable {
-                    if (!isExpanded && pendingQuestionCallback == null) {
+                    if (!isExpanded && pendingQuestionCallback == null && !isAlarmRinging) {
                         showIdle()
                     }
                 }
                 autoIdleRunnable = toIdleTask
                 mainHandler.postDelayed(toIdleTask, 2800L)
             }
+        }
+    }
+
+    /**
+     * Starts a live countdown inside the Dynamic Island for a scheduled alarm/reminder,
+     * shows an animated notification banner on the Island, and triggers an animated alert when time is up.
+     */
+    fun startAlarmCountdown(targetTimeMillis: Long, label: String, timeFormatted: String) {
+        mainHandler.post {
+            if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) return@post
+            if (rootContainer == null) {
+                createAndAttachOverlay()
+            }
+
+            countdownTargetMs = targetTimeMillis
+            countdownLabel = label
+            countdownTimeFormatted = timeFormatted
+            isAlarmRinging = false
+
+            val initRemainingSec = ((targetTimeMillis - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
+            activeReplyText = "- ALARM KURULDU // $timeFormatted\n- $label\n- KALAN SÜRE: ${formatDuration(initRemainingSec)}"
+            activeQuestionText = null
+            pendingQuestionCallback = null
+
+            // Animated notification expansion on the Island when alarm is scheduled
+            animateIslandNotificationBanner()
+
+            startCountdownLoop()
+
+            // Auto-collapse back to the compact live countdown pill after 3.8s if user isn't typing
+            autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
+            val collapseTask = Runnable {
+                val hasInput = !inputEditText?.text?.toString().isNullOrBlank()
+                if (isExpanded && !hasInput && pendingQuestionCallback == null && !isAlarmRinging) {
+                    activeReplyText = null
+                    collapseIsland()
+                }
+            }
+            autoIdleRunnable = collapseTask
+            mainHandler.postDelayed(collapseTask, 3800L)
+        }
+    }
+
+    private fun startCountdownLoop() {
+        countdownTicker?.let { mainHandler.removeCallbacks(it) }
+        val ticker = object : Runnable {
+            override fun run() {
+                val now = System.currentTimeMillis()
+                val diffMs = countdownTargetMs - now
+                if (diffMs <= 0L) {
+                    countdownTargetMs = 0L
+                    countdownTicker = null
+                    triggerAlarmRingingNotification()
+                    return
+                }
+                val remSec = (diffMs / 1000L).coerceAtLeast(0L)
+                val formattedCountdown = formatDuration(remSec)
+
+                // Update expanded countdown row if visible
+                countdownRowView?.visibility = View.VISIBLE
+                countdownTextView?.text = "- $countdownTimeFormatted · ${countdownLabel.take(24)}  [$formattedCountdown]"
+
+                // Update compact pill with live countdown if idle
+                if (!isExpanded && currentState == NotchState.IDLE) {
+                    renderCompactCountdown(formattedCountdown)
+                }
+
+                mainHandler.postDelayed(this, 1000L)
+            }
+        }
+        countdownTicker = ticker
+        mainHandler.post(ticker)
+    }
+
+    fun cancelAlarmCountdown() {
+        mainHandler.post {
+            countdownTicker?.let { mainHandler.removeCallbacks(it) }
+            countdownTicker = null
+            countdownTargetMs = 0L
+            countdownLabel = ""
+            countdownTimeFormatted = ""
+            isAlarmRinging = false
+            stopBorderPulseAnimation()
+            countdownRowView?.visibility = View.GONE
+            alarmDismissBtn?.visibility = View.GONE
+            activeReplyText = null
+            updateExpandedState()
+            if (!isExpanded && currentState == NotchState.IDLE) {
+                renderCompactIdle()
+            }
+        }
+    }
+
+    private fun triggerAlarmRingingNotification() {
+        isAlarmRinging = true
+        countdownRowView?.visibility = View.GONE
+        activeQuestionText = null
+        pendingQuestionCallback = null
+        activeReplyText = "⏰ ZAMAN GELDİ // $countdownTimeFormatted\n- $countdownLabel"
+
+        // Haptic + Sound alert
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 350, 180, 350, 180, 500), -1))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(800L)
+            }
+        }
+        runCatching {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            val ringtone = RingtoneManager.getRingtone(context, uri)
+            ringtone?.play()
+        }
+
+        animateIslandNotificationBanner()
+        startBorderPulseAnimation()
+    }
+
+    private fun animateIslandNotificationBanner() {
+        if (!isExpanded) {
+            expandIsland(popKeyboard = false)
+        } else {
+            updateExpandedState()
+        }
+        val container = rootContainer ?: return
+        container.scaleX = 0.86f
+        container.scaleY = 0.86f
+        container.animate()
+            .scaleX(1.0f)
+            .scaleY(1.0f)
+            .setDuration(300L)
+            .setInterpolator(OvershootInterpolator(1.35f))
+            .start()
+    }
+
+    private fun formatDuration(totalSeconds: Long): String {
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
+        return if (hours > 0L) {
+            String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.US, "%02d:%02d", minutes, seconds)
         }
     }
 
@@ -222,7 +393,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             updateUiContent(currentStepNum, currentPlan, "Soru", NotchState.THINKING)
             if (!isExpanded) {
-                expandIsland()
+                expandIsland(popKeyboard = true)
             } else {
                 updateExpandedState()
                 inputEditText?.requestFocus()
@@ -244,7 +415,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             activeReplyText = reply
             activeQuestionText = null
             pendingQuestionCallback = null
-            updateExpandedState()
+            animateIslandNotificationBanner()
         }
     }
 
@@ -252,8 +423,11 @@ class AgentOverlayNotchManager(private val context: Context) {
         mainHandler.post {
             autoIdleRunnable?.let { mainHandler.removeCallbacks(it) }
             autoIdleRunnable = null
+            countdownTicker?.let { mainHandler.removeCallbacks(it) }
+            countdownTicker = null
             unregisterScreenStateReceiver()
             stopPulseAnimation()
+            stopBorderPulseAnimation()
 
             pendingQuestionCallback?.invoke("")
             pendingQuestionCallback = null
@@ -283,8 +457,10 @@ class AgentOverlayNotchManager(private val context: Context) {
         val cleanup = {
             mainHandler.removeCallbacksAndMessages(null)
             autoIdleRunnable = null
+            countdownTicker = null
             unregisterScreenStateReceiver()
             stopPulseAnimation()
+            stopBorderPulseAnimation()
 
             pendingQuestionCallback?.invoke("")
             pendingQuestionCallback = null
@@ -298,7 +474,12 @@ class AgentOverlayNotchManager(private val context: Context) {
             statusWordView = null
             stageBadgeView = null
             expandedContainerView = null
+            countdownRowView = null
+            countdownTextView = null
+            countdownCancelBtn = null
             agentMessageView = null
+            alarmDismissBtn = null
+            inputCardView = null
             inputEditText = null
             stopButtonView = null
             startButtonView = null
@@ -328,7 +509,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         runCatching {
             val c = uiContext
 
-            // Dynamic Island Master Container: Pure OLED Black (#000000)
+            // Dynamic Island Master Container: Pure Black (#000000)
             val container = LinearLayout(c).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -336,8 +517,8 @@ class AgentOverlayNotchManager(private val context: Context) {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpF(14)
-                    setColor(Color.parseColor("#FF000000")) // Pure Apple Black
-                    setStroke(dp(1), Color.parseColor("#1F1F23"))
+                    setColor(Color.BLACK)
+                    setStroke(dp(1), Color.parseColor("#222222"))
                 }
                 elevation = 0f
             }
@@ -345,7 +526,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             // Tap compact pill to expand downwards
             container.setOnClickListener {
                 if (!isExpanded) {
-                    expandIsland()
+                    expandIsland(popKeyboard = true)
                 }
             }
 
@@ -371,9 +552,9 @@ class AgentOverlayNotchManager(private val context: Context) {
             }
             compactRowView = compactRow
 
-            // 1. Indicator Dot (Hidden when idle, pulses when active)
+            // 1. Monochrome Indicator Dot
             val dot = View(c).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(6), dp(6))
+                layoutParams = LinearLayout.LayoutParams(dp(5), dp(5))
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(Color.WHITE)
@@ -383,19 +564,19 @@ class AgentOverlayNotchManager(private val context: Context) {
             statusDotView = dot
             compactRow.addView(dot)
 
-            // 2. Single-Word Status Text (Hidden when idle, no "TARS" text on island)
+            // 2. Status / Live Countdown Text (Monochrome)
             val wordText = TextView(c).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    marginStart = dp(5)
+                    marginStart = dp(6)
                 }
                 text = ""
-                setTextColor(Color.parseColor("#E4E4E7"))
+                setTextColor(Color.WHITE)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                letterSpacing = 0f
+                typeface = Typeface.MONOSPACE
+                letterSpacing = 0.04f
                 includeFontPadding = false
                 ellipsize = TextUtils.TruncateAt.END
                 maxLines = 1
@@ -404,7 +585,7 @@ class AgentOverlayNotchManager(private val context: Context) {
             statusWordView = wordText
             compactRow.addView(wordText)
 
-            // 3. Micro Stage Badge (Hidden when idle)
+            // 3. Micro Stage Badge
             val stageBadge = TextView(c).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -413,10 +594,10 @@ class AgentOverlayNotchManager(private val context: Context) {
                     marginStart = dp(4)
                 }
                 text = ""
-                setTextColor(Color.parseColor("#71717A"))
+                setTextColor(Color.parseColor("#888888"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
                 includeFontPadding = false
-                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+                typeface = Typeface.MONOSPACE
                 maxLines = 1
                 visibility = View.GONE
             }
@@ -425,7 +606,7 @@ class AgentOverlayNotchManager(private val context: Context) {
 
             container.addView(compactRow)
 
-            // ----------------- EXPANDED INPUT VIEW -----------------
+            // ----------------- EXPANDED ULTRA-MINIMAL MONOCHROME CARD -----------------
             val expandedView = buildExpandedView(c)
             expandedContainerView = expandedView
             expandedView.visibility = View.GONE
@@ -454,7 +635,6 @@ class AgentOverlayNotchManager(private val context: Context) {
                 return@runCatching
             }
 
-            // Entrance Pop Animation
             container.scaleX = 0.7f
             container.scaleY = 0.7f
             container.alpha = 0f
@@ -470,6 +650,10 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
     }
 
+    /**
+     * Ultra-minimal, pure monochrome (`#000000` background, `#FFFFFF` / `#888888` / `#222222`,
+     * zero rounded corners `0dp`) AI conversation & countdown card matching TARS Launcher.
+     */
     private fun buildExpandedView(c: Context = uiContext): LinearLayout {
         val expanded = LinearLayout(c).apply {
             layoutParams = LinearLayout.LayoutParams(-1, -2)
@@ -477,64 +661,53 @@ class AgentOverlayNotchManager(private val context: Context) {
             setPadding(dp(16), dp(14), dp(16), dp(14))
         }
 
-        // --- Header Row: [Dot + "TARS"] [Status] ----- [Close Button] ---
+        // --- 1. Monochrome Header Row: [T A R S] · [STATUS] ----- [✕] ---
         val header = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(12)
+                bottomMargin = dp(10)
             }
         }
-
-        val statusDot = View(c).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(6), dp(6)).apply {
-                marginEnd = dp(6)
-            }
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#10B981"))
-            }
-        }
-        header.addView(statusDot)
 
         val title = TextView(c).apply {
-            text = "TARS"
-            setTextColor(Color.parseColor("#71717A"))
+            text = "T A R S"
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            letterSpacing = 0.08f
+            typeface = Typeface.MONOSPACE
+            letterSpacing = 0.15f
             includeFontPadding = false
         }
         header.addView(title)
 
         val divider = TextView(c).apply {
-            text = "·"
-            setTextColor(Color.parseColor("#52525B"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(dp(6), 0, dp(6), 0)
+            text = " // "
+            setTextColor(Color.parseColor("#555555"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = Typeface.MONOSPACE
             includeFontPadding = false
         }
         header.addView(divider)
 
         expandedStatusView = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-            text = "Bir sonraki adım sende."
-            setTextColor(Color.parseColor("#A1A1AA"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            text = "HAZIR"
+            setTextColor(Color.parseColor("#888888"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Typeface.MONOSPACE
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false
         }
         header.addView(expandedStatusView)
 
-        // Minimal close icon (28dp square rounded button)
         val closeBtn = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
+            layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            setCompoundDrawablesRelativeWithIntrinsicBounds(IslandIcon("close", Color.parseColor("#A1A1AA")), null, null, null)
-            background = controlBackground(Color.parseColor("#18181B"), 14)
+            text = "✕"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
             contentDescription = "Kapat"
             isFocusable = true
             setOnClickListener {
@@ -542,23 +715,76 @@ class AgentOverlayNotchManager(private val context: Context) {
                 pendingQuestionCallback = null
                 activeQuestionText = null
                 activeReplyText = null
+                if (isAlarmRinging) {
+                    isAlarmRinging = false
+                    stopBorderPulseAnimation()
+                }
                 collapseIsland()
             }
         }
         header.addView(closeBtn)
-
         expanded.addView(header)
 
-        // --- Agent Question / Reply Bubble inside Dynamic Island ---
+        // Thin monochrome separator line ('-')
+        expanded.addView(View(c).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply {
+                bottomMargin = dp(10)
+            }
+            setBackgroundColor(Color.parseColor("#222222"))
+        })
+
+        // --- 2. Live Countdown Row (Visible when an alarm/timer is active) ---
+        val cdRow = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            }
+            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            visibility = if (countdownTargetMs > System.currentTimeMillis()) View.VISIBLE else View.GONE
+        }
+
+        val cdText = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            text = ""
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.MONOSPACE
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        countdownTextView = cdText
+        cdRow.addView(cdText)
+
+        val cdCancel = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                marginStart = dp(8)
+            }
+            text = "[İPTAL]"
+            setTextColor(Color.parseColor("#888888"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = Typeface.MONOSPACE
+            setPadding(dp(4), dp(2), dp(4), dp(2))
+            setOnClickListener { cancelAlarmCountdown() }
+        }
+        countdownCancelBtn = cdCancel
+        cdRow.addView(cdCancel)
+
+        countdownRowView = cdRow
+        expanded.addView(cdRow)
+
+        // --- 3. Agent Question / Reply / Alarm Alert Box (Monochrome, 0dp corner) ---
         val messageBox = TextView(c).apply {
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(10)
             }
-            background = roundedSurface(Color.parseColor("#141418"), 12, Color.parseColor("#2E2E36"))
+            background = sharpSurface(Color.BLACK, Color.parseColor("#444444"))
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            setTextColor(Color.parseColor("#FAFAFA"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.MONOSPACE
+            setLineSpacing(dpF(2), 1.0f)
             maxLines = 6
             ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
@@ -566,27 +792,49 @@ class AgentOverlayNotchManager(private val context: Context) {
         agentMessageView = messageBox
         expanded.addView(messageBox)
 
-        // --- 21st.dev Style Integrated Input Card ---
-        val inputCard = LinearLayout(c).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(-1, -2)
-            background = roundedSurface(Color.parseColor("#121215"), 16, Color.parseColor("#27272A"))
-            setPadding(dp(12), dp(10), dp(10), dp(10))
+        // Dismiss button when alarm is ringing
+        val dismissAlarm = TextView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, dp(36)).apply {
+                bottomMargin = dp(10)
+            }
+            gravity = Gravity.CENTER
+            text = "[ ALARMI KAPAT ]"
+            setTextColor(Color.BLACK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            background = sharpSurface(Color.WHITE, Color.WHITE)
+            visibility = View.GONE
+            setOnClickListener {
+                cancelAlarmCountdown()
+                collapseIsland()
+            }
         }
+        alarmDismissBtn = dismissAlarm
+        expanded.addView(dismissAlarm)
+
+        // --- 4. Ultra-Minimal Monochrome Input Row (0dp corner, '-' aesthetic) ---
+        val inputCard = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
+            background = sharpSurface(Color.BLACK, Color.parseColor("#333333"))
+            setPadding(dp(10), dp(6), dp(6), dp(6))
+        }
+        inputCardView = inputCard
 
         val input = EditText(c).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, -2)
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             background = null
-            hint = "Mesajınızı yazın veya bir görev verin..."
-            setHintTextColor(Color.parseColor("#52525B"))
-            setTextColor(Color.parseColor("#F4F4F5"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            setPadding(dp(4), dp(4), dp(4), dp(8))
-            minHeight = dp(56)
-            gravity = Gravity.TOP or Gravity.START
+            hint = "Not, alarm veya mesaj yaz..."
+            setHintTextColor(Color.parseColor("#555555"))
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            setPadding(dp(2), dp(6), dp(8), dp(6))
+            minHeight = dp(36)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            maxLines = 4
+            maxLines = 3
             imeOptions = EditorInfo.IME_ACTION_SEND
             contentDescription = "Görev metni"
             setOnEditorActionListener { _, actionId, _ ->
@@ -600,13 +848,12 @@ class AgentOverlayNotchManager(private val context: Context) {
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val hasText = !s.isNullOrBlank()
                     startButtonView?.isEnabled = hasText
-                    startButtonView?.alpha = if (hasText) 1f else 0.4f
                     if (hasText) {
-                        startButtonView?.background = controlBackground(Color.WHITE, 16, darkRipple = true)
-                        startButtonView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("send", Color.BLACK), null)
+                        startButtonView?.background = sharpSurface(Color.WHITE, Color.WHITE)
+                        startButtonView?.setTextColor(Color.BLACK)
                     } else {
-                        startButtonView?.background = controlBackground(Color.parseColor("#27272A"), 16)
-                        startButtonView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("send", Color.parseColor("#71717A")), null)
+                        startButtonView?.background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
+                        startButtonView?.setTextColor(Color.parseColor("#555555"))
                     }
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
@@ -615,22 +862,17 @@ class AgentOverlayNotchManager(private val context: Context) {
         inputEditText = input
         inputCard.addView(input)
 
-        // Bottom Actions Bar inside Card
-        val cardActions = LinearLayout(c).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(-1, -2)
-        }
-
         stopButtonView = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(-2, dp(30))
-            text = "Durdur"
+            layoutParams = LinearLayout.LayoutParams(-2, dp(34)).apply {
+                marginEnd = dp(6)
+            }
+            text = "DUR"
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#F87171"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(dp(12), 0, dp(12), 0)
-            background = controlBackground(Color.parseColor("#221214"), 15)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Typeface.MONOSPACE
+            setPadding(dp(10), 0, dp(10), 0)
+            background = sharpSurface(Color.BLACK, Color.WHITE)
             visibility = View.GONE
             isFocusable = true
             setOnClickListener {
@@ -638,85 +880,35 @@ class AgentOverlayNotchManager(private val context: Context) {
                 collapseIsland()
             }
         }
-        cardActions.addView(stopButtonView)
-
-        cardActions.addView(View(c).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
-        })
+        inputCard.addView(stopButtonView)
 
         startButtonView = TextView(c).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34))
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, IslandIcon("send", Color.parseColor("#71717A")), null)
-            background = controlBackground(Color.parseColor("#27272A"), 16)
+            text = "↑"
+            setTextColor(Color.parseColor("#555555"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            background = sharpSurface(Color.parseColor("#111111"), Color.parseColor("#333333"))
             isEnabled = false
-            alpha = 0.4f
             isFocusable = true
             setOnClickListener { submitTaskFromInput() }
         }
-        cardActions.addView(startButtonView)
+        inputCard.addView(startButtonView)
 
-        inputCard.addView(cardActions)
         expanded.addView(inputCard)
 
         return expanded
     }
 
-    private fun roundedSurface(color: Int, radius: Int, border: Int? = null) = GradientDrawable().apply {
+    private fun sharpSurface(color: Int, borderColor: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpF(radius)
+        cornerRadius = 0f
         setColor(color)
-        border?.let { setStroke(dp(1), it) }
+        setStroke(dp(1), borderColor)
     }
 
-    private fun controlBackground(color: Int, radius: Int, darkRipple: Boolean = false): RippleDrawable {
-        val ripple = if (darkRipple) 0x24000000 else 0x24FFFFFF
-        return RippleDrawable(ColorStateList.valueOf(ripple), roundedSurface(color, radius), roundedSurface(Color.WHITE, radius))
-    }
-
-    /** Density-independent line icons, avoiding font-dependent symbol glyphs. */
-    private inner class IslandIcon(private val kind: String, color: Int) : Drawable() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color
-            style = Paint.Style.STROKE
-            strokeWidth = 1.8f
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-        }
-        override fun getIntrinsicWidth() = dp(20)
-        override fun getIntrinsicHeight() = dp(20)
-        override fun draw(canvas: Canvas) {
-            val save = canvas.save()
-            canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
-            canvas.scale(bounds.width() / 20f, bounds.height() / 20f)
-            val path = Path()
-            when (kind) {
-                "send" -> {
-                    path.moveTo(10f, 15f); path.lineTo(10f, 5f)
-                    path.moveTo(5.5f, 9.5f); path.lineTo(10f, 5f); path.lineTo(14.5f, 9.5f)
-                }
-                "up" -> {
-                    path.moveTo(6f, 12f); path.lineTo(10f, 8f); path.lineTo(14f, 12f)
-                }
-                "close" -> {
-                    path.moveTo(6.5f, 6.5f); path.lineTo(13.5f, 13.5f)
-                    path.moveTo(13.5f, 6.5f); path.lineTo(6.5f, 13.5f)
-                }
-                else -> {
-                    path.moveTo(6f, 8f); path.lineTo(10f, 12f); path.lineTo(14f, 8f)
-                }
-            }
-            canvas.drawPath(path, paint)
-            canvas.restoreToCount(save)
-        }
-        override fun setAlpha(alpha: Int) { paint.alpha = alpha; invalidateSelf() }
-        override fun setColorFilter(filter: android.graphics.ColorFilter?) { paint.colorFilter = filter; invalidateSelf() }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity() = PixelFormat.TRANSLUCENT
-    }
-
-    private fun expandIsland() {
+    private fun expandIsland(popKeyboard: Boolean = true) {
         if (isExpanded) return
         if (!com.tarslauncher.app.agent.data.AgentPreferences(context).isAgentEnabled()) {
             hide()
@@ -728,32 +920,30 @@ class AgentOverlayNotchManager(private val context: Context) {
         val container = rootContainer ?: return
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
 
-        // 1. Expand WindowManager params and remove FLAG_NOT_FOCUSABLE so EditText can receive keyboard
-        lp.width = minOf(dp(340), context.resources.displayMetrics.widthPixels - dp(24))
+        lp.width = minOf(dp(348), context.resources.displayMetrics.widthPixels - dp(24))
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT
         lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+            if (popKeyboard) WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE else WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
 
         wm.updateViewLayout(container, lp)
 
-        // 2. Adjust background corner radius and color for expanded 21st.dev card
+        // Expanded card: Pure Pitch Black (#000000), 0dp sharp corners, 1dp monochrome border
         (container.background as? GradientDrawable)?.apply {
-            cornerRadius = dpF(20)
-            setColor(Color.parseColor("#09090B"))
-            setStroke(dp(1), Color.parseColor("#27272A"))
+            cornerRadius = 0f
+            setColor(Color.BLACK)
+            setStroke(dp(1), Color.parseColor("#333333"))
         }
 
-        // 3. Switch views: hide compact row, show expanded view
         compactRowView?.visibility = View.GONE
         expandedContainerView?.visibility = View.VISIBLE
         updateExpandedState()
 
-        // 4. Smooth spring expansion animation
-        container.scaleX = 0.92f
-        container.scaleY = 0.92f
-        container.alpha = 0.9f
+        container.scaleX = 0.94f
+        container.scaleY = 0.94f
+        container.alpha = 0.92f
 
         container.isFocusableInTouchMode = true
         container.setOnKeyListener { _, keyCode, event ->
@@ -770,23 +960,24 @@ class AgentOverlayNotchManager(private val context: Context) {
             .scaleX(1.0f)
             .scaleY(1.0f)
             .alpha(1.0f)
-            .setDuration(220L)
-            .setInterpolator(OvershootInterpolator(1.1f))
+            .setDuration(200L)
+            .setInterpolator(OvershootInterpolator(1.08f))
             .start()
 
-        // 5. Request focus on input and pop software keyboard
-        inputEditText?.requestFocus()
-        mainHandler.postDelayed({
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            inputEditText?.let { imm?.showSoftInput(it, InputMethodManager.SHOW_IMPLICIT) }
-        }, 80L)
+        if (popKeyboard) {
+            inputEditText?.requestFocus()
+            mainHandler.postDelayed({
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                inputEditText?.let { imm?.showSoftInput(it, InputMethodManager.SHOW_IMPLICIT) }
+            }, 80L)
+        }
     }
 
     private fun collapseIsland() {
         if (!isExpanded) return
         isExpanded = false
+        stopBorderPulseAnimation()
 
-        // 1. Hide keyboard
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         inputEditText?.let { imm?.hideSoftInputFromWindow(it.windowToken, 0) }
         inputEditText?.clearFocus()
@@ -796,9 +987,13 @@ class AgentOverlayNotchManager(private val context: Context) {
         container.setOnKeyListener(null)
         val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
 
-        // 2. Restore compact WindowManager params with FLAG_NOT_FOCUSABLE and remove FLAG_WATCH_OUTSIDE_TOUCH
+        val hasCountdown = countdownTargetMs > System.currentTimeMillis()
         val isIdle = currentState == NotchState.IDLE
-        lp.width = if (isIdle) dp(88) else dp(118)
+        lp.width = when {
+            !isIdle -> dp(122)
+            hasCountdown -> dp(112)
+            else -> dp(88)
+        }
         lp.height = dp(28)
         lp.flags = (lp.flags and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()) or
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -806,18 +1001,16 @@ class AgentOverlayNotchManager(private val context: Context) {
 
         wm.updateViewLayout(container, lp)
 
-        // 3. Restore compact pill background (Pure OLED Black)
+        // Restore compact pill background
         (container.background as? GradientDrawable)?.apply {
             cornerRadius = dpF(14)
-            setColor(Color.parseColor("#FF000000"))
-            setStroke(dp(1), Color.parseColor("#1F1F23"))
+            setColor(Color.BLACK)
+            setStroke(dp(1), Color.parseColor("#222222"))
         }
 
-        // 4. Switch views
         expandedContainerView?.visibility = View.GONE
         compactRowView?.visibility = View.VISIBLE
 
-        // 5. Re-render compact state
         if (isIdle) {
             renderCompactIdle()
         } else {
@@ -846,7 +1039,37 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
     }
 
+    private fun renderCompactCountdown(formattedCountdown: String) {
+        statusDotView?.visibility = View.VISIBLE
+        (statusDotView?.background as? GradientDrawable)?.setColor(Color.WHITE)
+        startPulseAnimation()
+
+        statusWordView?.text = formattedCountdown
+        statusWordView?.visibility = View.VISIBLE
+        lastRenderedWord = formattedCountdown
+        stageBadgeView?.visibility = View.GONE
+
+        if (!isExpanded) {
+            rootContainer?.let { container ->
+                val lp = container.layoutParams as? WindowManager.LayoutParams
+                val targetW = if (formattedCountdown.length > 5) dp(116) else dp(98)
+                if (lp != null && (lp.width != targetW || lp.height != dp(28))) {
+                    lp.width = targetW
+                    lp.height = dp(28)
+                    windowManager?.updateViewLayout(container, lp)
+                }
+            }
+        }
+    }
+
     private fun renderCompactIdle() {
+        val now = System.currentTimeMillis()
+        if (countdownTargetMs > now) {
+            val remSec = ((countdownTargetMs - now) / 1000L).coerceAtLeast(0L)
+            renderCompactCountdown(formatDuration(remSec))
+            return
+        }
+
         stopPulseAnimation()
         statusDotView?.visibility = View.GONE
         statusWordView?.visibility = View.GONE
@@ -870,30 +1093,34 @@ class AgentOverlayNotchManager(private val context: Context) {
     private fun updateExpandedState() {
         val isRunning = currentState == NotchState.ACTIVE || currentState == NotchState.THINKING
         stopButtonView?.visibility = if (isRunning) View.VISIBLE else View.GONE
+        alarmDismissBtn?.visibility = if (isAlarmRinging) View.VISIBLE else View.GONE
+
+        val hasActiveCountdown = countdownTargetMs > System.currentTimeMillis()
+        countdownRowView?.visibility = if (hasActiveCountdown && !isAlarmRinging) View.VISIBLE else View.GONE
 
         val question = activeQuestionText
         val reply = activeReplyText
 
         if (!question.isNullOrBlank()) {
-            expandedStatusView?.text = "Yanıtınız bekleniyor…"
-            agentMessageView?.text = question
+            expandedStatusView?.text = "SORU"
+            agentMessageView?.text = "- $question"
             agentMessageView?.visibility = View.VISIBLE
             inputEditText?.hint = "Yanıtınızı yazın..."
         } else if (!reply.isNullOrBlank()) {
-            expandedStatusView?.text = "TARS Yanıtı"
+            expandedStatusView?.text = if (isAlarmRinging) "ALARM" else "BİLDİRİM"
             agentMessageView?.text = reply
             agentMessageView?.visibility = View.VISIBLE
-            inputEditText?.hint = "Mesajınızı yazın veya bir görev verin..."
+            inputEditText?.hint = "Not, alarm veya mesaj yaz..."
         } else {
             agentMessageView?.visibility = View.GONE
             agentMessageView?.text = ""
-            inputEditText?.hint = "Mesajınızı yazın veya bir görev verin..."
+            inputEditText?.hint = "Not, alarm veya mesaj yaz..."
             expandedStatusView?.text = when (currentState) {
-                NotchState.IDLE -> "Bir sonraki adım sende."
-                NotchState.THINKING -> "Görevin üzerinde düşünüyorum…"
-                NotchState.ACTIVE -> "Görevin üzerinde çalışıyorum…"
-                NotchState.COMPLETED -> "Görev tamamlandı."
-                NotchState.FAILED -> "Görev durduruldu."
+                NotchState.IDLE -> if (hasActiveCountdown) "GERİ SAYIM AKTİF" else "HAZIR"
+                NotchState.THINKING -> "DÜŞÜNÜYOR..."
+                NotchState.ACTIVE -> "İŞLENİYOR..."
+                NotchState.COMPLETED -> "TAMAMLANDI"
+                NotchState.FAILED -> "DURDURULDU"
             }
         }
     }
@@ -909,14 +1136,15 @@ class AgentOverlayNotchManager(private val context: Context) {
             return
         }
 
-        val (dotColor, defaultWord) = when (state) {
-            NotchState.IDLE -> Color.WHITE to ""
-            NotchState.THINKING -> Color.parseColor("#F59E0B") to "Düşünüyor" // Amber
-            NotchState.ACTIVE -> Color.parseColor("#10B981") to "İşliyor"     // Emerald
-            NotchState.COMPLETED -> Color.parseColor("#10B981") to "Tamamlandı"
-            NotchState.FAILED -> Color.parseColor("#EF4444") to "Durduruldu"  // Red
+        // Pure Monochrome Dot & Status Word
+        val defaultWord = when (state) {
+            NotchState.IDLE -> ""
+            NotchState.THINKING -> "Düşünüyor"
+            NotchState.ACTIVE -> "İşliyor"
+            NotchState.COMPLETED -> "Tamamlandı"
+            NotchState.FAILED -> "Durduruldu"
         }
-        (statusDotView?.background as? GradientDrawable)?.setColor(dotColor)
+        (statusDotView?.background as? GradientDrawable)?.setColor(Color.WHITE)
         statusDotView?.visibility = View.VISIBLE
 
         if (state == NotchState.ACTIVE || state == NotchState.THINKING) {
@@ -925,7 +1153,6 @@ class AgentOverlayNotchManager(private val context: Context) {
             stopPulseAnimation()
         }
 
-        // Resolve single-word status
         val singleWord = extractSingleWord(state, liveDetail, defaultWord)
         if (singleWord != lastRenderedWord) {
             lastRenderedWord = singleWord
@@ -933,13 +1160,11 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
         statusWordView?.visibility = View.VISIBLE
 
-        // Micro Stage Count (e.g. "2/4" or "1/3")
         val steps = plan?.steps.orEmpty()
         if (steps.size > 1 && state != NotchState.COMPLETED && state != NotchState.FAILED) {
             val activeIndex = steps.firstOrNull { it.isInProgress }?.index
                 ?: steps.firstOrNull { !it.isCompleted }?.index
                 ?: steps.size
-            stageBadgeView?.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null)
             stageBadgeView?.text = "$activeIndex/${steps.size}"
             stageBadgeView?.visibility = View.VISIBLE
         } else {
@@ -949,7 +1174,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         if (!isExpanded) {
             rootContainer?.let { container ->
                 val lp = container.layoutParams as? WindowManager.LayoutParams
-                val targetWidth = if (stageBadgeView?.visibility == View.VISIBLE) dp(130) else dp(118)
+                val targetWidth = if (stageBadgeView?.visibility == View.VISIBLE) dp(132) else dp(120)
                 if (lp != null && (lp.width != targetWidth || lp.height != dp(28))) {
                     lp.width = targetWidth
                     lp.height = dp(28)
@@ -966,33 +1191,19 @@ class AgentOverlayNotchManager(private val context: Context) {
         val trimmed = liveDetail?.trim().orEmpty()
         if (trimmed.isEmpty()) return defaultWord
 
-        // If it's already a single clean word, return capitalized
         if (!trimmed.contains(" ") && trimmed.length in 3..14) {
             return trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
 
         val lower = trimmed.lowercase()
         return when {
-            lower.contains("tıklan") || lower.contains("dokun") || lower.contains("tap") || lower.contains("click") -> "Tıklıyor"
-            lower.contains("yazıl") || lower.contains("metin") || lower.contains("type") || lower.contains("input") -> "Yazıyor"
-            lower.contains("kaydır") || lower.contains("scroll") || lower.contains("swipe") -> "Kaydırıyor"
-            lower.contains("açıl") || lower.contains("launch") || lower.contains("open") -> "Açıyor"
-            lower.contains("ses") || lower.contains("volume") -> "Ses"
-            lower.contains("medya") || lower.contains("müzik") -> "Medya"
-            lower.contains("fener") || lower.contains("ışık") || lower.contains("torch") -> "Fener"
-            lower.contains("görüntü") || lower.contains("screenshot") -> "Görüntü"
-            lower.contains("kilit") || lower.contains("lock") -> "Kilitliyor"
-            lower.contains("ayar") || lower.contains("settings") -> "Ayarlar"
-            lower.contains("alarm") -> "Alarm"
-            lower.contains("sayaç") || lower.contains("timer") -> "Sayaç"
-            lower.contains("ara") || lower.contains("search") -> "Arıyor"
-            lower.contains("bekle") || lower.contains("wait") -> "Bekliyor"
-            lower.contains("geri") || lower.contains("back") -> "Geri"
-            lower.contains("ana ekran") || lower.contains("home") -> "Ana Ekran"
+            lower.contains("alarm") || lower.contains("saat") -> "Alarm"
+            lower.contains("sayaç") || lower.contains("timer") || lower.contains("geri") -> "Sayaç"
+            lower.contains("kayde") -> "Kaydediyor"
+            lower.contains("özet") -> "Özetliyor"
             lower.contains("soru") || lower.contains("?") -> "Soru"
             lower.contains("onay") -> "Onay"
-            lower.contains("incele") || lower.contains("ekran") || lower.contains("karar") -> "İnceliyor"
-            lower.contains("plan") || lower.contains("hedef") || lower.contains("analiz") -> "Planlıyor"
+            lower.contains("plan") || lower.contains("analiz") -> "Planlıyor"
             state == NotchState.THINKING -> "Düşünüyor"
             state == NotchState.ACTIVE -> "İşliyor"
             else -> defaultWord
@@ -1027,7 +1238,7 @@ class AgentOverlayNotchManager(private val context: Context) {
         }
         if (pulseAnimator != null) return
         statusDotView?.let { dot ->
-            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.4f).apply {
+            pulseAnimator = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.25f).apply {
                 duration = 800L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.REVERSE
@@ -1042,6 +1253,28 @@ class AgentOverlayNotchManager(private val context: Context) {
         statusDotView?.alpha = 1f
     }
 
+    private fun startBorderPulseAnimation() {
+        stopBorderPulseAnimation()
+        val bg = rootContainer?.background as? GradientDrawable ?: return
+        borderPulseAnimator = ValueAnimator.ofArgb(Color.WHITE, Color.parseColor("#333333")).apply {
+            duration = 550L
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            addUpdateListener { anim ->
+                val c = anim.animatedValue as Int
+                bg.setStroke(dp(1), c)
+            }
+            start()
+        }
+    }
+
+    private fun stopBorderPulseAnimation() {
+        borderPulseAnimator?.cancel()
+        borderPulseAnimator = null
+        val bg = rootContainer?.background as? GradientDrawable
+        bg?.setStroke(dp(1), if (isExpanded) Color.parseColor("#333333") else Color.parseColor("#222222"))
+    }
+
     private fun registerScreenStateReceiver() {
         if (screenStateReceiver != null) return
         val receiver = object : BroadcastReceiver() {
@@ -1051,7 +1284,7 @@ class AgentOverlayNotchManager(private val context: Context) {
                         stopPulseAnimation()
                     }
                     Intent.ACTION_SCREEN_ON -> {
-                        if (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING) {
+                        if (currentState == NotchState.ACTIVE || currentState == NotchState.THINKING || countdownTargetMs > System.currentTimeMillis()) {
                             startPulseAnimation()
                         }
                     }

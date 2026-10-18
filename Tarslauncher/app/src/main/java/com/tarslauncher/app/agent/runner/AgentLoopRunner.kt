@@ -1,6 +1,8 @@
 package com.tarslauncher.app.agent.runner
 
 import android.content.Context
+import android.content.Intent
+import android.provider.AlarmClock
 import com.tarslauncher.app.agent.data.AgentPreferences
 import com.tarslauncher.app.agent.domain.engine.AgentBrain
 import com.tarslauncher.app.agent.domain.model.AgentAction
@@ -15,6 +17,8 @@ import com.tarslauncher.app.data.model.ChecklistItem
 import com.tarslauncher.app.data.model.WorkspaceItem
 import com.tarslauncher.app.data.model.WorkspaceItemType
 import com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository
+import java.util.Calendar
+import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -185,12 +189,21 @@ class AgentLoopRunner(
                 )
                 val saveResult = workspaceRepository.addItem(newItem)
                 if (saveResult.isSuccess) {
-                    val badge = when (finalAction.itemType) {
-                        WorkspaceItemType.TASK -> "✓ Görev Eklendi"
-                        WorkspaceItemType.NOTE -> "✓ Not Kaydedildi"
-                        WorkspaceItemType.IDEA -> "✓ Fikir Eklendi"
+                    val alarmInfo = resolveAndScheduleAlarm(finalAction, cleanGoal, service)
+                    val badge = if (alarmInfo != null) {
+                        "⏰ $alarmInfo"
+                    } else {
+                        when (finalAction.itemType) {
+                            WorkspaceItemType.TASK -> "✓ Görev Eklendi"
+                            WorkspaceItemType.NOTE -> "✓ Not Kaydedildi"
+                            WorkspaceItemType.IDEA -> "✓ Fikir Eklendi"
+                        }
                     }
-                    val summary = "[${finalAction.itemType.labelTr}] '${finalAction.title}' Firebase çalışma alanına kaydedildi."
+                    val summary = if (alarmInfo != null) {
+                        "'${finalAction.title}' kaydedildi ve $alarmInfo için alarm + geri sayım başlatıldı."
+                    } else {
+                        "[${finalAction.itemType.labelTr}] '${finalAction.title}' kaydedildi."
+                    }
                     currentPlan = currentPlan.markAllCompleted()
                     emit(AgentEvent.PlanStepUpdated(currentPlan))
                     service?.overlayNotch?.showOrUpdate(
@@ -411,7 +424,98 @@ class AgentLoopRunner(
         }
     }.flowOn(Dispatchers.Default)
 
+    private fun resolveAndScheduleAlarm(
+        action: AgentAction.CreateWorkspaceItem,
+        rawInput: String,
+        service: TarsAccessibilityService?
+    ): String? {
+        val now = System.currentTimeMillis()
+        val lowerInput = rawInput.lowercase(Locale.forLanguageTag("tr-TR"))
+
+        // 1. Check relative duration ("10 dakika sonra", "30 saniye sonra", etc.)
+        var durationSec = action.durationSeconds ?: 0L
+        if (durationSec <= 0L) {
+            val relMatch = RELATIVE_TIME_REGEX.find(lowerInput)
+            if (relMatch != null) {
+                val amount = relMatch.groupValues[1].toLongOrNull() ?: 0L
+                val unit = relMatch.groupValues[2]
+                durationSec = when {
+                    unit.startsWith("sa") && unit != "saniye" -> amount * 3600L
+                    unit.startsWith("d") -> amount * 60L
+                    else -> amount
+                }
+            }
+        }
+
+        if (durationSec > 0L) {
+            val targetMs = now + (durationSec * 1000L)
+            val cal = Calendar.getInstance().apply { timeInMillis = targetMs }
+            val h = cal.get(Calendar.HOUR_OF_DAY)
+            val m = cal.get(Calendar.MINUTE)
+            val timeFormatted = String.format(Locale.US, "%02d:%02d", h, m)
+
+            if (durationSec >= 60L) {
+                setSystemClockAlarm(h, m, action.title)
+            }
+            service?.overlayNotch?.startAlarmCountdown(targetMs, action.title, timeFormatted)
+            return timeFormatted
+        }
+
+        // 2. Check explicit clock time ("yarın saat 8 de", "14:30", etc.)
+        var hour = action.alarmHour
+        var minute = action.alarmMinute ?: 0
+
+        if (hour == null) {
+            val saatMatch = SAAT_TIME_REGEX.find(lowerInput) ?: COLON_TIME_REGEX.find(lowerInput)
+            if (saatMatch != null) {
+                val parsedH = saatMatch.groupValues[1].toIntOrNull()
+                val parsedM = saatMatch.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+                if (parsedH != null && parsedH in 0..23 && parsedM in 0..59) {
+                    hour = parsedH
+                    minute = parsedM
+                }
+            }
+        }
+
+        val finalHour = hour ?: return null
+        val finalMinute = minute.coerceIn(0, 59)
+
+        val mentionsTomorrow = action.isTomorrow || lowerInput.contains("yarın") || lowerInput.contains("yarin")
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, finalHour)
+            set(Calendar.MINUTE, finalMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (mentionsTomorrow || cal.timeInMillis <= now) {
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        val targetMs = cal.timeInMillis
+        val timeFormatted = String.format(Locale.US, "%02d:%02d", finalHour, finalMinute)
+
+        setSystemClockAlarm(finalHour, finalMinute, action.title)
+        service?.overlayNotch?.startAlarmCountdown(targetMs, action.title, timeFormatted)
+        return timeFormatted
+    }
+
+    private fun setSystemClockAlarm(hour: Int, minute: Int, label: String) {
+        runCatching {
+            val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(AlarmClock.EXTRA_MESSAGE, label.take(60))
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(alarmIntent)
+        }
+    }
+
     companion object {
         private const val MAX_PROMPT_LENGTH = 2_000
+        private val RELATIVE_TIME_REGEX = Regex("""\b(\d{1,4})\s*(saniye|sn|dakika|dk|saat)\s*sonra\b""")
+        private val SAAT_TIME_REGEX = Regex("""\bsaat\s*(\d{1,2})(?:[:.](\d{2}))?\b""")
+        private val COLON_TIME_REGEX = Regex("""\b([01]?\d|2[0-3])[:.]([0-5]\d)\b""")
     }
 }
