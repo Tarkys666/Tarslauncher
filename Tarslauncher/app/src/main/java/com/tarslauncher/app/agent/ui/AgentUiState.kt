@@ -1,16 +1,18 @@
 package com.tarslauncher.app.agent.ui
 
 import com.tarslauncher.app.agent.data.AgentProvider
+import com.tarslauncher.app.agent.data.GroqRemoteDataSource
 import com.tarslauncher.app.agent.domain.model.AgentEvent
 import com.tarslauncher.app.agent.domain.model.AgentPlan
 
 data class AgentUiState(
     val isServiceActive: Boolean = false,
     val isAgentEnabled: Boolean = true,
+    val isQwenEnabled: Boolean = false,
     val isRunning: Boolean = false,
-    val provider: AgentProvider = AgentProvider.GROQ,
+    val provider: AgentProvider = AgentProvider.OPENROUTER,
     val groqApiKey: String = "",
-    val groqModel: String = "qwen/qwen3.8-27b",
+    val groqModel: String = GroqRemoteDataSource.DEFAULT_OPENROUTER_MODEL,
     val googleWebClientId: String = "",
     val isGoogleSignedIn: Boolean = false,
     val userEmail: String? = null,

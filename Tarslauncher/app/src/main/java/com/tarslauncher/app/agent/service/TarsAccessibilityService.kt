@@ -152,23 +152,17 @@ class TarsAccessibilityService : AccessibilityService() {
             overlayNotch.hide()
             return
         }
-        val apiKey = prefs.getGroqApiKey().trim()
-        if (apiKey.isBlank()) {
-            overlayNotch.showOrUpdate(
-                stepNumber = 1,
-                liveDetail = "API Anahtarı Yok",
-                state = AgentOverlayNotchManager.NotchState.FAILED
-            )
-            return
-        }
+        val activeModel = prefs.getActiveModel()
 
         activeOverlayJob?.cancel()
 
+        val authManager = com.tarslauncher.app.data.sync.GoogleAuthManager(applicationContext)
         val remoteDataSource = GroqRemoteDataSource(
-            apiKeyProvider = { apiKey },
-            preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
+            apiKeyProvider = { prefs.getActiveApiKey() },
+            preferredModelProvider = { prefs.getActiveModel() },
+            userIdProvider = { authManager.currentUser?.uid.orEmpty() }
         )
-        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL)
+        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = activeModel)
         val runner = AgentLoopRunner(
             context = applicationContext,
             agentBrain = brain

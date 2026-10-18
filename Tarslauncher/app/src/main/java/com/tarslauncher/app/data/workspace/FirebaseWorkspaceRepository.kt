@@ -2,17 +2,16 @@ package com.tarslauncher.app.data.workspace
 
 import android.content.Context
 import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.SetOptions
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.tarslauncher.app.data.model.ChecklistItem
 import com.tarslauncher.app.data.model.WorkspaceItem
 import com.tarslauncher.app.data.model.WorkspaceItemType
-import com.tarslauncher.app.data.model.WorkspacePriority
 import com.tarslauncher.app.data.sync.GoogleAuthManager
+import com.tarslauncher.app.data.sync.SupabaseConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -24,13 +23,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * Second Brain Vault & Cloud Workspace Repository (Obsidian + Claude style).
+ * Second Brain Vault & Supabase Cloud Workspace Repository (Obsidian + Claude style).
  * - Persists all notes, tasks, and ideas locally in an instant-access Vault (JSON + Obsidian `.md` files)
- *   AND synchronizes them in real time with Firebase Firestore (`users/{uid}`).
+ *   AND synchronizes them with Supabase (`public.workspace_items`).
  * - Ensures the AI chatbot and Notes UI always have 100% access to every note, online or offline.
  */
 class FirebaseWorkspaceRepository(
@@ -38,8 +36,6 @@ class FirebaseWorkspaceRepository(
     private val authManager: GoogleAuthManager = GoogleAuthManager(context)
 ) {
     private val appContext = context.applicationContext
-    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
-    private val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
     private val prefs by lazy {
         appContext.getSharedPreferences(PREFS_VAULT_NAME, Context.MODE_PRIVATE)
     }
@@ -59,7 +55,7 @@ class FirebaseWorkspaceRepository(
     }
 
     /**
-     * Real-time stream of Second Brain items combining instant local vault state and Firestore cloud sync.
+     * Real-time stream of Second Brain items combining instant local vault state and Supabase cloud sync.
      */
     val workspaceItemsFlow: Flow<List<WorkspaceItem>> = callbackFlow {
         ensureLocalCacheLoaded()
@@ -71,60 +67,37 @@ class FirebaseWorkspaceRepository(
             }
         }
 
-        var firestoreRegistration: ListenerRegistration? = null
-
-        fun attachToUser(uid: String?) {
-            firestoreRegistration?.remove()
-            firestoreRegistration = null
-
-            if (uid.isNullOrBlank()) {
-                trySend(vaultStateFlow.value)
-                return
-            }
-
-            firestoreRegistration = firestore.collection(COLLECTION_USERS)
-                .document(uid)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.w(TAG, "Firestore workspace listener error: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot == null || !snapshot.exists()) {
-                        val localItems = vaultStateFlow.value
-                        if (localItems.isNotEmpty()) {
-                            launch(Dispatchers.IO) {
-                                runCatching { saveItemsToFirestore(uid, localItems) }
+        val authSyncJob = launch(Dispatchers.IO) {
+            authManager.authUserFlow.collect { user ->
+                val uid = user?.uid
+                if (!uid.isNullOrBlank()) {
+                    runCatching {
+                        val remoteItems = fetchItemsFromSupabase(uid)
+                        if (remoteItems != null) {
+                            val localItems = vaultStateFlow.value
+                            val merged = mergeVaultItems(local = localItems, remote = remoteItems)
+                            if (merged != localItems) {
+                                updateLocalVault(merged)
+                            }
+                            if (merged.size > remoteItems.size) {
+                                saveItemsToSupabase(uid, merged)
                             }
                         }
-                        return@addSnapshotListener
+                    }.onFailure { e ->
+                        Log.w(TAG, "Initial Supabase sync skipped: ${e.message}")
                     }
-                    val remoteItems = parseItemsFromDocument(snapshot.data)
-                    val merged = mergeVaultItems(local = vaultStateFlow.value, remote = remoteItems)
-                    updateLocalVault(merged)
                 }
-        }
-
-        val authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            val user = firebaseAuth.currentUser
-            attachToUser(user?.uid)
-        }
-
-        auth.addAuthStateListener(authListener)
-        if (auth.currentUser == null) {
-            auth.signInAnonymously()
-        } else {
-            attachToUser(auth.currentUser?.uid)
+            }
         }
 
         awaitClose {
             localCollectorJob.cancel()
-            auth.removeAuthStateListener(authListener)
-            firestoreRegistration?.remove()
+            authSyncJob.cancel()
         }
     }.flowOn(Dispatchers.IO)
 
     /**
-     * Returns all Second Brain items, merging local vault and cloud state so the AI chatbot
+     * Returns all Second Brain items, merging local vault and Supabase state so the AI chatbot
      * always has full access to every stored note.
      */
     suspend fun getItems(): List<WorkspaceItem> = withContext(Dispatchers.IO) {
@@ -132,24 +105,14 @@ class FirebaseWorkspaceRepository(
         val localItems = vaultStateFlow.value
         val uid = authManager.ensureSessionUid().getOrNull() ?: return@withContext localItems
 
-        val remoteItems = runCatching {
-            val snapshot = firestore.collection(COLLECTION_USERS)
-                .document(uid)
-                .get()
-                .await()
-            if (snapshot.exists()) parseItemsFromDocument(snapshot.data) else null
-        }.getOrNull()
-
-        if (remoteItems == null) {
-            return@withContext localItems
-        }
+        val remoteItems = fetchItemsFromSupabase(uid) ?: return@withContext localItems
 
         val merged = mergeVaultItems(local = localItems, remote = remoteItems)
         if (merged != localItems) {
             updateLocalVault(merged)
         }
         if (merged.size > remoteItems.size) {
-            runCatching { saveItemsToFirestore(uid, merged) }
+            runCatching { saveItemsToSupabase(uid, merged) }
         }
         merged
     }
@@ -195,7 +158,6 @@ class FirebaseWorkspaceRepository(
             val current = getItems().toMutableList()
             val index = findMatchingIndex(current, idOrQuery, preferTasks = false)
             if (index == null) {
-                // If no matching note exists, create a new note in the Second Brain Vault
                 val created = WorkspaceItem(
                     type = WorkspaceItemType.NOTE,
                     title = newTitle.ifBlank { idOrQuery.take(60).ifBlank { "Not" } },
@@ -310,7 +272,12 @@ class FirebaseWorkspaceRepository(
                 ?: throw IllegalArgumentException("'$idOrQuery' ile eşleşen silinecek kayıt bulunamadı.")
 
             val removed = current.removeAt(index)
-            persistVaultAndCloud(current)
+            updateLocalVault(current)
+
+            val uid = authManager.ensureSessionUid().getOrNull()
+            if (!uid.isNullOrBlank()) {
+                runCatching { deleteItemFromSupabase(uid, removed.id) }
+            }
             removed
         }
     }
@@ -318,18 +285,32 @@ class FirebaseWorkspaceRepository(
     suspend fun clearCompletedTasks(): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
             val current = getItems()
+            val toRemove = current.filter { it.type == WorkspaceItemType.TASK && it.isCompleted }
             val remaining = current.filterNot { it.type == WorkspaceItemType.TASK && it.isCompleted }
-            val removedCount = current.size - remaining.size
-            if (removedCount > 0) {
-                persistVaultAndCloud(remaining)
+            if (toRemove.isNotEmpty()) {
+                updateLocalVault(remaining)
+                val uid = authManager.ensureSessionUid().getOrNull()
+                if (!uid.isNullOrBlank()) {
+                    toRemove.forEach { item ->
+                        runCatching { deleteItemFromSupabase(uid, item.id) }
+                    }
+                }
             }
-            removedCount
+            toRemove.size
         }
     }
 
     suspend fun clearAll(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            persistVaultAndCloud(emptyList(), allowEmptyOverwrite = true)
+            updateLocalVault(emptyList())
+            val uid = authManager.ensureSessionUid().getOrNull()
+            if (!uid.isNullOrBlank()) {
+                val encodedUid = SupabaseConfig.urlEncode("eq.$uid")
+                SupabaseConfig.restRequest(
+                    pathAndQuery = "workspace_items?user_id=$encodedUid",
+                    method = "DELETE"
+                )
+            }
         }
     }
 
@@ -345,13 +326,13 @@ class FirebaseWorkspaceRepository(
         // 1. Always save immediately to Local Second Brain Vault (JSON + Obsidian Markdown files)
         updateLocalVault(bounded)
 
-        // 2. Sync to Firebase Firestore if session is available
+        // 2. Sync to Supabase `public.workspace_items`
         val uid = authManager.ensureSessionUid().getOrNull()
         if (!uid.isNullOrBlank() && (bounded.isNotEmpty() || allowEmptyOverwrite)) {
             runCatching {
-                saveItemsToFirestore(uid, bounded)
+                saveItemsToSupabase(uid, bounded)
             }.onFailure { e ->
-                Log.w(TAG, "Cloud sync deferred (saved in local Second Brain Vault): ${e.message}")
+                Log.w(TAG, "Supabase sync deferred (saved in local Second Brain Vault): ${e.message}")
             }
         }
     }
@@ -392,7 +373,7 @@ class FirebaseWorkspaceRepository(
 
             val df = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
             val indexBuilder = StringBuilder()
-            indexBuilder.appendLine("# TARS Second Brain Vault")
+            indexBuilder.appendLine("# TARS Second Brain Vault (Supabase)")
             indexBuilder.appendLine("Updated: ${df.format(Date())}")
             indexBuilder.appendLine("Total Notes: ${items.size}")
             indexBuilder.appendLine()
@@ -480,35 +461,117 @@ class FirebaseWorkspaceRepository(
         return null
     }
 
-    private suspend fun saveItemsToFirestore(uid: String, items: List<WorkspaceItem>) {
-        val bounded = items.take(MAX_WORKSPACE_ITEMS).map { it.sanitized().toFirestoreMap() }
-        val payload = hashMapOf<String, Any>(
-            FIELD_WORKSPACE_ITEMS to bounded,
-            FIELD_WORKSPACE_UPDATED_AT to System.currentTimeMillis()
-        )
-        firestore.collection(COLLECTION_USERS)
-            .document(uid)
-            .set(payload, SetOptions.merge())
-            .await()
+    private suspend fun fetchItemsFromSupabase(uid: String): List<WorkspaceItem>? {
+        return runCatching {
+            val encodedUid = SupabaseConfig.urlEncode("eq.$uid")
+            val responseText = SupabaseConfig.restRequest(
+                pathAndQuery = "workspace_items?user_id=$encodedUid&select=*&order=created_at.desc&limit=$MAX_WORKSPACE_ITEMS",
+                method = "GET"
+            ).getOrThrow()
+
+            val arr = JsonParser.parseString(responseText).asJsonArray
+            val list = ArrayList<WorkspaceItem>(arr.size())
+            for (elem in arr) {
+                val row = elem.asJsonObject
+                val id = row.get("id")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                if (id.isBlank()) continue
+                val typeStr = row.get("type")?.takeIf { !it.isJsonNull }?.asString
+                val title = row.get("title")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                val content = row.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                val isCompleted = row.get("is_completed")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                val createdAt = row.get("created_at")?.takeIf { !it.isJsonNull }?.asLong ?: System.currentTimeMillis()
+                val updatedAt = row.get("updated_at")?.takeIf { !it.isJsonNull }?.asLong ?: createdAt
+
+                val tags = mutableListOf<String>()
+                row.get("tags")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { t ->
+                    val s = t.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                    if (s.isNotBlank()) tags.add(s)
+                }
+
+                val checklist = mutableListOf<ChecklistItem>()
+                row.get("checklist")?.takeIf { it.isJsonArray }?.asJsonArray?.forEachIndexed { idx, c ->
+                    if (c.isJsonObject) {
+                        val cObj = c.asJsonObject
+                        val cText = cObj.get("text")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                        if (cText.isNotBlank()) {
+                            checklist.add(
+                                ChecklistItem(
+                                    id = cObj.get("id")?.takeIf { !it.isJsonNull }?.asString ?: "chk_$idx",
+                                    text = cText,
+                                    isDone = cObj.get("isDone")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                                )
+                            )
+                        }
+                    }
+                }
+
+                list.add(
+                    WorkspaceItem(
+                        id = id,
+                        type = WorkspaceItemType.fromString(typeStr),
+                        title = title,
+                        content = content,
+                        tags = tags,
+                        checklist = checklist,
+                        isCompleted = isCompleted,
+                        createdAt = createdAt,
+                        updatedAt = updatedAt
+                    ).sanitized()
+                )
+            }
+            list.sortedByDescending { it.createdAt }.take(MAX_WORKSPACE_ITEMS)
+        }.getOrNull()
     }
 
-    private fun parseItemsFromDocument(data: Map<String, Any?>?): List<WorkspaceItem> {
-        if (data == null) return emptyList()
-        val rawList = data[FIELD_WORKSPACE_ITEMS] as? List<*> ?: return emptyList()
-        return rawList.mapNotNull { entry ->
-            val map = entry as? Map<*, *> ?: return@mapNotNull null
-            @Suppress("UNCHECKED_CAST")
-            val typedMap = map as Map<String, Any?>
-            val id = (typedMap["id"] as? String).orEmpty()
-            WorkspaceItem.fromFirestoreMap(id, typedMap)
-        }.sortedByDescending { it.createdAt }.take(MAX_WORKSPACE_ITEMS)
+    private suspend fun saveItemsToSupabase(uid: String, items: List<WorkspaceItem>) {
+        if (items.isEmpty()) return
+        val rowsArray = JsonArray()
+        for (item in items.take(MAX_WORKSPACE_ITEMS)) {
+            val clean = item.sanitized()
+            val tagsArr = JsonArray().apply { clean.tags.forEach { add(it) } }
+            val checklistArr = JsonArray().apply {
+                clean.checklist.forEach { sub ->
+                    add(JsonObject().apply {
+                        addProperty("id", sub.id)
+                        addProperty("text", sub.text)
+                        addProperty("isDone", sub.isDone)
+                    })
+                }
+            }
+            val rowObj = JsonObject().apply {
+                addProperty("id", clean.id)
+                addProperty("user_id", uid)
+                addProperty("type", clean.type.name)
+                addProperty("title", clean.title)
+                addProperty("content", clean.content)
+                add("tags", tagsArr)
+                add("checklist", checklistArr)
+                addProperty("is_completed", clean.isCompleted)
+                addProperty("created_at", clean.createdAt)
+                addProperty("updated_at", clean.updatedAt)
+            }
+            rowsArray.add(rowObj)
+        }
+
+        SupabaseConfig.restRequest(
+            pathAndQuery = "workspace_items?on_conflict=user_id,id",
+            method = "POST",
+            bodyJson = rowsArray.toString(),
+            preferHeader = "resolution=merge-duplicates,return=minimal"
+        ).getOrThrow()
+    }
+
+    private suspend fun deleteItemFromSupabase(uid: String, itemId: String) {
+        val encodedUid = SupabaseConfig.urlEncode("eq.$uid")
+        val encodedId = SupabaseConfig.urlEncode("eq.$itemId")
+        SupabaseConfig.restRequest(
+            pathAndQuery = "workspace_items?user_id=$encodedUid&id=$encodedId",
+            method = "DELETE"
+        ).getOrThrow()
     }
 
     companion object {
-        private const val TAG = "FirebaseWorkspaceRepo"
-        private const val COLLECTION_USERS = "users"
-        private const val FIELD_WORKSPACE_ITEMS = "workspaceItems"
-        private const val FIELD_WORKSPACE_UPDATED_AT = "workspaceUpdatedAt"
+        private const val TAG = "SupabaseWorkspaceRepo"
         private const val PREFS_VAULT_NAME = "tars_second_brain_vault"
         private const val KEY_VAULT_ITEMS_JSON = "vault_items_json_v1"
         const val MAX_WORKSPACE_ITEMS = 300
@@ -520,4 +583,3 @@ class FirebaseWorkspaceRepository(
         private val gson = Gson()
     }
 }
-

@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.tarslauncher.app.agent.domain.model.ChatMessage
+import com.tarslauncher.app.data.sync.SupabaseConfig
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -12,20 +13,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
- * Remote data source for Groq Cloud API (OpenAI-compatible Chat Completions).
- * Includes smart 429 TPM/RPM rate-limit backoff and token-efficient completion reservation.
+ * Pure Supabase Edge Function (`tars-chat`) client.
+ * The Android client ONLY sends the message payload to `https://nznftexnhmzboihbeilq.supabase.co/functions/v1/tars-chat`
+ * and receives the model response back; all upstream LLM calls (`dots-studio/dots-3-note-preview:free` / `Qwen`)
+ * and secret lookups (`public.agent_secrets`) execute on the Supabase Edge Function.
  */
 class GroqRemoteDataSource(
     private val apiKeyProvider: () -> String,
-    private val preferredModelProvider: () -> String = { DEFAULT_GROQ_MODEL }
+    private val preferredModelProvider: () -> String = { DEFAULT_OPENROUTER_MODEL },
+    private val userIdProvider: () -> String = { "" }
 ) {
     companion object {
+        const val DEFAULT_OPENROUTER_MODEL = "dots-studio/dots-3-note-preview:free"
         const val DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
-        private const val MAX_RETRIES_PER_MODEL = 3
+        private const val MAX_RETRIES = 3
     }
 
     @Volatile
-    var lastUsedModel: String = DEFAULT_GROQ_MODEL
+    var lastUsedModel: String = DEFAULT_OPENROUTER_MODEL
         private set
 
     suspend fun generateContent(
@@ -33,71 +38,32 @@ class GroqRemoteDataSource(
         messages: List<ChatMessage>
     ): Result<String> = withContext(Dispatchers.IO) {
         val key = apiKeyProvider().trim()
-        if (key.isBlank()) {
+        val userId = userIdProvider().trim()
+        val requestedModel = preferredModelProvider().trim().ifBlank { DEFAULT_OPENROUTER_MODEL }
+        val qwenEnabled = requestedModel == DEFAULT_GROQ_MODEL || requestedModel.startsWith("qwen/")
+
+        if (!SupabaseConfig.isConfigured()) {
             return@withContext Result.failure(
-                IllegalStateException("Groq API anahtarı girilmemiş. Lütfen ayarlardan Groq anahtarınızı (gsk_...) ekleyin.")
+                IllegalStateException("Supabase servisi yapılandırılmamış (local.properties veya BuildConfig içinde SUPABASE_URL / SUPABASE_ANON_KEY eksik).")
             )
         }
 
-        val model = preferredModelProvider().trim().ifBlank { DEFAULT_GROQ_MODEL }
         var lastError: Throwable? = null
         var attempt = 0
 
-        while (attempt < MAX_RETRIES_PER_MODEL) {
+        while (attempt < MAX_RETRIES) {
             attempt++
-            var retryAfterMs = 0L
-
-            val callResult = runCatching {
-                val requestBody = buildRequestBody(model, systemInstruction, messages)
-                val endpoint = URL("https://api.groq.com/openai/v1/chat/completions")
-
-                val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 30_000
-                    doOutput = true
-                    instanceFollowRedirects = false
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Accept", "application/json")
-                    setRequestProperty("Authorization", "Bearer $key")
-                }
-
-                try {
-                    connection.outputStream.use { output ->
-                        output.write(requestBody.toString().toByteArray(Charsets.UTF_8))
-                    }
-
-                    val statusCode = connection.responseCode
-                    if (statusCode == 429) {
-                        val headerRetrySec = connection.getHeaderField("retry-after")?.trim()?.toDoubleOrNull()
-                        if (headerRetrySec != null && headerRetrySec > 0) {
-                            retryAfterMs = (headerRetrySec * 1000L).toLong().coerceIn(1500L, 12_000L)
-                        }
-                    }
-
-                    val inputStream: InputStream = if (statusCode in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream ?: throw RuntimeException("HTTP $statusCode: Yanıt alınamadı.")
-                    }
-
-                    val responseText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-
-                    if (statusCode !in 200..299) {
-                        if (statusCode == 429 && retryAfterMs == 0L) {
-                            retryAfterMs = parseRetryDelayMs(responseText, attempt)
-                        }
-                        throw RuntimeException("Groq API Hatası ($statusCode) [Model: $model]: ${responseText.take(250)}")
-                    }
-
-                    extractTextFromResponse(responseText)
-                } finally {
-                    connection.disconnect()
-                }
-            }
+            val callResult = callSupabaseEdgeFunction(
+                userId = userId,
+                model = requestedModel,
+                systemInstruction = systemInstruction,
+                messages = messages,
+                apiKey = key,
+                qwenEnabled = qwenEnabled
+            )
 
             if (callResult.isSuccess) {
-                lastUsedModel = model
+                lastUsedModel = requestedModel
                 return@withContext callResult
             }
 
@@ -105,24 +71,23 @@ class GroqRemoteDataSource(
             val msg = error?.message.orEmpty()
             val isRateLimit = msg.contains("429") || msg.contains("rate_limit", ignoreCase = true)
 
-            if (isRateLimit && attempt < MAX_RETRIES_PER_MODEL) {
-                val waitMs = if (retryAfterMs > 0L) retryAfterMs else (2200L * attempt)
-                delay(waitMs)
+            if (isRateLimit && attempt < MAX_RETRIES) {
+                delay(2200L * attempt)
                 continue
             }
 
             lastError = when {
                 error is java.net.UnknownHostException -> {
-                    RuntimeException("İnternet / DNS Hatası: Groq sunucusuna bağlanılamadı. Lütfen internetinizi kontrol edin.")
+                    RuntimeException("İnternet / DNS Hatası: Supabase sunucusuna bağlanılamadı.")
                 }
                 error is java.net.SocketTimeoutException -> {
-                    RuntimeException("Zaman Aşımı: Groq sunucusuna bağlanırken süre aşıldı.")
+                    RuntimeException("Zaman Aşımı: Supabase Edge Function yanıt süresi aşıldı.")
                 }
                 msg.contains("401") || msg.contains("invalid_api_key", ignoreCase = true) -> {
-                    RuntimeException("Geçersiz Groq API Anahtarı: Lütfen console.groq.com adresinden aldığınız gsk_... anahtarınızı kontrol edin.")
+                    RuntimeException("API Anahtarı Eksik veya Geçersiz: Lütfen TARS Agent konsolundan API anahtarınızı kaydedin.")
                 }
                 isRateLimit -> {
-                    RuntimeException("Groq Hız Limiti (429 Rate Limit): Dakikalık token/istek sınırına ulaşıldı, lütfen birkaç saniye bekleyip tekrar deneyin.")
+                    RuntimeException("Hız Limiti (429): Lütfen birkaç saniye bekleyip tekrar deneyin.")
                 }
                 else -> error
             }
@@ -136,84 +101,115 @@ class GroqRemoteDataSource(
             }
         }
 
-        Result.failure(lastError ?: RuntimeException("Groq modeli ($model) yanıt vermedi."))
+        Result.failure(lastError ?: RuntimeException("Supabase API ($requestedModel) yanıt vermedi."))
     }
 
-    private fun parseRetryDelayMs(errorText: String, attempt: Int): Long {
-        // Groq error messages often include "Please try again in 2.34s" or "Please try again in 1500ms"
-        val msMatch = Regex("try again in\\s+(\\d+)\\s*ms", RegexOption.IGNORE_CASE).find(errorText)
-        if (msMatch != null) {
-            val ms = msMatch.groupValues[1].toLongOrNull()
-            if (ms != null) return (ms + 400L).coerceIn(1200L, 12_000L)
-        }
-        val secMatch = Regex("try again in\\s+([0-9.]+)\\s*s", RegexOption.IGNORE_CASE).find(errorText)
-        if (secMatch != null) {
-            val sec = secMatch.groupValues[1].toDoubleOrNull()
-            if (sec != null) return ((sec * 1000L).toLong() + 500L).coerceIn(1500L, 12_000L)
-        }
-        return (2500L * attempt).coerceAtMost(8000L)
-    }
-
-    private fun buildRequestBody(
+    private fun callSupabaseEdgeFunction(
+        userId: String,
         model: String,
         systemInstruction: String,
-        messages: List<ChatMessage>
-    ): JsonObject {
-        return JsonObject().apply {
-            addProperty("model", model)
-            addProperty("temperature", 0.15)
-            // Balanced token reservation (800) prevents truncation while respecting TPM quota
-            addProperty("max_completion_tokens", 800)
-            addProperty("top_p", 0.9)
-
-            // Force JSON object format for reliable Agent parsing
-            add("response_format", JsonObject().apply {
-                addProperty("type", "json_object")
-            })
-
-            val messagesArray = JsonArray()
-
-            // System prompt
-            messagesArray.add(JsonObject().apply {
+        messages: List<ChatMessage>,
+        apiKey: String,
+        qwenEnabled: Boolean
+    ): Result<String> = runCatching {
+        val messagesArray = JsonArray().apply {
+            add(JsonObject().apply {
                 addProperty("role", "system")
                 addProperty("content", systemInstruction)
             })
-
-            // Conversation history
             messages.forEach { msg ->
                 val roleStr = when (msg.role) {
                     ChatMessage.Role.USER -> "user"
                     ChatMessage.Role.MODEL -> "assistant"
                 }
-                messagesArray.add(JsonObject().apply {
+                add(JsonObject().apply {
                     addProperty("role", roleStr)
                     addProperty("content", msg.content)
                 })
             }
+        }
 
+        val edgePayload = JsonObject().apply {
+            if (userId.isNotBlank()) {
+                addProperty("userId", userId)
+            }
+            addProperty("model", model)
+            addProperty("qwenEnabled", qwenEnabled)
+            addProperty("temperature", 0.15)
+            addProperty("top_p", 0.9)
+            if (apiKey.isNotBlank()) {
+                addProperty("apiKey", apiKey)
+            }
             add("messages", messagesArray)
+        }
+
+        val connection = (URL(SupabaseConfig.EDGE_CHAT_URL).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15_000
+            readTimeout = 45_000
+            doOutput = true
+            instanceFollowRedirects = false
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("apikey", SupabaseConfig.SUPABASE_ANON_KEY)
+            setRequestProperty("Authorization", "Bearer ${SupabaseConfig.SUPABASE_ANON_KEY}")
+        }
+
+        try {
+            connection.outputStream.use { out ->
+                out.write(edgePayload.toString().toByteArray(Charsets.UTF_8))
+            }
+            val code = connection.responseCode
+            val stream: InputStream = if (code in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream ?: throw RuntimeException("Supabase Edge HTTP $code")
+            }
+            val responseText = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            if (code !in 200..299) {
+                throw RuntimeException("Supabase Edge ($code): ${responseText.take(250)}")
+            }
+            extractTextFromResponse(responseText)
+        } finally {
+            connection.disconnect()
         }
     }
 
     private fun extractTextFromResponse(jsonResponse: String): String {
         val root = JsonParser.parseString(jsonResponse).asJsonObject
         val choices = root.getAsJsonArray("choices")
-            ?: throw IllegalStateException("Groq choices listesi boş.")
+            ?: throw IllegalStateException("Model choices listesi boş.")
         if (choices.size() == 0) {
-            throw IllegalStateException("Groq yanıt döndürmedi.")
+            throw IllegalStateException("Model yanıt döndürmedi.")
         }
 
         val firstChoice = choices[0].asJsonObject
-        val finishReason = firstChoice.get("finish_reason")?.asString
-        if (finishReason == "length") {
-            throw IllegalStateException("Model çıktısı maksimum token sınırına (max_tokens) takılarak yarıda kesildi.")
+        val message = firstChoice.getAsJsonObject("message")
+            ?: throw IllegalStateException("Model message içeriği bulunamadı.")
+
+        val content = message.get("content")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val reasoning = message.get("reasoning")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val resolved = content ?: reasoning
+            ?: throw IllegalStateException("Model yanıt içeriği boş.")
+
+        val finishReason = firstChoice.get("finish_reason")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+
+        if (finishReason == "length" && (!resolved.contains("{") || !resolved.contains("}"))) {
+            throw IllegalStateException("Model çıktısı maksimum token sınırına takılarak yarıda kesildi.")
         }
 
-        val message = firstChoice.getAsJsonObject("message")
-            ?: throw IllegalStateException("Groq message içeriği bulunamadı.")
-
-        return message.get("content")?.asString
-            ?: message.get("reasoning")?.asString
-            ?: throw IllegalStateException("Groq yanıt içeriği boş.")
+        return resolved
     }
 }

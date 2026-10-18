@@ -78,7 +78,7 @@ fun AgentBottomSheet(
     val focusManager = LocalFocusManager.current
 
     var showKeyEditor by remember { mutableStateOf(uiState.groqApiKey.isBlank()) }
-    var tempApiKey by remember(uiState.groqApiKey) { mutableStateOf(uiState.groqApiKey) }
+    var tempApiKey by remember(uiState.groqApiKey, uiState.isQwenEnabled) { mutableStateOf(uiState.groqApiKey) }
 
     val logListState = rememberLazyListState()
     LaunchedEffect(uiState.logs.size) {
@@ -196,7 +196,34 @@ fun AgentBottomSheet(
 
                 HorizontalDivider(thickness = 1.dp, color = TarsLine)
 
-                // Row C: Groq API Key
+                // Row B2: Qwen Model Toggle (Off = dots-studio/dots-3-note-preview:free, On = Qwen)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.onToggleQwenEnabled(!uiState.isQwenEnabled) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isQwenEnabled) "- Qwen Modeli (qwen3.8-27b)" else "- Qwen Modeli (Dots3-Note Aktif)",
+                        color = TarsWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Light
+                    )
+
+                    Text(
+                        text = if (uiState.isQwenEnabled) "AÇIK" else "KAPALI",
+                        color = if (uiState.isQwenEnabled) TarsWhite else TarsMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 2.sp
+                    )
+                }
+
+                HorizontalDivider(thickness = 1.dp, color = TarsLine)
+
+                // Row C: API Key (OpenRouter sk-or-... / Groq gsk_...)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -249,7 +276,7 @@ fun AgentBottomSheet(
                                 Box(modifier = Modifier.weight(1f)) {
                                     if (tempApiKey.isEmpty()) {
                                         Text(
-                                            text = "gsk_...",
+                                            text = if (uiState.isQwenEnabled) "gsk_..." else "sk-or-...",
                                             color = TarsDim,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Light

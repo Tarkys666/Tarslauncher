@@ -110,9 +110,10 @@ fun SettingsScreen(
     // Default launcher state
     var isDefaultLauncherSet by remember { mutableStateOf(false) }
 
-    // TARS Agent Master Kill Switch state
+    // TARS Agent Master Kill Switch & Qwen Model state
     val agentPrefs = remember { com.tarslauncher.app.agent.data.AgentPreferences(context) }
     var isAgentEnabled by remember { mutableStateOf(agentPrefs.isAgentEnabled()) }
+    var isQwenEnabled by remember { mutableStateOf(agentPrefs.isQwenEnabled()) }
     
     // Refresh launcher status when screen becomes visible (user returns from settings)
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
@@ -121,12 +122,14 @@ fun SettingsScreen(
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isDefaultLauncherSet = isDefaultLauncher(context)
                 isAgentEnabled = agentPrefs.isAgentEnabled()
+                isQwenEnabled = agentPrefs.isQwenEnabled()
             }
         }
         
         lifecycleOwner.lifecycle.addObserver(observer)
         isDefaultLauncherSet = isDefaultLauncher(context)
         isAgentEnabled = agentPrefs.isAgentEnabled()
+        isQwenEnabled = agentPrefs.isQwenEnabled()
         
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
@@ -162,6 +165,7 @@ fun SettingsScreen(
         selectedIconPack,
         isDefaultLauncherSet,
         isAgentEnabled,
+        isQwenEnabled,
         installedPwas.size,
         appVersion,
         isSyncing,
@@ -286,12 +290,12 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "CLOUD BACKUP (FIREBASE)",
+            title = "CLOUD BACKUP (SUPABASE)",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
                     title = "Backup to Cloud",
-                    description = if (isSyncing) "Syncing..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout & settings to Firestore",
+                    description = if (isSyncing) "Syncing..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout & settings to Supabase",
                     type = SettingType.BUTTON,
                     onClick = onBackupToCloud
                 ),
@@ -321,9 +325,21 @@ fun SettingsScreen(
             children = listOf(
                 SettingsItem.Setting(
                     title = "TARS Agent Konsolu",
-                    description = "LLM API anahtarı, Dynamic Island ve hızlı komut konsolu",
+                    description = "API anahtarı, Dynamic Island ve komut konsolu",
                     type = SettingType.BUTTON,
                     onClick = { showAgentSheet = true }
+                ),
+                SettingsItem.Setting(
+                    title = "Qwen Modeli",
+                    description = if (isQwenEnabled) "Açık: Qwen 3.8-27B aktif" else "Kapalı: Dots3-Note Preview (Free) aktif",
+                    type = SettingType.TOGGLE,
+                    currentValue = isQwenEnabled,
+                    onValueChange = { newValue ->
+                        val enabled = newValue as Boolean
+                        isQwenEnabled = enabled
+                        agentPrefs.setQwenEnabled(enabled)
+                        com.tarslauncher.app.agent.ui.AgentViewModel.getInstance()?.onToggleQwenEnabled(enabled)
+                    }
                 ),
                 SettingsItem.Setting(
                     title = "Notlarım",
@@ -678,9 +694,15 @@ fun SettingsScreen(
         }
         com.tarslauncher.app.agent.ui.AgentBottomSheet(
             viewModel = agentViewModel,
-            onDismissRequest = { showAgentSheet = false },
+            onDismissRequest = {
+                showAgentSheet = false
+                isQwenEnabled = agentPrefs.isQwenEnabled()
+                isAgentEnabled = agentPrefs.isAgentEnabled()
+            },
             onOpenWorkspace = {
                 showAgentSheet = false
+                isQwenEnabled = agentPrefs.isQwenEnabled()
+                isAgentEnabled = agentPrefs.isAgentEnabled()
                 showNotesDialog = true
             }
         )

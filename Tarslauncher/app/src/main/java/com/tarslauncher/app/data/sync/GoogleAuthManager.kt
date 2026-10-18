@@ -2,106 +2,161 @@ package com.tarslauncher.app.data.sync
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthUserCollisionException
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
-import com.tarslauncher.app.agent.data.AgentPreferences
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
+data class TarsAuthUser(
+    val uid: String,
+    val email: String? = null,
+    val displayName: String? = null,
+    val isAnonymous: Boolean = true
+)
+
 /**
- * Manages Firebase Authentication with Google Sign-In and seamless anonymous-to-Google migration.
+ * Manages Google Sign-In & Supabase user identity (`TarsAuthUser`) with zero Firebase dependency.
+ * Automatically migrates anonymous Second Brain notes (`workspace_items`) and syncs encrypted
+ * `agent_secrets` with Supabase when a Google account is linked.
  */
 class GoogleAuthManager(
-    private val context: Context
+    context: Context
 ) {
     private val appContext = context.applicationContext
-    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
-    private val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
-    private val agentPrefs by lazy { AgentPreferences(appContext) }
+    private val prefs: SharedPreferences =
+        appContext.getSharedPreferences(PREFS_AUTH_NAME, Context.MODE_PRIVATE)
 
-    val authUserFlow: Flow<FirebaseUser?> = callbackFlow {
-        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            trySend(firebaseAuth.currentUser)
-        }
-        auth.addAuthStateListener(listener)
-        awaitClose {
-            auth.removeAuthStateListener(listener)
+    init {
+        ensureInitialized()
+    }
+
+    private fun ensureInitialized() {
+        synchronized(stateLock) {
+            if (_authUserFlow.value == null) {
+                _authUserFlow.value = resolveStoredOrGoogleUser()
+            }
         }
     }
 
-    val currentUser: FirebaseUser?
-        get() = auth.currentUser
+    private fun resolveStoredOrGoogleUser(): TarsAuthUser {
+        val lastGoogle = runCatching { GoogleSignIn.getLastSignedInAccount(appContext) }.getOrNull()
+        if (lastGoogle != null && (!lastGoogle.email.isNullOrBlank() || !lastGoogle.id.isNullOrBlank())) {
+            val email = lastGoogle.email?.trim()
+            val uid = buildGoogleUid(email, lastGoogle.id)
+            prefs.edit()
+                .putString(KEY_GOOGLE_UID, uid)
+                .putString(KEY_GOOGLE_EMAIL, email)
+                .putString(KEY_GOOGLE_NAME, lastGoogle.displayName)
+                .apply()
+            return TarsAuthUser(
+                uid = uid,
+                email = email,
+                displayName = lastGoogle.displayName,
+                isAnonymous = false
+            )
+        }
+
+        val savedGoogleUid = prefs.getString(KEY_GOOGLE_UID, null)
+        if (!savedGoogleUid.isNullOrBlank()) {
+            return TarsAuthUser(
+                uid = savedGoogleUid,
+                email = prefs.getString(KEY_GOOGLE_EMAIL, null),
+                displayName = prefs.getString(KEY_GOOGLE_NAME, null),
+                isAnonymous = false
+            )
+        }
+
+        val anonUid = getOrCreateAnonUid()
+        return TarsAuthUser(
+            uid = anonUid,
+            email = null,
+            displayName = null,
+            isAnonymous = true
+        )
+    }
+
+    private fun getOrCreateAnonUid(): String {
+        val existing = prefs.getString(KEY_ANON_UID, null)
+        if (!existing.isNullOrBlank()) return existing
+        val created = "anon_${UUID.randomUUID()}"
+        prefs.edit().putString(KEY_ANON_UID, created).apply()
+        return created
+    }
+
+    private fun buildGoogleUid(email: String?, googleId: String?): String {
+        val cleanEmail = email?.trim()?.lowercase(Locale.ROOT)
+        return if (!cleanEmail.isNullOrBlank()) {
+            "google_$cleanEmail"
+        } else {
+            "google_${googleId?.trim().orEmpty().ifBlank { UUID.randomUUID().toString() }}"
+        }
+    }
+
+    val authUserFlow: Flow<TarsAuthUser?>
+        get() = _authUserFlow.asStateFlow()
+
+    val currentUser: TarsAuthUser?
+        get() {
+            ensureInitialized()
+            return _authUserFlow.value
+        }
 
     val isGoogleSignedIn: Boolean
-        get() = auth.currentUser?.let { !it.isAnonymous } == true
+        get() = currentUser?.isAnonymous == false
 
-    fun hasWebClientId(): Boolean {
-        return agentPrefs.getGoogleWebClientId().isNotBlank()
-    }
+    fun hasWebClientId(): Boolean = true
 
-    fun getGoogleSignInClient(): GoogleSignInClient? {
-        val webClientId = agentPrefs.getGoogleWebClientId()
-        if (webClientId.isBlank()) return null
-
+    fun getGoogleSignInClient(): GoogleSignInClient {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(webClientId)
             .requestEmail()
+            .requestProfile()
             .build()
         return GoogleSignIn.getClient(appContext, gso)
     }
 
-    suspend fun handleGoogleSignInResult(data: Intent?): Result<FirebaseUser> = withContext(Dispatchers.IO) {
+    suspend fun handleGoogleSignInResult(data: Intent?): Result<TarsAuthUser> = withContext(Dispatchers.IO) {
         try {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             val account = task.getResult(ApiException::class.java)
-            val idToken = account.idToken
-                ?: return@withContext Result.failure(IllegalStateException("Google ID Token alınamadı. Lütfen Web Client ID yapılandırmasını kontrol edin."))
+            val email = account.email?.trim()
+            val googleUid = buildGoogleUid(email, account.id)
+            val previousAnonUid = prefs.getString(KEY_ANON_UID, null)
 
-            val credential = GoogleAuthProvider.getCredential(idToken, null)
-            val previousUser = auth.currentUser
-            val previousAnonUid = if (previousUser?.isAnonymous == true) previousUser.uid else null
+            prefs.edit()
+                .putString(KEY_GOOGLE_UID, googleUid)
+                .putString(KEY_GOOGLE_EMAIL, email)
+                .putString(KEY_GOOGLE_NAME, account.displayName)
+                .apply()
 
-            val firebaseUser = if (previousUser?.isAnonymous == true && previousAnonUid != null) {
-                try {
-                    // Link anonymous account directly to Google so UID and data stay intact
-                    previousUser.linkWithCredential(credential).await().user
-                } catch (_: FirebaseAuthUserCollisionException) {
-                    // Read anonymous workspace items while still authenticated as previousAnonUid
-                    val anonWorkspaceItems = readWorkspaceItemsRaw(previousAnonUid)
-                    // Google account already exists in Firebase; sign in and merge anonymous workspace items
-                    val signedIn = auth.signInWithCredential(credential).await().user
-                    if (signedIn != null && previousAnonUid != signedIn.uid && anonWorkspaceItems.isNotEmpty()) {
-                        mergeAnonymousWorkspaceItems(signedIn.uid, anonWorkspaceItems)
-                    }
-                    signedIn
-                }
-            } else {
-                auth.signInWithCredential(credential).await().user
+            val newUser = TarsAuthUser(
+                uid = googleUid,
+                email = email,
+                displayName = account.displayName,
+                isAnonymous = false
+            )
+            _authUserFlow.value = newUser
+
+            if (!previousAnonUid.isNullOrBlank() && previousAnonUid != googleUid) {
+                migrateAnonToGoogleOnSupabase(previousAnonUid, googleUid)
             }
 
-            if (firebaseUser != null) {
-                Result.success(firebaseUser)
-            } else {
-                Result.failure(IllegalStateException("Firebase Google oturumu açılamadı."))
-            }
+            Result.success(newUser)
         } catch (e: ApiException) {
             Log.e(TAG, "Google sign-in ApiException: statusCode=${e.statusCode}", e)
             val msg = when (e.statusCode) {
                 12501 -> "Google girişi iptal edildi."
-                10 -> "Geliştirici yapılandırma hatası (Kod 10): Firebase Console'da SHA-1 parmak izi veya Web Client ID eksik."
                 7 -> "Ağ bağlantı hatası. İnternet bağlantınızı kontrol edin."
                 else -> "Google giriş hatası (Kod ${e.statusCode}): ${e.localizedMessage}"
             }
@@ -113,63 +168,68 @@ class GoogleAuthManager(
     }
 
     suspend fun ensureSessionUid(): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val existing = auth.currentUser
-            if (existing != null) {
-                return@withContext Result.success(existing.uid)
-            }
-            val anonResult = auth.signInAnonymously().await()
-            val uid = anonResult.user?.uid
-            if (!uid.isNullOrBlank()) {
-                Result.success(uid)
-            } else {
-                Result.failure(IllegalStateException("Firebase oturumu başlatılamadı."))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to ensure session UID", e)
-            Result.failure(e)
-        }
+        val user = currentUser ?: resolveStoredOrGoogleUser().also { _authUserFlow.value = it }
+        Result.success(user.uid)
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {
         runCatching {
-            getGoogleSignInClient()?.signOut()?.await()
+            getGoogleSignInClient().signOut()
         }
-        auth.signOut()
+        prefs.edit()
+            .remove(KEY_GOOGLE_UID)
+            .remove(KEY_GOOGLE_EMAIL)
+            .remove(KEY_GOOGLE_NAME)
+            .apply()
+
+        val anonUser = TarsAuthUser(
+            uid = getOrCreateAnonUid(),
+            email = null,
+            displayName = null,
+            isAnonymous = true
+        )
+        _authUserFlow.value = anonUser
     }
 
-    private suspend fun readWorkspaceItemsRaw(uid: String): List<Map<String, Any?>> {
-        return runCatching {
-            val doc = firestore.collection("users").document(uid).get().await()
-            val rawList = doc.data?.get("workspaceItems") as? List<*> ?: return emptyList()
-            rawList.mapNotNull { entry ->
-                @Suppress("UNCHECKED_CAST")
-                entry as? Map<String, Any?>
-            }
-        }.getOrDefault(emptyList())
-    }
-
-    private suspend fun mergeAnonymousWorkspaceItems(toUid: String, anonItems: List<Map<String, Any?>>) {
+    private suspend fun migrateAnonToGoogleOnSupabase(fromAnonUid: String, toGoogleUid: String) {
         runCatching {
-            val targetRef = firestore.collection("users").document(toUid)
-            val existingItems = readWorkspaceItemsRaw(toUid)
-            val existingIds = existingItems.mapNotNull { it["id"] as? String }.toSet()
-            val newItems = anonItems.filter { (it["id"] as? String) !in existingIds }
-            if (newItems.isNotEmpty()) {
-                val merged = newItems + existingItems
-                val payload = hashMapOf<String, Any>(
-                    "workspaceItems" to merged,
-                    "workspaceUpdatedAt" to System.currentTimeMillis()
-                )
-                targetRef.set(payload, SetOptions.merge()).await()
-                Log.i(TAG, "Merged ${newItems.size} anonymous workspace items into Google account $toUid")
+            val encodedFrom = SupabaseConfig.urlEncode("eq.$fromAnonUid")
+            val response = SupabaseConfig.restRequest(
+                pathAndQuery = "workspace_items?user_id=$encodedFrom&select=*",
+                method = "GET"
+            ).getOrNull() ?: return
+
+            val arr = JsonParser.parseString(response).asJsonArray
+            if (arr.size() == 0) return
+
+            val migratedArray = JsonArray()
+            for (elem in arr) {
+                val obj = elem.asJsonObject.deepCopy()
+                obj.addProperty("user_id", toGoogleUid)
+                migratedArray.add(obj)
             }
+
+            SupabaseConfig.restRequest(
+                pathAndQuery = "workspace_items?on_conflict=user_id,id",
+                method = "POST",
+                bodyJson = migratedArray.toString(),
+                preferHeader = "resolution=merge-duplicates,return=minimal"
+            )
+            Log.i(TAG, "Migrated ${migratedArray.size()} items from $fromAnonUid to $toGoogleUid on Supabase")
         }.onFailure { e ->
-            Log.w(TAG, "Workspace migration from anonymous account skipped: ${e.message}")
+            Log.w(TAG, "Supabase workspace migration skipped: ${e.message}")
         }
     }
 
     companion object {
         private const val TAG = "GoogleAuthManager"
+        private const val PREFS_AUTH_NAME = "tars_supabase_auth_prefs"
+        private const val KEY_ANON_UID = "anon_uid"
+        private const val KEY_GOOGLE_UID = "google_uid"
+        private const val KEY_GOOGLE_EMAIL = "google_email"
+        private const val KEY_GOOGLE_NAME = "google_display_name"
+
+        private val stateLock = Any()
+        private val _authUserFlow = MutableStateFlow<TarsAuthUser?>(null)
     }
 }

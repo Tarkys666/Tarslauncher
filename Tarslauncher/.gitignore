@@ -16,6 +16,10 @@ local.properties
 *.keystore
 keystore.properties
 *base64.txt
+google-services.json
+*google-services.json
+.env
+.env.*
 
 # Build & Release outputs
 *.apk

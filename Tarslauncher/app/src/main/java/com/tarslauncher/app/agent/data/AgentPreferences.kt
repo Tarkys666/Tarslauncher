@@ -12,6 +12,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 enum class AgentProvider {
+    OPENROUTER,
     GROQ
 }
 
@@ -21,7 +22,95 @@ class AgentPreferences(context: Context) {
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getProvider(): AgentProvider = AgentProvider.GROQ
+    /**
+     * When true, uses Qwen (`qwen/qwen3.8-27b`).
+     * When false (default), uses OpenRouter (`dots-studio/dots-3-note-preview:free`).
+     */
+    fun isQwenEnabled(): Boolean {
+        return prefs.getBoolean(KEY_QWEN_ENABLED, false)
+    }
+
+    fun setQwenEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_QWEN_ENABLED, enabled).apply()
+    }
+
+    fun getProvider(): AgentProvider {
+        return if (isQwenEnabled()) AgentProvider.GROQ else AgentProvider.OPENROUTER
+    }
+
+    fun getActiveModel(): String {
+        return if (isQwenEnabled()) {
+            GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+        } else {
+            GroqRemoteDataSource.DEFAULT_OPENROUTER_MODEL
+        }
+    }
+
+    /**
+     * Returns the API key for the currently selected model/provider,
+     * falling back to whichever key is available so a single token entry works seamlessly.
+     */
+    fun getActiveApiKey(): String {
+        return if (isQwenEnabled()) {
+            getGroqApiKey().ifBlank { getOpenRouterApiKey() }
+        } else {
+            getOpenRouterApiKey().ifBlank { getGroqApiKey() }
+        }
+    }
+
+    /**
+     * Saves the API key from the unified token input field.
+     * Automatically routes `gsk_...` to Groq and `sk-or-...` to OpenRouter,
+     * or saves to the currently active provider slot.
+     */
+    fun setActiveApiKey(key: String) {
+        val trimmed = key.trim()
+        when {
+            trimmed.startsWith("sk-or-", ignoreCase = true) -> {
+                setOpenRouterApiKey(trimmed)
+            }
+            trimmed.startsWith("gsk_", ignoreCase = true) -> {
+                setGroqApiKey(trimmed)
+            }
+            isQwenEnabled() -> {
+                setGroqApiKey(trimmed)
+            }
+            else -> {
+                setOpenRouterApiKey(trimmed)
+            }
+        }
+    }
+
+    fun getOpenRouterApiKey(): String {
+        val encrypted = prefs.getString(KEY_OPENROUTER_API_KEY_ENCRYPTED, null)
+        if (!encrypted.isNullOrBlank()) {
+            val decrypted = decryptSecret(encrypted)
+            if (!decrypted.isNullOrBlank()) {
+                return decrypted
+            }
+        }
+        val legacyPlain = prefs.getString(KEY_OPENROUTER_API_KEY_LEGACY, "").orEmpty().trim()
+        if (legacyPlain.isNotBlank()) {
+            setOpenRouterApiKey(legacyPlain)
+            return legacyPlain
+        }
+        return ""
+    }
+
+    fun setOpenRouterApiKey(key: String) {
+        val trimmed = key.trim()
+        val editor = prefs.edit().remove(KEY_OPENROUTER_API_KEY_LEGACY)
+        if (trimmed.isBlank()) {
+            editor.remove(KEY_OPENROUTER_API_KEY_ENCRYPTED).apply()
+            return
+        }
+        val encrypted = encryptSecret(trimmed)
+        if (encrypted != null) {
+            editor.putString(KEY_OPENROUTER_API_KEY_ENCRYPTED, encrypted).apply()
+        } else {
+            editor.putString(KEY_OPENROUTER_API_KEY_LEGACY, trimmed).apply()
+        }
+    }
 
     fun getGroqApiKey(): String {
         val encrypted = prefs.getString(KEY_GROQ_API_KEY_ENCRYPTED, null)
@@ -57,7 +146,7 @@ class AgentPreferences(context: Context) {
         }
     }
 
-    fun getGroqModel(): String = GroqRemoteDataSource.DEFAULT_GROQ_MODEL
+    fun getGroqModel(): String = getActiveModel()
 
     fun getGoogleWebClientId(): String {
         val custom = prefs.getString(KEY_GOOGLE_WEB_CLIENT_ID, "").orEmpty().trim()
@@ -141,8 +230,11 @@ class AgentPreferences(context: Context) {
     companion object {
         private const val PREFS_NAME = "tars_agent_prefs"
         private const val KEY_AGENT_ENABLED = "agent_master_enabled"
+        private const val KEY_QWEN_ENABLED = "qwen_model_enabled"
         private const val KEY_GROQ_API_KEY_LEGACY = "groq_api_key"
         private const val KEY_GROQ_API_KEY_ENCRYPTED = "groq_api_key_enc_v1"
+        private const val KEY_OPENROUTER_API_KEY_LEGACY = "openrouter_api_key"
+        private const val KEY_OPENROUTER_API_KEY_ENCRYPTED = "openrouter_api_key_enc_v1"
         private const val KEY_GOOGLE_WEB_CLIENT_ID = "google_web_client_id"
 
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"

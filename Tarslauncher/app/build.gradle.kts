@@ -20,7 +20,6 @@ fun generateBuildHash(): String {
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
-    alias(libs.plugins.googleServices)
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -63,8 +62,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 43
-        versionName = "1.8.8"
+        versionCode = 44
+        versionName = "1.8.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -75,6 +74,16 @@ android {
         ndk {
             abiFilters.clear()
         }
+
+        // Supabase configuration parameterized from local.properties or env vars
+        val supabaseUrl = System.getenv("SUPABASE_URL")
+            ?: localProperties.getProperty("SUPABASE_URL")
+            ?: ""
+        val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
+            ?: localProperties.getProperty("SUPABASE_ANON_KEY")
+            ?: ""
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
@@ -158,12 +167,8 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.gson)
     
-    // Firebase & Google Auth
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.firestore.ktx)
-    implementation(libs.firebase.auth.ktx)
+    // Google Auth (Supabase Cloud Identity)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

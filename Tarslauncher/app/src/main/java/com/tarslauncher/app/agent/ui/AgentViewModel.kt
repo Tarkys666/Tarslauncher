@@ -31,8 +31,9 @@ class AgentViewModel(
     private val _uiState = MutableStateFlow(
         AgentUiState(
             provider = preferences.getProvider(),
-            groqApiKey = preferences.getGroqApiKey(),
-            groqModel = preferences.getGroqModel(),
+            isQwenEnabled = preferences.isQwenEnabled(),
+            groqApiKey = preferences.getActiveApiKey(),
+            groqModel = preferences.getActiveModel(),
             googleWebClientId = preferences.getGoogleWebClientId(),
             isGoogleSignedIn = authManager.isGoogleSignedIn,
             userEmail = authManager.currentUser?.email,
@@ -74,8 +75,26 @@ class AgentViewModel(
 
     fun onSaveApiKey(newApiKey: String) {
         val trimmed = newApiKey.trim()
-        preferences.setGroqApiKey(trimmed)
-        _uiState.update { it.copy(groqApiKey = trimmed) }
+        preferences.setActiveApiKey(trimmed)
+        _uiState.update {
+            it.copy(
+                groqApiKey = preferences.getActiveApiKey(),
+                provider = preferences.getProvider(),
+                groqModel = preferences.getActiveModel()
+            )
+        }
+    }
+
+    fun onToggleQwenEnabled(enabled: Boolean) {
+        preferences.setQwenEnabled(enabled)
+        _uiState.update {
+            it.copy(
+                isQwenEnabled = enabled,
+                provider = preferences.getProvider(),
+                groqModel = preferences.getActiveModel(),
+                groqApiKey = preferences.getActiveApiKey()
+            )
+        }
     }
 
     fun onSaveGoogleWebClientId(clientId: String) {
@@ -110,17 +129,7 @@ class AgentViewModel(
             return
         }
 
-        val state = _uiState.value
-        val activeKey = state.groqApiKey.trim()
-        if (activeKey.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    isFailure = true,
-                    finalMessage = "Lütfen önce geçerli bir Groq API anahtarı (gsk_...) kaydedin."
-                )
-            }
-            return
-        }
+        val activeModel = preferences.getActiveModel()
 
         currentExecutionJob?.cancel()
 
@@ -137,10 +146,11 @@ class AgentViewModel(
         }
 
         val remoteDataSource = GroqRemoteDataSource(
-            apiKeyProvider = { _uiState.value.groqApiKey },
-            preferredModelProvider = { GroqRemoteDataSource.DEFAULT_GROQ_MODEL }
+            apiKeyProvider = { preferences.getActiveApiKey() },
+            preferredModelProvider = { preferences.getActiveModel() },
+            userIdProvider = { authManager.currentUser?.uid.orEmpty() }
         )
-        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = GroqRemoteDataSource.DEFAULT_GROQ_MODEL)
+        val brain: AgentBrain = GroqAgentBrain(remoteDataSource, modelName = activeModel)
 
         val runner = AgentLoopRunner(
             context = getApplication(),

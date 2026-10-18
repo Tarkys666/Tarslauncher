@@ -306,24 +306,19 @@ fun ManageAuthDialog(
                         text = "G O O G L E   A U T H",
                         color = MonoWhite,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Light,
+                        fontWeight = FontWeight.ExtraLight,
                         letterSpacing = 3.sp
                     )
 
-                    Box(
+                    Text(
+                        text = "×",
+                        color = MonoMuted,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Light,
                         modifier = Modifier
-                            .border(BorderStroke(1.dp, MonoBorder), RectangleShape)
                             .clickable { onDismiss() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✕",
-                            color = MonoWhite,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Light
-                        )
-                    }
+                            .padding(horizontal = 6.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -339,7 +334,7 @@ fun ManageAuthDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isGoogleLinked) "- BAĞLI: $userDisplayLabel" else "- ANONİM BULUT OTURUMU",
+                    text = if (isGoogleLinked) "- BAĞLI (SUPABASE): $userDisplayLabel" else "- ANONİM BULUT OTURUMU (SUPABASE)",
                     color = MonoWhite,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light
@@ -380,11 +375,7 @@ fun ManageAuthDialog(
                             .clickable {
                                 authStatusMessage = null
                                 val client = authManager.getGoogleSignInClient()
-                                if (client != null) {
-                                    googleSignInLauncher.launch(client.signInIntent)
-                                } else {
-                                    authStatusMessage = "WEB CLIENT ID YAPILANDIRILMAMIŞ."
-                                }
+                                googleSignInLauncher.launch(client.signInIntent)
                             }
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center

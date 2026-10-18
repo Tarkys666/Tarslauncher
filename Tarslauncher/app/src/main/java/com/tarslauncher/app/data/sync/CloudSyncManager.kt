@@ -3,50 +3,38 @@ package com.tarslauncher.app.data.sync
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.tarslauncher.app.data.datastore.LauncherDataStore
 import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.LauncherSettings
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
+/**
+ * Cloud backup & restore manager powered by Supabase (`public.user_backups` & `public.agent_secrets`).
+ */
 class CloudSyncManager(
     private val context: Context,
-    private val dataStore: LauncherDataStore = LauncherDataStore(context)
+    private val dataStore: LauncherDataStore = LauncherDataStore(context),
+    private val authManager: GoogleAuthManager = GoogleAuthManager(context)
 ) {
-    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
-    private val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
     companion object {
         private const val TAG = "CloudSyncManager"
-        private const val COLLECTION_USERS = "users"
     }
 
-    suspend fun getCurrentUser(): FirebaseUser? = withContext(Dispatchers.IO) {
-        auth.currentUser
+    suspend fun getCurrentUser(): TarsAuthUser? = withContext(Dispatchers.IO) {
+        authManager.currentUser
     }
 
-    suspend fun ensureAuthenticated(): Result<FirebaseUser> = withContext(Dispatchers.IO) {
-        try {
-            val current = auth.currentUser
-            if (current != null) {
-                return@withContext Result.success(current)
-            }
-            val authResult = auth.signInAnonymously().await()
-            val user = authResult.user
-            if (user != null) {
-                Log.i(TAG, "Anonymous sign-in successful: ${user.uid}")
-                Result.success(user)
-            } else {
-                Result.failure(Exception("Kullanıcı kimliği oluşturulamadı."))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Authentication failed", e)
-            Result.failure(e)
+    suspend fun ensureAuthenticated(): Result<TarsAuthUser> = withContext(Dispatchers.IO) {
+        val uidResult = authManager.ensureSessionUid()
+        val user = authManager.currentUser
+        if (uidResult.isSuccess && user != null) {
+            Result.success(user)
+        } else {
+            Result.failure(uidResult.exceptionOrNull() ?: Exception("Kullanıcı oturumu başlatılamadı."))
         }
     }
 
@@ -61,37 +49,46 @@ class CloudSyncManager(
             val pwasJson = dataStore.getPwasJson() ?: "[]"
             val usageStatsJson = dataStore.getUsageStatsJson() ?: "[]"
 
-            val settingsMap = hashMapOf<String, Any?>(
-                "showAppDrawer" to currentSettings.showAppDrawer,
-                "gridSize" to currentSettings.gridSize.serialize(),
-                "buttonColorMode" to currentSettings.buttonColorMode,
-                "showTarsHeader" to currentSettings.showTarsHeader,
-                "showClock" to currentSettings.showClock,
-                "selectedIconPack" to currentSettings.selectedIconPack,
-                "appDrawerIconSize" to currentSettings.appDrawerIconSize
-            )
+            val settingsObj = JsonObject().apply {
+                addProperty("showAppDrawer", currentSettings.showAppDrawer)
+                addProperty("gridSize", currentSettings.gridSize.serialize())
+                addProperty("buttonColorMode", currentSettings.buttonColorMode)
+                addProperty("showTarsHeader", currentSettings.showTarsHeader)
+                addProperty("showClock", currentSettings.showClock)
+                if (currentSettings.selectedIconPack != null) {
+                    addProperty("selectedIconPack", currentSettings.selectedIconPack)
+                }
+                addProperty("appDrawerIconSize", currentSettings.appDrawerIconSize)
+            }
 
-            val backupPayload = hashMapOf<String, Any?>(
-                "updatedAt" to now,
-                "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}",
-                "appVersion" to com.tarslauncher.app.BuildConfig.VERSION_NAME,
-                "foldersJson" to foldersJson,
-                "pwasJson" to pwasJson,
-                "usageStatsJson" to usageStatsJson,
-                "settings" to settingsMap
-            )
+            val payloadObj = JsonObject().apply {
+                addProperty("updatedAt", now)
+                addProperty("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
+                addProperty("appVersion", com.tarslauncher.app.BuildConfig.VERSION_NAME)
+                addProperty("foldersJson", foldersJson)
+                addProperty("pwasJson", pwasJson)
+                addProperty("usageStatsJson", usageStatsJson)
+                add("settings", settingsObj)
+            }
 
-            // Write securely to users/{userId} (enforced by Firestore rules)
-            firestore.collection(COLLECTION_USERS)
-                .document(user.uid)
-                .set(backupPayload, SetOptions.merge())
-                .await()
+            val rowObj = JsonObject().apply {
+                addProperty("user_id", user.uid)
+                add("payload", payloadObj)
+                addProperty("updated_at", now)
+            }
+
+            SupabaseConfig.restRequest(
+                pathAndQuery = "user_backups?on_conflict=user_id",
+                method = "POST",
+                bodyJson = rowObj.toString(),
+                preferHeader = "resolution=merge-duplicates,return=minimal"
+            ).getOrThrow()
 
             dataStore.setLastBackupTime(now)
-            Log.i(TAG, "Backup successfully uploaded to Firestore for uid: ${user.uid}")
+            Log.i(TAG, "Backup uploaded to Supabase for uid: ${user.uid}")
             Result.success(now)
         } catch (e: Exception) {
-            Log.e(TAG, "Backup failed", e)
+            Log.e(TAG, "Supabase backup failed", e)
             Result.failure(e)
         }
     }
@@ -102,44 +99,51 @@ class CloudSyncManager(
             val user = authResult.getOrNull()
                 ?: return@withContext Result.failure(authResult.exceptionOrNull() ?: Exception("Giriş yapılamadı."))
 
-            val snapshot = firestore.collection(COLLECTION_USERS)
-                .document(user.uid)
-                .get()
-                .await()
+            val encodedUid = SupabaseConfig.urlEncode("eq.${user.uid}")
+            val responseText = SupabaseConfig.restRequest(
+                pathAndQuery = "user_backups?user_id=$encodedUid&select=*&limit=1",
+                method = "GET"
+            ).getOrThrow()
 
-            if (!snapshot.exists()) {
-                return@withContext Result.failure(Exception("Bulutta bu hesaba ait kayıtlı bir yedek bulunamadı."))
+            val arr = JsonParser.parseString(responseText).asJsonArray
+            if (arr.size() == 0) {
+                return@withContext Result.failure(Exception("Supabase bulutunda bu hesaba ait kayıtlı bir yedek bulunamadı."))
             }
 
-            val foldersJson = snapshot.getString("foldersJson")
+            val row = arr[0].asJsonObject
+            val payload = row.getAsJsonObject("payload")
+                ?: return@withContext Result.failure(Exception("Yedek verisi okunamadı."))
+
+            val foldersJson = payload.get("foldersJson")?.takeIf { !it.isJsonNull }?.asString
             if (!foldersJson.isNullOrBlank()) {
                 dataStore.saveFoldersJson(foldersJson)
             }
 
-            val pwasJson = snapshot.getString("pwasJson")
+            val pwasJson = payload.get("pwasJson")?.takeIf { !it.isJsonNull }?.asString
             if (!pwasJson.isNullOrBlank()) {
                 dataStore.savePwasJson(pwasJson)
             }
 
-            val usageStatsJson = snapshot.getString("usageStatsJson")
+            val usageStatsJson = payload.get("usageStatsJson")?.takeIf { !it.isJsonNull }?.asString
             if (!usageStatsJson.isNullOrBlank()) {
                 dataStore.saveUsageStatsJson(usageStatsJson)
             }
 
-            val updatedAt = snapshot.getLong("updatedAt") ?: System.currentTimeMillis()
+            val updatedAt = row.get("updated_at")?.takeIf { !it.isJsonNull }?.asLong
+                ?: payload.get("updatedAt")?.takeIf { !it.isJsonNull }?.asLong
+                ?: System.currentTimeMillis()
             dataStore.setLastBackupTime(updatedAt)
 
-            @Suppress("UNCHECKED_CAST")
-            val settingsMap = snapshot.get("settings") as? Map<String, Any?>
-            val restoredSettings = if (settingsMap != null) {
+            val settingsObj = payload.getAsJsonObject("settings")
+            val restoredSettings = if (settingsObj != null) {
                 val settings = LauncherSettings(
-                    showAppDrawer = settingsMap["showAppDrawer"] as? Boolean ?: true,
-                    gridSize = GridSize.fromString(settingsMap["gridSize"] as? String),
-                    buttonColorMode = settingsMap["buttonColorMode"] as? String ?: "black",
-                    showTarsHeader = settingsMap["showTarsHeader"] as? Boolean ?: true,
-                    showClock = settingsMap["showClock"] as? Boolean ?: true,
-                    selectedIconPack = settingsMap["selectedIconPack"] as? String,
-                    appDrawerIconSize = (settingsMap["appDrawerIconSize"] as? Number)?.toInt() ?: 32
+                    showAppDrawer = settingsObj.get("showAppDrawer")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
+                    gridSize = GridSize.fromString(settingsObj.get("gridSize")?.takeIf { !it.isJsonNull }?.asString),
+                    buttonColorMode = settingsObj.get("buttonColorMode")?.takeIf { !it.isJsonNull }?.asString ?: "black",
+                    showTarsHeader = settingsObj.get("showTarsHeader")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
+                    showClock = settingsObj.get("showClock")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
+                    selectedIconPack = settingsObj.get("selectedIconPack")?.takeIf { !it.isJsonNull }?.asString,
+                    appDrawerIconSize = settingsObj.get("appDrawerIconSize")?.takeIf { !it.isJsonNull }?.asInt ?: 32
                 )
                 dataStore.saveAllSettings(settings)
                 settings
@@ -147,10 +151,10 @@ class CloudSyncManager(
                 LauncherSettings()
             }
 
-            Log.i(TAG, "Layout successfully restored from Firestore for uid: ${user.uid}")
+            Log.i(TAG, "Layout restored from Supabase for uid: ${user.uid}")
             Result.success(restoredSettings)
         } catch (e: Exception) {
-            Log.e(TAG, "Restore failed", e)
+            Log.e(TAG, "Supabase restore failed", e)
             Result.failure(e)
         }
     }

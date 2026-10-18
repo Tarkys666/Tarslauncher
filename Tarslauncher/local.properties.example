@@ -1,0 +1,15 @@
+## This file is an example template for local configuration.
+# Copy this file to 'local.properties' and fill in your values.
+# 'local.properties' is gitignored and will NOT be committed to git.
+
+sdk.dir=C\:\\Users\\your_username\\AppData\\Local\\Android\\Sdk
+
+# Signing configuration (Optional for local debug builds)
+RELEASE_STORE_FILE=tarslauncher-release.jks
+RELEASE_STORE_PASSWORD=your_store_password
+RELEASE_KEY_ALIAS=your_key_alias
+RELEASE_KEY_PASSWORD=your_key_password
+
+# Supabase Backend Configuration (Optional for cloud sync & AI proxy)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key-here
