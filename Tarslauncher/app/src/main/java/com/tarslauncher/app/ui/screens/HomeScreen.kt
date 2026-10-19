@@ -98,19 +98,19 @@ fun HomeScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     
-    // Swipe down to hide settings button, swipe up to show
+    // Swipe down to hide settings button, swipe up to show (zero recomposition overhead)
     var isSettingsButtonVisible by remember { mutableStateOf(true) }
-    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+    val dragAccumulator = remember { floatArrayOf(0f) }
     val verticalDragState = rememberDraggableState { delta ->
-        dragAccumulator += delta
-        if (dragAccumulator > 30f) {
+        dragAccumulator[0] += delta
+        if (dragAccumulator[0] > 30f) {
             // Dragged down -> hide settings button
             isSettingsButtonVisible = false
-            dragAccumulator = 0f
-        } else if (dragAccumulator < -30f) {
+            dragAccumulator[0] = 0f
+        } else if (dragAccumulator[0] < -30f) {
             // Dragged up -> show settings button
             isSettingsButtonVisible = true
-            dragAccumulator = 0f
+            dragAccumulator[0] = 0f
         }
     }
     
@@ -178,14 +178,14 @@ fun HomeScreen(
             .draggable(
                 state = verticalDragState,
                 orientation = Orientation.Vertical,
-                onDragStarted = { dragAccumulator = 0f },
+                onDragStarted = { dragAccumulator[0] = 0f },
                 onDragStopped = { velocity ->
                     if (velocity > 250f) {
                         isSettingsButtonVisible = false
                     } else if (velocity < -250f) {
                         isSettingsButtonVisible = true
                     }
-                    dragAccumulator = 0f
+                    dragAccumulator[0] = 0f
                 }
             )
     ) {
