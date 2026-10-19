@@ -100,10 +100,6 @@ fun SettingsScreen(
     pwaPresets: List<PwaInfo> = emptyList(),
     onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
     onDeletePwa: (pwaId: String) -> Unit = {},
-    isSyncing: Boolean = false,
-    lastBackupTime: Long = 0L,
-    onExportBackup: (Uri) -> Unit = {},
-    onImportBackup: (Uri) -> Unit = {},
     onCheckForUpdates: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -140,14 +136,6 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
 
-    // Local backup: Storage Access Framework file picker (offline, zero permissions)
-    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
-    ) { uri -> if (uri != null) onExportBackup(uri) }
-    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) onImportBackup(uri) }
-    
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
         showAppDrawer,
@@ -160,9 +148,7 @@ fun SettingsScreen(
         selectedIconPack,
         isDefaultLauncherSet,
         installedPwas.size,
-        appVersion,
-        isSyncing,
-        lastBackupTime
+        appVersion
     ) {
         listOf(
             SettingsItem.Category(
@@ -266,28 +252,6 @@ fun SettingsScreen(
                     type = SettingType.BUTTON,
                     onClick = { showManagePwasDialog = true },
                     buttonLabel = "MANAGE"
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "BACKUP & RESTORE",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Export Backup",
-                    description = if (isSyncing) "Exporting..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.US).format(Date(lastBackupTime)) else "Save layout and settings to a file",
-                    type = SettingType.BUTTON,
-                    onClick = { exportLauncher.launch("tars-backup.json") },
-                    enabled = !isSyncing,
-                    buttonLabel = "EXPORT"
-                ),
-                SettingsItem.Setting(
-                    title = "Import Backup",
-                    description = if (isSyncing) "Importing..." else "Restore layout and settings from a file",
-                    type = SettingType.BUTTON,
-                    onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
-                    enabled = !isSyncing,
-                    buttonLabel = "IMPORT"
                 )
             )
         ),

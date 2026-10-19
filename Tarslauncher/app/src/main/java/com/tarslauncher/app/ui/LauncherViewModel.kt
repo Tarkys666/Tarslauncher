@@ -54,8 +54,6 @@ class LauncherViewModel(
                 }
             }
             refreshAppList()
-            val lastBackup = appRepository.getLastBackupTime()
-            _uiState.update { it.copy(lastBackupTime = lastBackup) }
         }
     }
 
@@ -251,38 +249,6 @@ class LauncherViewModel(
 
     fun updateAppDrawerIconSize(size: Int) {
         viewModelScope.launch { appRepository.updateAppDrawerIconSize(size) }
-    }
-
-    fun exportBackup(target: android.net.Uri, onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSyncing = true) }
-            val result = appRepository.backupManager.export(target)
-            if (result.isSuccess) {
-                val time = result.getOrNull() ?: System.currentTimeMillis()
-                _uiState.update { it.copy(isSyncing = false, lastBackupTime = time) }
-                onResult(true, "Backup saved successfully.")
-            } else {
-                _uiState.update { it.copy(isSyncing = false) }
-                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Backup failed.")
-            }
-        }
-    }
-
-    fun importBackup(source: android.net.Uri, onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSyncing = true) }
-            val result = appRepository.backupManager.import(source)
-            if (result.isSuccess) {
-                val lastTime = appRepository.getLastBackupTime()
-                _uiState.update { it.copy(isSyncing = false, lastBackupTime = lastTime) }
-                appRepository.invalidateAppCache()
-                refreshAppList()
-                onResult(true, "Backup restored successfully.")
-            } else {
-                _uiState.update { it.copy(isSyncing = false) }
-                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Restore failed.")
-            }
-        }
     }
 
     fun setOnboardingComplete() {

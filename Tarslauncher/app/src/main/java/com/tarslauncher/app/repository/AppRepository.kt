@@ -24,7 +24,6 @@ class AppRepository(
 ) {
     private val context: Context = context.applicationContext
     private val packageManager: PackageManager = this.context.packageManager
-    val backupManager: com.tarslauncher.app.data.backup.LocalBackupManager = com.tarslauncher.app.data.backup.LocalBackupManager(this.context, dataStore)
     val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(this.context)
 
     @Volatile
@@ -48,10 +47,6 @@ class AppRepository(
         cachedInstalledApps = null
         cachedPwas = null
         com.tarslauncher.app.utils.clearIconBitmapCache()
-    }
-
-    suspend fun getLastBackupTime(): Long = withContext(Dispatchers.IO) {
-        dataStore.getLastBackupTime()
     }
 
     suspend fun initialize() {

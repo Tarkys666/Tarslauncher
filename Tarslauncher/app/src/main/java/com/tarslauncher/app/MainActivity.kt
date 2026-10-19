@@ -147,20 +147,6 @@ fun LauncherMain(
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
     val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
-    val onExportBackup = remember(context, viewModel) {
-        { uri: android.net.Uri ->
-            viewModel.exportBackup(uri) { _, msg ->
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-    val onImportBackup = remember(context, viewModel) {
-        { uri: android.net.Uri ->
-            viewModel.importBackup(uri) { _, msg ->
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
     val onCheckForUpdates = remember(viewModel) {
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
     }
@@ -214,10 +200,6 @@ fun LauncherMain(
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
                     onDeletePwa = onDeletePwa,
-                    isSyncing = uiState.isSyncing,
-                    lastBackupTime = uiState.lastBackupTime,
-                    onExportBackup = onExportBackup,
-                    onImportBackup = onImportBackup,
                     onCheckForUpdates = onCheckForUpdates
                 )
             }

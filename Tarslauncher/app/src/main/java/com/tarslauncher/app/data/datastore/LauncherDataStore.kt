@@ -40,7 +40,6 @@ class LauncherDataStore(private val context: Context) {
         val KEY_PWAS_JSON = stringPreferencesKey("pwas_json")
         val KEY_PWAS_SEEDED = booleanPreferencesKey("pwas_seeded")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
-        val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
     }
 
     private val safeData: Flow<Preferences> = context.dataStore.data
@@ -128,10 +127,6 @@ class LauncherDataStore(private val context: Context) {
     suspend fun isPwasSeeded(): Boolean = getPreference(KEY_PWAS_SEEDED, false)
 
     suspend fun setPwasSeeded(seeded: Boolean) = setPreference(KEY_PWAS_SEEDED, seeded)
-
-    suspend fun getLastBackupTime(): Long = getPreference(KEY_LAST_BACKUP_TIME, 0L)
-
-    suspend fun setLastBackupTime(time: Long) = setPreference(KEY_LAST_BACKUP_TIME, time)
 
     suspend fun saveAllSettings(settings: LauncherSettings) {
         try {

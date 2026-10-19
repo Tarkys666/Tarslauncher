@@ -15,8 +15,6 @@ data class LauncherUiState(
     val installedPwas: List<PwaInfo> = emptyList(),
     val pwaPresets: List<PwaInfo> = emptyList(),
     val isLoading: Boolean = false,
-    val isSyncing: Boolean = false,
-    val lastBackupTime: Long = 0L,
     val updateState: UpdateState = UpdateState.Idle,
     val errorMessage: String? = null
 ) {
