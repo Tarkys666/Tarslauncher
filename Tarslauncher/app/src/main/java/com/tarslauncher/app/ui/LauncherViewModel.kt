@@ -128,7 +128,7 @@ class LauncherViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = e.localizedMessage ?: "Uygulamalar yüklenirken bir hata oluştu."
+                        errorMessage = e.localizedMessage ?: "An error occurred while loading apps."
                     )
                 }
             }
@@ -256,10 +256,10 @@ class LauncherViewModel(
             if (result.isSuccess) {
                 val time = result.getOrNull() ?: System.currentTimeMillis()
                 _uiState.update { it.copy(isSyncing = false, lastBackupTime = time) }
-                onResult(true, "Yedek dosyası kaydedildi.")
+                onResult(true, "Backup saved successfully.")
             } else {
                 _uiState.update { it.copy(isSyncing = false) }
-                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Yedekleme başarısız oldu.")
+                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Backup failed.")
             }
         }
     }
@@ -273,10 +273,10 @@ class LauncherViewModel(
                 _uiState.update { it.copy(isSyncing = false, lastBackupTime = lastTime) }
                 appRepository.invalidateAppCache()
                 refreshAppList()
-                onResult(true, "Yedek geri yüklendi.")
+                onResult(true, "Backup restored successfully.")
             } else {
                 _uiState.update { it.copy(isSyncing = false) }
-                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Geri yükleme başarısız oldu.")
+                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Restore failed.")
             }
         }
     }
@@ -303,7 +303,7 @@ class LauncherViewModel(
                 }
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "Güncelleme kontrolü başarısız oldu."))
+                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "Update check failed."))
                 }
             }
         }
@@ -328,7 +328,7 @@ class LauncherViewModel(
                 _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.ReadyToInstall(file)) }
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "İndirme başarısız oldu."))
+                    it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Error(error.localizedMessage ?: "Download failed."))
                 }
             }
         }

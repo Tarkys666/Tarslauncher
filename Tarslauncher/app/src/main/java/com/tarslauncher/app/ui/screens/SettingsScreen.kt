@@ -133,7 +133,6 @@ fun SettingsScreen(
     var expandedCategories by remember { mutableStateOf(setOf<String>()) }
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
-    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showNotesDialog by remember { mutableStateOf(false) }
@@ -141,7 +140,7 @@ fun SettingsScreen(
     val workspaceRepo = remember { com.tarslauncher.app.data.notes.LocalNotesRepository.get(context) }
     val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState()
 
-    // Yerel yedek: Storage Access Framework ile kullanıcının seçtiği dosya (ağ yok, ek izin yok)
+    // Local backup: Storage Access Framework file picker (offline, zero permissions)
     val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
     ) { uri -> if (uri != null) onExportBackup(uri) }
@@ -227,12 +226,12 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "SECURITY",
+            title = "SYSTEM",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
                     title = "Default Launcher",
-                    description = if (isDefaultLauncherSet) "TARS is set as default" else "Set TARS as default home screen",
+                    description = if (isDefaultLauncherSet) "TARS is default launcher" else "Set TARS as default home screen",
                     type = SettingType.LAUNCHER_STATUS,
                     currentValue = isDefaultLauncherSet,
                     onClick = {
@@ -249,8 +248,8 @@ fun SettingsScreen(
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "Add Web App (PWA)",
-                    description = "Install websites as native apps with Presets or URL",
+                    title = "Add Web App",
+                    description = "Install websites as apps with presets or URL",
                     type = SettingType.BUTTON,
                     onClick = { showAddPwaDialog = true },
                     buttonLabel = "ADD"
@@ -265,12 +264,12 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "LOCAL BACKUP",
+            title = "BACKUP & RESTORE",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
                     title = "Export Backup",
-                    description = if (isSyncing) "Working..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout, settings & notes to a file",
+                    description = if (isSyncing) "Exporting..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.US).format(Date(lastBackupTime)) else "Save layout, settings and notes to a file",
                     type = SettingType.BUTTON,
                     onClick = { exportLauncher.launch("tars-backup.json") },
                     enabled = !isSyncing,
@@ -278,7 +277,7 @@ fun SettingsScreen(
                 ),
                 SettingsItem.Setting(
                     title = "Import Backup",
-                    description = if (isSyncing) "Working..." else "Restore from a backup file",
+                    description = if (isSyncing) "Importing..." else "Restore layout, settings and notes from a file",
                     type = SettingType.BUTTON,
                     onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
                     enabled = !isSyncing,
@@ -287,15 +286,15 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "NOTLARIM",
+            title = "NOTES",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "Notlarım",
-                    description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
+                    title = "Notes",
+                    description = if (workspaceItems.isEmpty()) "No saved notes" else "${workspaceItems.size} note(s) saved",
                     type = SettingType.BUTTON,
                     onClick = { showNotesDialog = true },
-                    buttonLabel = "AÇ"
+                    buttonLabel = "VIEW"
                 )
             )
         ),
@@ -314,13 +313,6 @@ fun SettingsScreen(
                     type = SettingType.BUTTON,
                     onClick = onCheckForUpdates,
                     buttonLabel = "CHECK"
-                ),
-                SettingsItem.Setting(
-                    title = "Privacy Policy",
-                    description = "Tarslauncher – Privacy Policy",
-                    type = SettingType.BUTTON,
-                    onClick = { showPrivacyPolicyDialog = true },
-                    buttonLabel = "VIEW"
                 )
             )
         )
@@ -590,12 +582,6 @@ fun SettingsScreen(
             }
         )
     }
-    
-    if (showPrivacyPolicyDialog) {
-        PrivacyPolicyDialog(
-            onDismiss = { showPrivacyPolicyDialog = false }
-        )
-    }
 
     if (showAddPwaDialog) {
         AddPwaDialog(
@@ -750,8 +736,7 @@ fun SettingsItemView(
                         setting.title.contains("Manage", ignoreCase = true) -> "MANAGE"
                         setting.title.contains("Add", ignoreCase = true) -> "ADD"
                         setting.title.contains("Grid", ignoreCase = true) || setting.title.contains("Icon", ignoreCase = true) -> "SELECT"
-                        setting.title.contains("Privacy", ignoreCase = true) -> "VIEW"
-                        setting.title.contains("Notlar", ignoreCase = true) -> "AÇ"
+                        setting.title.contains("Note", ignoreCase = true) -> "VIEW"
                         else -> "OPEN"
                     }
 
@@ -986,257 +971,5 @@ fun IconPackSelectionDialog(
     }
 }
 
-@Composable
-fun PrivacyPolicyDialog(
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.Black
-            ),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "P R I V A C Y   P O L I C Y",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 2.sp
-                    )
-                    
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
-                            contentColor = Color.White
-                        ),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
-                        modifier = Modifier.size(40.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text(
-                            text = "×",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Light
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Privacy policy content
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        Text(
-                            text = "TarsLauncher Privacy Policy",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                    // ... (Reduced for brevity, but logically full content is assumed or copied)
-
-
-                    item {
-                        Text(
-                            text = "Last updated: August 30, 2025 • Effective: August 30, 2025",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Light
-                        )
-                    }
-                    
-                    item {
-                        Text(
-                            text = "We are committed to protecting your privacy and ensuring transparency about how we handle your personal information. By using TarsLauncher, you agree to this policy.",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                            lineHeight = 20.sp
-                        )
-                    }
-                    
-                    // Information We Collect Section
-                    item {
-                        Text(
-                            text = "Information We Collect",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                    
-                    item {
-                        Text(
-                            text = "Personal Information (Pro Version Only):",
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    
-                    item {
-                        Text(
-                            text = "• Google account information (email, ID, display name)\n• Purpose: Pro authentication and license verification\n• Retention: Until Pro subscription cancellation + 90 days",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp
-                        )
-                    }
-                    
-                    item {
-                        Text(
-                            text = "System Permissions & Usage:",
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            PrivacyPolicyPermissionItem(
-                                permission = "QUERY_ALL_PACKAGES",
-                                purpose = "Display installed apps (stored locally only)"
-                            )
-                            PrivacyPolicyPermissionItem(
-                                permission = "SET_WALLPAPER",
-                                purpose = "Enable wallpaper customization features"
-                            )
-                            PrivacyPolicyPermissionItem(
-                                permission = "BIND_DEVICE_ADMIN",
-                                purpose = "Double-tap to lock screen functionality"
-                            )
-                            PrivacyPolicyPermissionItem(
-                                permission = "INTERNET",
-                                purpose = "Pro features: authentication & cloud sync"
-                            )
-                        }
-                    }
-
-                    // Links Section
-                    item {
-                        Text(
-                            text = "Links & Contact",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                    
-                    item {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://tarslauncher.online/"))
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = Color.White
-                            ),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "📄 Read Full Privacy Policy",
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
-                    item {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:equryt@gmail.com")
-                                    putExtra(Intent.EXTRA_SUBJECT, "TarsLauncher Privacy Policy Inquiry")
-                                    putExtra(Intent.EXTRA_TEXT, "Hello TarsLauncher Team,\n\nI have a question about your privacy policy:\n\n")
-                                }
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.DarkGray.copy(alpha = 0.8f)
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "✉️ Contact Privacy Team",
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                    
-                    item {
-                        Text(
-                            text = "Data Controller: TarsLauncher Development Team\nEmail: equryt@gmail.com\nWebsite: heartfelt-sundae-0b73f4.netlify.app\n\nDocument Version: 2.0\nNext Review: February 28, 2026",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PrivacyPolicyPermissionItem(
-    permission: String,
-    purpose: String
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.05f)
-        ),
-        shape = RoundedCornerShape(6.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = permission,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = purpose,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal,
-                lineHeight = 16.sp
-            )
-        }
-    }
-}
 
 

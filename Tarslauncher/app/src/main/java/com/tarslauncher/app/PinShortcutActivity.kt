@@ -106,21 +106,21 @@ class PinShortcutActivity : ComponentActivity() {
         val callerLabel = try {
             packageManager.getApplicationLabel(packageManager.getApplicationInfo(shortcutInfo.`package`, 0)).toString()
         } catch (e: Exception) {
-            shortcutPackage ?: "Bilinmeyen Uygulama"
+            shortcutPackage ?: "Unknown App"
         }
 
         val dialogMessage = if (!sanitizedUrl.isNullOrBlank()) {
-            "$callerLabel uygulaması, \"$label\" kısayolunu ana ekranınıza eklemek istiyor.\n\nHedef: $sanitizedUrl"
+            "$callerLabel wants to add the shortcut \"$label\" to your home screen.\n\nTarget: $sanitizedUrl"
         } else {
-            "$callerLabel uygulaması, \"$label\" kısayolunu ana ekranınıza eklemek istiyor."
+            "$callerLabel wants to add the shortcut \"$label\" to your home screen."
         }
 
         var isAccepted = false
 
         val builder = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Kısayol Ekle")
+            .setTitle("Add Shortcut")
             .setMessage(dialogMessage)
-            .setPositiveButton("Ekle") { _, _ ->
+            .setPositiveButton("Add") { _, _ ->
                 isAccepted = true
                 saveAndAcceptShortcut(
                     pinItemRequest = pinItemRequest,
@@ -131,7 +131,7 @@ class PinShortcutActivity : ComponentActivity() {
                     iconDrawable = iconDrawable
                 )
             }
-            .setNegativeButton("İptal") { dialog, _ ->
+            .setNegativeButton("Cancel") { dialog, _ ->
                 dialog.dismiss()
                 finish()
             }
@@ -193,7 +193,7 @@ class PinShortcutActivity : ComponentActivity() {
                     pinItemRequest.accept()
                 }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(applicationContext, "$label TARS Launcher'a eklendi", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(applicationContext, "$label added to TARS Launcher", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error accepting pin shortcut request", e)

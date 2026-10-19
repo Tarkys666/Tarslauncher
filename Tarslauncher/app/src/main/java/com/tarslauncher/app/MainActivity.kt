@@ -131,7 +131,7 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
             viewModel.incrementAppUsage(appInfo)
             val started = PwaLauncherHelper.launchApp(context, appInfo)
             if (!started) {
-                Toast.makeText(context, "Uygulama başlatılamadı", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Unable to launch app", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -221,12 +221,12 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                 onStartDownload = { info -> viewModel.startUpdateDownload(info) },
                 onInstall = { file ->
                     if (!viewModel.updateManager.canInstallPackages()) {
-                        Toast.makeText(context, "Lütfen harici kaynaklardan uygulama yükleme iznini açın.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Please allow installing unknown apps from this source.", Toast.LENGTH_LONG).show()
                         viewModel.updateManager.openInstallPermissionSettings()
                     } else {
                         val result = viewModel.updateManager.installApk(file)
                         if (result.isFailure) {
-                            Toast.makeText(context, "Yükleme başlatılamadı: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Installation failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 },

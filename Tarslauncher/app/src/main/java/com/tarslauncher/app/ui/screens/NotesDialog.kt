@@ -95,7 +95,7 @@ fun ManageNotesDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "N O T L A R",
+                        text = "N O T E S",
                         color = MonoWhite,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraLight,
@@ -128,7 +128,7 @@ fun ManageNotesDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "- HENÜZ NOT YOK -",
+                            text = "- NO NOTES YET -",
                             color = MonoDim,
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace,
@@ -226,7 +226,7 @@ fun ManageNotesDialog(
                         decorationBox = { innerTextField ->
                             if (newNoteInput.isEmpty()) {
                                 Text(
-                                    text = "Yeni not ekle...",
+                                    text = "Add note...",
                                     color = MonoDim,
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace
@@ -238,7 +238,7 @@ fun ManageNotesDialog(
 
                     if (newNoteInput.isNotBlank()) {
                         Text(
-                            text = "EKLE",
+                            text = "ADD",
                             color = MonoWhite,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
