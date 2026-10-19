@@ -1,8 +1,8 @@
 {
     "apkSize": 1275731,
     "sha256": "b2e71e5698148ed91ddb7ba68ae6ea0771d9e123363dca0cc68fc993a2dd6a61",
-    "versionName": "2.0.1",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.1/TarsLauncher-release.apk",
-    "versionCode": 50,
-    "releaseNotes": "TARS v2.0.1: Ultra minimal saf Android ba\u015flat\u0131c\u0131s\u0131. R8 full mode, bellek i\u00e7i ImageBitmap LRU \u00f6nbelle\u011fi, recomposition optimizasyonlar\u0131 ve dil kaynak filtreleme uyguland\u0131. 1.20 MB ultra optimize APK."
+    "versionName": "2.0.2",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.2/TarsLauncher-release.apk",
+    "versionCode": 51,
+    "releaseNotes": "TARS v2.0.2: Minimal saf siyah ve şeffaf kenarlıklı ayarlar butonları, ana ekranda ayarlar butonunu aşağı kaydırarak gizleme ve yukarı kaydırarak geri getirme hareketi."
 }
