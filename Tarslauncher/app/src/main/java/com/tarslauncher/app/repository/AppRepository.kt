@@ -52,6 +52,38 @@ class AppRepository(
     suspend fun initialize() {
         withContext(Dispatchers.IO) {
             dataStore.migrateFromLegacyPrefsIfNeeded()
+            cleanupLegacyRedGifsPwaIfNeeded()
+        }
+    }
+
+    private suspend fun cleanupLegacyRedGifsPwaIfNeeded() {
+        try {
+            val pwasJson = dataStore.getPwasJson()
+            if (!pwasJson.isNullOrBlank() && pwasJson.contains("redgifs", ignoreCase = true)) {
+                val currentList = pwasJson.parseJson<List<PwaInfo>>()?.toMutableList()
+                if (currentList != null) {
+                    val removed = currentList.removeAll {
+                        it.id.contains("redgifs", ignoreCase = true) || it.url.contains("redgifs.com", ignoreCase = true)
+                    }
+                    if (removed) {
+                        dataStore.savePwasJson(currentList.toJson())
+                        cachedPwas = currentList
+                        invalidateAppCache()
+                    }
+                }
+            }
+
+            val foldersJson = dataStore.getFoldersJson()
+            if (!foldersJson.isNullOrBlank() && foldersJson.contains("redgifs", ignoreCase = true)) {
+                val folders = foldersJson.parseJson<List<PersistFolder>>()?.map { folder ->
+                    folder.copy(apps = folder.apps.filterNot { it.contains("redgifs", ignoreCase = true) })
+                }
+                if (folders != null) {
+                    dataStore.saveFoldersJson(folders.toJson())
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to cleanup legacy redgifs PWA: ${e.message}")
         }
     }
 

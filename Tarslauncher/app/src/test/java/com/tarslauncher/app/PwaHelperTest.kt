@@ -26,9 +26,9 @@ class PwaHelperTest {
     }
 
     @Test
-    fun testRedGifsDomainAndTitle() {
-        assertEquals("redgifs.com", PwaFetcherHelper.extractDomain("https://www.redgifs.com"))
-        assertEquals("Redgifs", PwaFetcherHelper.extractDefaultTitle("https://www.redgifs.com"))
+    fun testWikipediaDomainAndTitle() {
+        assertEquals("wikipedia.org", PwaFetcherHelper.extractDomain("https://www.wikipedia.org"))
+        assertEquals("Wikipedia", PwaFetcherHelper.extractDefaultTitle("https://www.wikipedia.org"))
     }
 
     @Test

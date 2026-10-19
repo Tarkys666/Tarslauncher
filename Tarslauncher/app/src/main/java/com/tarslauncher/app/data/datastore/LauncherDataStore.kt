@@ -38,7 +38,6 @@ class LauncherDataStore(private val context: Context) {
         val KEY_FOLDERS_JSON = stringPreferencesKey("folders_json")
         val KEY_USAGE_STATS_JSON = stringPreferencesKey("usage_stats_json")
         val KEY_PWAS_JSON = stringPreferencesKey("pwas_json")
-        val KEY_PWAS_SEEDED = booleanPreferencesKey("pwas_seeded")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
     }
 
@@ -123,10 +122,6 @@ class LauncherDataStore(private val context: Context) {
     suspend fun savePwasJson(json: String) = setPreference(KEY_PWAS_JSON, json)
 
     suspend fun getPwasJson(): String? = getPreference(KEY_PWAS_JSON)
-
-    suspend fun isPwasSeeded(): Boolean = getPreference(KEY_PWAS_SEEDED, false)
-
-    suspend fun setPwasSeeded(seeded: Boolean) = setPreference(KEY_PWAS_SEEDED, seeded)
 
     suspend fun saveAllSettings(settings: LauncherSettings) {
         try {
