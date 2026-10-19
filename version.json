@@ -1,8 +1,8 @@
 {
-    "apkSize": 1275731,
-    "sha256": "b2e71e5698148ed91ddb7ba68ae6ea0771d9e123363dca0cc68fc993a2dd6a61",
+    "apkSize": 1275735,
+    "sha256": "afed6966fe4ddaea609ea2d651a2642780e9ea52bc68bf5d34702fce6c188e64",
     "versionName": "2.0.2",
     "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.2/TarsLauncher-release.apk",
     "versionCode": 51,
-    "releaseNotes": "TARS v2.0.2: Minimal saf siyah ve şeffaf kenarlıklı ayarlar butonları, ana ekranda ayarlar butonunu aşağı kaydırarak gizleme ve yukarı kaydırarak geri getirme hareketi."
+    "releaseNotes": "TARS v2.0.2: Minimal saf siyah ve \u015feffaf kenarl\u0131kl\u0131 ayarlar butonlar\u0131, ana ekranda ayarlar butonunu a\u015fa\u011f\u0131 kayd\u0131rarak gizleme ve yukar\u0131 kayd\u0131rarak geri getirme hareketi."
 }
