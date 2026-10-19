@@ -34,6 +34,8 @@ import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.IconPackInfo
 import com.tarslauncher.app.data.model.PwaInfo
 import com.tarslauncher.app.utils.isDefaultLauncher
+import com.tarslauncher.app.utils.openDefaultHomeSettings
+
 
 // Tree-based settings data structure
 @Immutable
@@ -230,28 +232,7 @@ fun SettingsScreen(
                     type = SettingType.LAUNCHER_STATUS,
                     currentValue = isDefaultLauncherSet,
                     onClick = {
-                        var launched = false
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                            val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
-                            if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true) {
-                                val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                                try {
-                                    context.startActivity(intent)
-                                    launched = true
-                                } catch (_: Exception) {}
-                            }
-                        }
-                        if (!launched) {
-                            try {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                try {
-                                    val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
-                            }
-                        }
+                        openDefaultHomeSettings(context)
                     }
                 )
             )
@@ -409,157 +390,33 @@ fun SettingsScreen(
                         modifier = Modifier.height(300.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 2x Grid Options
-                        item {
-                            Text(
-                                text = "2x Grid Options",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(Grid2xOptions, key = { it.serialize() }) { option ->
-                            Button(
-                                onClick = {
-                                    onGridSizeChange(option)
-                                    showGridSizeDialog = false
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (gridSize == option) 
-                                        Color(0xFF1E1E1E) 
-                                    else 
-                                        Color.Black,
-                                    contentColor = Color.White
-                                ),
-                                border = BorderStroke(1.dp, Color.Transparent),
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
+                        val gridSections = listOf(
+                            "2x Grid Options" to Grid2xOptions,
+                            "3x Grid Options" to Grid3xOptions,
+                            "4x Grid Options" to Grid4xOptions,
+                            "5x Grid Options" to Grid5xOptions
+                        )
+                        gridSections.forEachIndexed { index, (title, options) ->
+                            item {
+                                if (index > 0) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                                 Text(
-                                    text = option.serialize(),
+                                    text = title,
                                     color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Light
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(vertical = 4.dp)
                                 )
                             }
-                        }
-                        
-                        // 3x Grid Options
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "3x Grid Options",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(Grid3xOptions, key = { it.serialize() }) { option ->
-                            Button(
-                                onClick = {
-                                    onGridSizeChange(option)
-                                    showGridSizeDialog = false
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (gridSize == option) 
-                                        Color(0xFF1E1E1E) 
-                                    else 
-                                        Color.Black,
-                                    contentColor = Color.White
-                                ),
-                                border = BorderStroke(1.dp, Color.Transparent),
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Text(
+                            items(options, key = { it.serialize() }) { option ->
+                                TarsOptionButton(
                                     text = option.serialize(),
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Light
-                                )
-                            }
-                        }
-                        
-                        // 4x Grid Options
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "4x Grid Options",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(Grid4xOptions, key = { it.serialize() }) { option ->
-                            Button(
-                                onClick = {
-                                    onGridSizeChange(option)
-                                    showGridSizeDialog = false
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (gridSize == option) 
-                                        Color(0xFF1E1E1E) 
-                                    else 
-                                        Color.Black,
-                                    contentColor = Color.White
-                                ),
-                                border = BorderStroke(1.dp, Color.Transparent),
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Text(
-                                    text = option.serialize(),
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Light
-                                )
-                            }
-                        }
-                        
-                        // 5x Grid Options
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "5x Grid Options",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(Grid5xOptions, key = { it.serialize() }) { option ->
-                            Button(
-                                onClick = {
-                                    onGridSizeChange(option)
-                                    showGridSizeDialog = false
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (gridSize == option) 
-                                        Color(0xFF1E1E1E) 
-                                    else 
-                                        Color.Black,
-                                    contentColor = Color.White
-                                ),
-                                border = BorderStroke(1.dp, Color.Transparent),
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Text(
-                                    text = option.serialize(),
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Light
+                                    isSelected = gridSize == option,
+                                    onClick = {
+                                        onGridSizeChange(option)
+                                        showGridSizeDialog = false
+                                    }
                                 )
                             }
                         }
@@ -870,6 +727,37 @@ fun SettingsItemView(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun TarsOptionButton(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) 
+                Color(0xFF1E1E1E) 
+            else 
+                Color.Black,
+            contentColor = Color.White
+        ),
+        border = BorderStroke(1.dp, Color.Transparent),
+        shape = RoundedCornerShape(4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Light
+        )
     }
 }
 

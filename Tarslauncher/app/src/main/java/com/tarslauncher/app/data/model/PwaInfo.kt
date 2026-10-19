@@ -12,4 +12,12 @@ data class PwaInfo(
     val shortcutPackage: String? = null,
     val shortcutId: String? = null,
     val addedAt: Long = System.currentTimeMillis()
-)
+) {
+    val pseudoPackageName: String
+        get() = "$PACKAGE_PREFIX$id"
+
+    companion object {
+        const val PACKAGE_PREFIX = "pwa_"
+        fun generateId(): String = java.util.UUID.randomUUID().toString().take(8)
+    }
+}

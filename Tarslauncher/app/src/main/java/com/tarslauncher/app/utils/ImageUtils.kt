@@ -15,6 +15,7 @@ import android.graphics.Rect
 import androidx.collection.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.tarslauncher.app.IconPackLoader
 
 private const val DEFAULT_ICON_SIZE = 192
 private const val MAX_ICON_SIZE = 216
@@ -37,6 +38,7 @@ private val appImageBitmapCache = object : LruCache<String, ImageBitmap>(cacheSi
 fun clearIconBitmapCache() {
     iconBitmapCache.evictAll()
     appImageBitmapCache.evictAll()
+    IconPackLoader.clearAllCaches()
 }
 
 fun getAppImageBitmap(packageName: String, drawable: Drawable?): ImageBitmap? {

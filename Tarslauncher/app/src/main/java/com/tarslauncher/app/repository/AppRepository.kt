@@ -4,9 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.tarslauncher.app.data.datastore.LauncherDataStore
+import com.tarslauncher.app.data.json.parseJson
+import com.tarslauncher.app.data.json.toJson
 import com.tarslauncher.app.data.model.*
 import com.tarslauncher.app.utils.SecurityHelper
 import com.tarslauncher.app.utils.base64ToDrawable
@@ -24,7 +24,6 @@ class AppRepository(
 ) {
     private val context: Context = context.applicationContext
     private val packageManager: PackageManager = this.context.packageManager
-    private val gson = Gson()
     val backupManager: com.tarslauncher.app.data.backup.LocalBackupManager = com.tarslauncher.app.data.backup.LocalBackupManager(this.context, dataStore)
     val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(this.context)
 
@@ -40,9 +39,6 @@ class AppRepository(
 
     companion object {
         private const val TAG = "AppRepository"
-        private val PWA_LIST_TYPE = object : TypeToken<List<PwaInfo>>() {}.type
-        private val USAGE_STATS_LIST_TYPE = object : TypeToken<List<AppUsageStats>>() {}.type
-        private val PERSIST_FOLDER_LIST_TYPE = object : TypeToken<List<PersistFolder>>() {}.type
     }
 
     val settingsFlow: Flow<LauncherSettings> = dataStore.settingsFlow
@@ -141,7 +137,7 @@ class AppRepository(
                 apps.add(
                     AppInfo(
                         name = pwa.name.take(50).trim(),
-                        packageName = "pwa_${pwa.id}",
+                        packageName = "${PwaInfo.PACKAGE_PREFIX}${pwa.id}",
                         icon = pwaIcon,
                         activityName = "",
                         isPwa = true,
@@ -193,12 +189,8 @@ class AppRepository(
     suspend fun getUsageStats(): RepositoryResult<List<AppUsageStats>> = withContext(Dispatchers.IO) {
         try {
             val json = dataStore.getUsageStatsJson()
-            if (!json.isNullOrBlank()) {
-                val list: List<AppUsageStats> = gson.fromJson(json, USAGE_STATS_LIST_TYPE) ?: emptyList()
-                RepositoryResult.Success(list)
-            } else {
-                RepositoryResult.Success(emptyList())
-            }
+            val list = json.parseJson<List<AppUsageStats>>().orEmpty()
+            RepositoryResult.Success(list)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.e(TAG, "Error parsing usage stats", e)
@@ -209,8 +201,7 @@ class AppRepository(
     suspend fun saveUsageStats(stats: List<AppUsageStats>) = withContext(Dispatchers.IO) {
         usageStatsMutex.withLock {
             try {
-                val json = gson.toJson(stats)
-                dataStore.saveUsageStatsJson(json)
+                dataStore.saveUsageStatsJson(stats.toJson())
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving usage stats", e)
             }
@@ -220,15 +211,7 @@ class AppRepository(
     suspend fun getFolders(totalFolders: Int, installedApps: List<AppInfo>): RepositoryResult<List<FolderInfo>> = withContext(Dispatchers.IO) {
         try {
             val savedJson = dataStore.getFoldersJson()
-            val saved: List<PersistFolder>? = if (!savedJson.isNullOrBlank()) {
-                try {
-                    gson.fromJson(savedJson, PERSIST_FOLDER_LIST_TYPE)
-                } catch (_: Exception) {
-                    null
-                }
-            } else {
-                null
-            }
+            val saved: List<PersistFolder>? = savedJson.parseJson<List<PersistFolder>>()
 
             // O(1) map lookup for mapping packages to installed apps
             val appMap = installedApps.associateBy { it.packageName }
@@ -257,8 +240,7 @@ class AppRepository(
                 val persistList = folders.map { f ->
                     PersistFolder(id = f.id, apps = f.apps.map { it.packageName })
                 }
-                val json = gson.toJson(persistList)
-                dataStore.saveFoldersJson(json)
+                dataStore.saveFoldersJson(persistList.toJson())
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving folders", e)
             }
@@ -272,11 +254,7 @@ class AppRepository(
                 return@withContext RepositoryResult.Success(cachedPwas!!)
             }
             val json = dataStore.getPwasJson()
-            val list: List<PwaInfo> = if (!json.isNullOrBlank()) {
-                gson.fromJson(json, PWA_LIST_TYPE) ?: emptyList()
-            } else {
-                emptyList()
-            }
+            val list = json.parseJson<List<PwaInfo>>().orEmpty()
             cachedPwas = list
             RepositoryResult.Success(list)
         } catch (e: Exception) {
@@ -292,8 +270,7 @@ class AppRepository(
                 val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
                 currentList.removeAll { it.id == pwa.id || (pwa.url.isNotBlank() && it.url == pwa.url) }
                 currentList.add(pwa)
-                val json = gson.toJson(currentList)
-                dataStore.savePwasJson(json)
+                dataStore.savePwasJson(currentList.toJson())
                 cachedPwas = currentList
                 invalidateAppCache()
                 RepositoryResult.Success(Unit)
@@ -309,8 +286,7 @@ class AppRepository(
             try {
                 val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
                 currentList.removeAll { it.id == pwaId }
-                val json = gson.toJson(currentList)
-                dataStore.savePwasJson(json)
+                dataStore.savePwasJson(currentList.toJson())
                 cachedPwas = currentList
                 invalidateAppCache()
                 RepositoryResult.Success(Unit)

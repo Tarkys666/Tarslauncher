@@ -2,6 +2,7 @@ package com.tarslauncher.app.onboarding
 
 import android.content.Intent
 import android.provider.Settings
+import com.tarslauncher.app.utils.openDefaultHomeSettings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -109,28 +110,7 @@ fun OnboardingScreen(onOnboardingComplete: () -> Unit) {
                             1 -> StepFolderTutorial()
                             2 -> StepDefaultLauncher(
                                 onSetDefaultClick = {
-                                    var launched = false
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                        val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
-                                        if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true) {
-                                            val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                                            try {
-                                                context.startActivity(intent)
-                                                launched = true
-                                            } catch (_: Exception) {}
-                                        }
-                                    }
-                                    if (!launched) {
-                                        try {
-                                            val intent = android.content.Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
-                                            context.startActivity(intent)
-                                        } catch (_: Exception) {
-                                            try {
-                                                val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
-                                                context.startActivity(intent)
-                                            } catch (_: Exception) {}
-                                        }
-                                    }
+                                    openDefaultHomeSettings(context)
                                 }
                             )
                         }

@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -51,6 +52,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -256,8 +258,7 @@ fun HomeScreen(
                         .height(appDrawerHeight) // Responsive height
                         .navigationBarsPadding() // Alt navigation bar için padding
                         .padding(top = 4.dp) // Settings butonuna yaklaşmak için minimal boşluk
-                        .padding(bottom = 24.dp) // Alt navigation bar ile arasında boşluk
-                        .padding(horizontal = mainPadding), // Responsive padding
+                        .padding(bottom = 24.dp), // Alt navigation bar ile arasında boşluk
                     contentAlignment = Alignment.Center
                 ) {
                     val onAppLongClickMemo: (AppInfo) -> Unit = remember {
@@ -271,8 +272,7 @@ fun HomeScreen(
 
                     LazyRow(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = mainPadding), // Responsive padding
+                            .fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp))
                     ) {
                         items(
@@ -503,13 +503,69 @@ fun FolderGrid(
 }
 
 @Composable
+fun rememberAppIcon(app: AppInfo, iconPackLoader: IconPackLoader?): ImageBitmap? {
+    val isPackLoaded = iconPackLoader?.isLoaded == true
+    return remember(app.packageName, app.activityName, iconPackLoader, isPackLoaded) {
+        try {
+            iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
+                ?: getAppImageBitmap(app.packageName, app.icon)
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
+@Composable
+fun FolderPreviewGrid(
+    apps: List<AppInfo>,
+    iconPackLoader: IconPackLoader?,
+    iconSize: Dp = 12.dp,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(4.dp),
+        verticalArrangement = Arrangement.SpaceEvenly
+    ) {
+        repeat(2) { rowIndex ->
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = SpacedBy4Dp
+            ) {
+                repeat(2) { colIndex ->
+                    val appIndex = rowIndex * 2 + colIndex
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (appIndex < apps.size) {
+                            val app = apps[appIndex]
+                            key(app.packageName) {
+                                val appIcon = rememberAppIcon(app, iconPackLoader)
+                                if (appIcon != null) {
+                                    Image(
+                                        bitmap = appIcon,
+                                        contentDescription = app.name,
+                                        modifier = Modifier.size(iconSize)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun FolderItem(
     folder: FolderInfo,
     onFolderClick: (String) -> Unit,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color
 ) {
-    val isPackLoaded = iconPackLoader?.isLoaded == true
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
@@ -522,46 +578,10 @@ fun FolderItem(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp),
-            verticalArrangement = Arrangement.SpaceEvenly
-        ) {
-            repeat(2) { rowIndex ->
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = SpacedBy4Dp
-                ) {
-                    repeat(2) { colIndex ->
-                        val appIndex = rowIndex * 2 + colIndex
-                        Box(
-                            modifier = Modifier.weight(1f).fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (appIndex < folder.apps.size) {
-                                val app = folder.apps[appIndex]
-                                key(app.packageName) {
-                                    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-                                        val activityName = app.activityName
-                                        iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-                                            ?: getAppImageBitmap(app.packageName, app.icon)
-                                    }
-
-                                    if (appIcon != null) {
-                                        Image(
-                                            bitmap = appIcon,
-                                            contentDescription = app.name,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        FolderPreviewGrid(
+            apps = folder.apps,
+            iconPackLoader = iconPackLoader
+        )
     }
 }
 
@@ -574,15 +594,7 @@ fun AppIconWithoutName(
     iconPackLoader: IconPackLoader?,
     iconSize: Int = 32
 ) {
-    val isPackLoaded = iconPackLoader?.isLoaded == true
-    
-    // Icon'u composable dışında hazırlıyoruz
-    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-        val activityName = app.activityName
-        iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-            ?: getAppImageBitmap(app.packageName, app.icon)
-    }
-    
+    val appIcon = rememberAppIcon(app, iconPackLoader)
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
@@ -716,44 +728,10 @@ fun FolderSelectItem(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp),
-            verticalArrangement = Arrangement.SpaceEvenly
-        ) {
-            repeat(2) { rowIndex ->
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = SpacedBy4Dp
-                ) {
-                    repeat(2) { colIndex ->
-                        val appIndex = rowIndex * 2 + colIndex
-                        Box(
-                            modifier = Modifier.weight(1f).fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (appIndex < folder.apps.size) {
-                                val app = folder.apps[appIndex]
-                                val isPackLoaded = iconPackLoader?.isLoaded == true
-                                val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-                                    iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
-                                        ?: getAppImageBitmap(app.packageName, app.icon)
-                                }
-
-                                if (appIcon != null) {
-                                    Image(
-                                        bitmap = appIcon,
-                                        contentDescription = app.name,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        FolderPreviewGrid(
+            apps = folder.apps,
+            iconPackLoader = iconPackLoader
+        )
     }
 }
 
@@ -982,16 +960,7 @@ fun FolderAppItem(
     onLongClick: () -> Unit,
     iconPackLoader: IconPackLoader?
 ) {
-    val isPackLoaded = iconPackLoader?.isLoaded == true
-    val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
-        try {
-            val activityName = app.activityName
-            iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-                ?: getAppImageBitmap(app.packageName, app.icon)
-        } catch (e: Exception) {
-            null
-        }
-    }
+    val appIcon = rememberAppIcon(app, iconPackLoader)
 
     val interactionSource = remember { MutableInteractionSource() }
 

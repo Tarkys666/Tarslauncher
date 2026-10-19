@@ -36,6 +36,14 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
         }
     }
 
+    init {
+        register(this)
+    }
+
+    fun clearCache() {
+        imageBitmapCache.evictAll()
+    }
+
     var isLoaded by mutableStateOf(false)
         private set
 
@@ -153,6 +161,28 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
             bitmap
         } catch (_: Exception) {
             null
+        }
+    }
+
+    companion object {
+        private val activeLoaders = java.util.Collections.newSetFromMap(
+            java.util.WeakHashMap<IconPackLoader, Boolean>()
+        )
+
+        internal fun register(loader: IconPackLoader) {
+            synchronized(activeLoaders) {
+                activeLoaders.add(loader)
+            }
+        }
+
+        fun clearAllCaches() {
+            synchronized(activeLoaders) {
+                activeLoaders.forEach { it.clearCache() }
+            }
+        }
+
+        fun clearCache() {
+            clearAllCaches()
         }
     }
 }

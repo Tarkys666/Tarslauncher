@@ -42,15 +42,41 @@ class LauncherDataStore(private val context: Context) {
         val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
     }
 
-    val settingsFlow: Flow<LauncherSettings> = context.dataStore.data
+    private val safeData: Flow<Preferences> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
-                Log.e(TAG, "Error reading settings from DataStore", exception)
+                Log.e(TAG, "Error reading from DataStore", exception)
                 emit(emptyPreferences())
             } else {
                 throw exception
             }
         }
+
+    private suspend fun <T> getPreference(key: Preferences.Key<T>, defaultValue: T): T = try {
+        safeData.first()[key] ?: defaultValue
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to read preference ${key.name}", e)
+        defaultValue
+    }
+
+    private suspend fun <T> getPreference(key: Preferences.Key<T>): T? = try {
+        safeData.first()[key]
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to read preference ${key.name}", e)
+        null
+    }
+
+    private suspend fun <T> setPreference(key: Preferences.Key<T>, value: T?) {
+        try {
+            context.dataStore.edit { prefs ->
+                if (value == null) prefs.remove(key) else prefs[key] = value
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update ${key.name}", e)
+        }
+    }
+
+    val settingsFlow: Flow<LauncherSettings> = safeData
         .map { preferences ->
             LauncherSettings(
                 showAppDrawer = preferences[KEY_SHOW_APP_DRAWER] ?: true,
@@ -64,189 +90,44 @@ class LauncherDataStore(private val context: Context) {
         }
         .distinctUntilChanged()
 
-    val pwasJsonFlow: Flow<String?> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) emit(emptyPreferences()) else throw exception
-        }
+    val pwasJsonFlow: Flow<String?> = safeData
         .map { preferences -> preferences[KEY_PWAS_JSON] }
         .distinctUntilChanged()
 
-    suspend fun updateShowAppDrawer(show: Boolean) {
-        try {
-            context.dataStore.edit { it[KEY_SHOW_APP_DRAWER] = show }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update showAppDrawer", e)
-        }
-    }
+    suspend fun updateShowAppDrawer(show: Boolean) = setPreference(KEY_SHOW_APP_DRAWER, show)
 
-    suspend fun updateGridSize(gridSize: GridSize) {
-        try {
-            context.dataStore.edit { it[KEY_GRID_SIZE] = gridSize.serialize() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update gridSize", e)
-        }
-    }
+    suspend fun updateGridSize(gridSize: GridSize) = setPreference(KEY_GRID_SIZE, gridSize.serialize())
 
-    suspend fun updateButtonColorMode(mode: String) {
-        try {
-            context.dataStore.edit { it[KEY_BUTTON_COLOR_MODE] = mode }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update buttonColorMode", e)
-        }
-    }
+    suspend fun updateButtonColorMode(mode: String) = setPreference(KEY_BUTTON_COLOR_MODE, mode)
 
-    suspend fun updateShowTarsHeader(show: Boolean) {
-        try {
-            context.dataStore.edit { it[KEY_SHOW_TARS_HEADER] = show }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update showTarsHeader", e)
-        }
-    }
+    suspend fun updateShowTarsHeader(show: Boolean) = setPreference(KEY_SHOW_TARS_HEADER, show)
 
-    suspend fun updateShowClock(show: Boolean) {
-        try {
-            context.dataStore.edit { it[KEY_SHOW_CLOCK] = show }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update showClock", e)
-        }
-    }
+    suspend fun updateShowClock(show: Boolean) = setPreference(KEY_SHOW_CLOCK, show)
 
-    suspend fun updateSelectedIconPack(iconPackPackage: String?) {
-        try {
-            context.dataStore.edit {
-                if (iconPackPackage.isNullOrBlank()) {
-                    it.remove(KEY_SELECTED_ICON_PACK)
-                } else {
-                    it[KEY_SELECTED_ICON_PACK] = iconPackPackage
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update selectedIconPack", e)
-        }
-    }
+    suspend fun updateSelectedIconPack(iconPackPackage: String?) =
+        setPreference(KEY_SELECTED_ICON_PACK, iconPackPackage.takeUnless { it.isNullOrBlank() })
 
-    suspend fun updateAppDrawerIconSize(size: Int) {
-        try {
-            context.dataStore.edit { it[KEY_APP_DRAWER_ICON_SIZE] = size }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update appDrawerIconSize", e)
-        }
-    }
+    suspend fun updateAppDrawerIconSize(size: Int) = setPreference(KEY_APP_DRAWER_ICON_SIZE, size)
 
-    suspend fun saveFoldersJson(json: String) {
-        try {
-            context.dataStore.edit { it[KEY_FOLDERS_JSON] = json }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save folders json", e)
-        }
-    }
+    suspend fun saveFoldersJson(json: String) = setPreference(KEY_FOLDERS_JSON, json)
 
-    suspend fun getFoldersJson(): String? = try {
-        context.dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    Log.e(TAG, "Error reading folders from DataStore", exception)
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
-                }
-            }
-            .first()[KEY_FOLDERS_JSON]
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to get folders json", e)
-        null
-    }
+    suspend fun getFoldersJson(): String? = getPreference(KEY_FOLDERS_JSON)
 
-    suspend fun saveUsageStatsJson(json: String) {
-        try {
-            context.dataStore.edit { it[KEY_USAGE_STATS_JSON] = json }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save usage stats json", e)
-        }
-    }
+    suspend fun saveUsageStatsJson(json: String) = setPreference(KEY_USAGE_STATS_JSON, json)
 
-    suspend fun getUsageStatsJson(): String? = try {
-        context.dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    Log.e(TAG, "Error reading usage stats from DataStore", exception)
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
-                }
-            }
-            .first()[KEY_USAGE_STATS_JSON]
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to get usage stats json", e)
-        null
-    }
+    suspend fun getUsageStatsJson(): String? = getPreference(KEY_USAGE_STATS_JSON)
 
-    suspend fun savePwasJson(json: String) {
-        try {
-            context.dataStore.edit { it[KEY_PWAS_JSON] = json }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save pwas json", e)
-        }
-    }
+    suspend fun savePwasJson(json: String) = setPreference(KEY_PWAS_JSON, json)
 
-    suspend fun getPwasJson(): String? = try {
-        context.dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    Log.e(TAG, "Error reading pwas from DataStore", exception)
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
-                }
-            }
-            .first()[KEY_PWAS_JSON]
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to get pwas json", e)
-        null
-    }
+    suspend fun getPwasJson(): String? = getPreference(KEY_PWAS_JSON)
 
-    suspend fun isPwasSeeded(): Boolean = try {
-        context.dataStore.data
-            .catch { exception ->
-                if (exception is IOException) emit(emptyPreferences()) else throw exception
-            }
-            .first()[KEY_PWAS_SEEDED] ?: false
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to read pwas seeded status", e)
-        false
-    }
+    suspend fun isPwasSeeded(): Boolean = getPreference(KEY_PWAS_SEEDED, false)
 
-    suspend fun setPwasSeeded(seeded: Boolean) {
-        try {
-            context.dataStore.edit { it[KEY_PWAS_SEEDED] = seeded }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to set pwas seeded", e)
-        }
-    }
+    suspend fun setPwasSeeded(seeded: Boolean) = setPreference(KEY_PWAS_SEEDED, seeded)
 
-    suspend fun getLastBackupTime(): Long = try {
-        context.dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    Log.e(TAG, "Error reading last backup time from DataStore", exception)
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
-                }
-            }
-            .first()[KEY_LAST_BACKUP_TIME] ?: 0L
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to get last backup time", e)
-        0L
-    }
+    suspend fun getLastBackupTime(): Long = getPreference(KEY_LAST_BACKUP_TIME, 0L)
 
-    suspend fun setLastBackupTime(time: Long) {
-        try {
-            context.dataStore.edit { it[KEY_LAST_BACKUP_TIME] = time }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to set last backup time", e)
-        }
-    }
+    suspend fun setLastBackupTime(time: Long) = setPreference(KEY_LAST_BACKUP_TIME, time)
 
     suspend fun saveAllSettings(settings: LauncherSettings) {
         try {
@@ -273,7 +154,7 @@ class LauncherDataStore(private val context: Context) {
      */
     suspend fun migrateFromLegacyPrefsIfNeeded() {
         try {
-            val isMigrated = context.dataStore.data.first()[KEY_MIGRATED_FROM_SP] ?: false
+            val isMigrated = safeData.first()[KEY_MIGRATED_FROM_SP] ?: false
             if (isMigrated) return
 
             val legacyPrefs = context.getSharedPreferences("tarslauncher_secure_prefs", Context.MODE_PRIVATE)

@@ -13,6 +13,7 @@ import com.tarslauncher.app.data.model.LauncherSettings
 import com.tarslauncher.app.data.model.PwaInfo
 import com.tarslauncher.app.utils.PwaLauncherHelper
 import com.tarslauncher.app.utils.SecurityHelper
+import com.tarslauncher.app.utils.readTextWithLimit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -64,17 +65,7 @@ class LocalBackupManager(
     suspend fun import(source: Uri): Result<Long> = withContext(Dispatchers.IO) {
         try {
             val text = appContext.contentResolver.openInputStream(source)?.use { input ->
-                val buf = java.io.ByteArrayOutputStream()
-                val chunk = ByteArray(8192)
-                var total = 0
-                while (true) {
-                    val n = input.read(chunk)
-                    if (n < 0) break
-                    total += n
-                    if (total > MAX_BYTES) throw SecurityException("Backup file is too large.")
-                    buf.write(chunk, 0, n)
-                }
-                buf.toString(Charsets.UTF_8.name())
+                input.readTextWithLimit(MAX_BYTES)
             } ?: return@withContext Result.failure(Exception("Unable to open backup file."))
 
             val root = JsonParser.parseString(text).asJsonObject

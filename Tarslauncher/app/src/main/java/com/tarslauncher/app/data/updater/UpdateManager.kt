@@ -18,6 +18,8 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import com.tarslauncher.app.utils.sha256
+import com.tarslauncher.app.utils.toHexString
 
 class UpdateManager(
     private val context: Context,
@@ -367,18 +369,15 @@ class UpdateManager(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && info.signingInfo != null) {
                     val sInfo = info.signingInfo
                     sInfo?.apkContentsSigners?.forEach { s ->
-                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
-                            .joinToString("") { "%02x".format(it) })
+                        hashes.add(s.toByteArray().sha256())
                     }
                     sInfo?.signingCertificateHistory?.forEach { s ->
-                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
-                            .joinToString("") { "%02x".format(it) })
+                        hashes.add(s.toByteArray().sha256())
                     }
                 }
                 if (hashes.isEmpty()) {
                     info.signatures?.forEach { s ->
-                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
-                            .joinToString("") { "%02x".format(it) })
+                        hashes.add(s.toByteArray().sha256())
                     }
                 }
                 return hashes
@@ -462,15 +461,19 @@ class UpdateManager(
             }
 
             return try {
-                val digest = MessageDigest.getInstance(algorithm)
-                apkFile.inputStream().buffered().use { input ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        digest.update(buffer, 0, bytesRead)
+                val calculatedHash = if (algorithm == "SHA-256") {
+                    apkFile.sha256()
+                } else {
+                    val digest = MessageDigest.getInstance(algorithm)
+                    apkFile.inputStream().buffered().use { input ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            digest.update(buffer, 0, bytesRead)
+                        }
                     }
+                    digest.digest().toHexString()
                 }
-                val calculatedHash = digest.digest().joinToString("") { "%02x".format(it) }
                 calculatedHash.equals(cleanExpected, ignoreCase = true)
             } catch (e: Exception) {
                 false
