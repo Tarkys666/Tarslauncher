@@ -187,13 +187,13 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     onDeletePwa = onDeletePwa,
                     isSyncing = uiState.isSyncing,
                     lastBackupTime = uiState.lastBackupTime,
-                    onBackupToCloud = {
-                        viewModel.backupToCloud { _, msg ->
+                    onExportBackup = { uri ->
+                        viewModel.exportBackup(uri) { _, msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onRestoreFromCloud = {
-                        viewModel.restoreFromCloud { _, msg ->
+                    onImportBackup = { uri ->
+                        viewModel.importBackup(uri) { _, msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },

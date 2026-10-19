@@ -29,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -276,7 +277,21 @@ fun HomeScreen(
                 tarsFontSize = tarsFontSize
             )
         }
-        
+
+        // Yerel notlu Dynamic Island (overlay izni / erişilebilirlik / ağ yok)
+        var showAllNotes by remember { mutableStateOf(false) }
+        NotesDynamicIsland(
+            onOpenAllNotes = { showAllNotes = true },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(1f)
+                .statusBarsPadding()
+                .padding(top = 4.dp)
+        )
+        if (showAllNotes) {
+            ManageNotesDialog(onDismiss = { showAllNotes = false })
+        }
+
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
         Box(
             modifier = Modifier

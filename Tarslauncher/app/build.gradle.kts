@@ -62,8 +62,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 48
-        versionName = "1.8.13"
+        versionCode = 49
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -73,20 +73,7 @@ android {
         // Disable split APKs to generate single APK
         ndk {
             abiFilters.clear()
-        }
-
-        // Supabase configuration parameterized from local.properties or env vars, with production default fallback
-        val defaultSupabaseUrl = "https://nznftexnhmzboihbeilq.supabase.co"
-        val defaultSupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56bmZ0ZXhuaG16Ym9paGJlaWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMzk0OTUsImV4cCI6MjEwNzkxNTQ5NX0.FZo6dEMZNbe33Bj8VjQ6VZ57j-O-y464YPJQXDS6kD0"
-
-        val supabaseUrl = (System.getenv("SUPABASE_URL") ?: localProperties.getProperty("SUPABASE_URL"))
-            ?.takeIf { it.isNotBlank() } ?: defaultSupabaseUrl
-        val supabaseAnonKey = (System.getenv("SUPABASE_ANON_KEY") ?: localProperties.getProperty("SUPABASE_ANON_KEY"))
-            ?.takeIf { it.isNotBlank() } ?: defaultSupabaseAnonKey
-
-        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
-    }
+        }    }
 
     buildTypes {
         release {
@@ -167,11 +154,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.browser)
-    implementation(libs.gson)
-    
-    // Google Auth (Supabase Cloud Identity)
-    implementation("com.google.android.gms:play-services-auth:21.2.0")
-    
+    implementation(libs.gson)    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

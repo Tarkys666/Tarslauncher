@@ -148,6 +148,12 @@ class UpdateManager(
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         var targetFile: File? = null
+        if (!isTrustedDownloadUrl(downloadUrl)) {
+            return@withContext Result.failure(SecurityException("Güvenilmeyen indirme adresi reddedildi."))
+        }
+        if (expectedHash.isNullOrBlank() || !SHA256_PATTERN.matches(expectedHash.trim())) {
+            return@withContext Result.failure(SecurityException("Sürüm için SHA-256 özeti yok; güvenlik nedeniyle güncelleme reddedildi."))
+        }
         try {
             val updatesDir = File(context.cacheDir, "updates").apply {
                 if (!exists()) mkdirs()
@@ -188,6 +194,9 @@ class UpdateManager(
                         val location = connection.getHeaderField("Location")
                             ?: return@withContext Result.failure(Exception("İndirme yönlendirme adresi bulunamadı."))
                         connection.disconnect()
+                        if (!isTrustedDownloadUrl(location)) {
+                            return@withContext Result.failure(SecurityException("Güvenilmeyen yönlendirme adresi reddedildi."))
+                        }
                         currentUrl = location
                         redirects++
                         if (redirects > maxRedirects) {
@@ -233,15 +242,19 @@ class UpdateManager(
                     onProgress(1f, totalLength, totalLength)
                 }
 
-                // Verify APK integrity if expectedHash is provided
-                if (!expectedHash.isNullOrBlank()) {
-                    val isValid = verifyApkHash(file, expectedHash)
-                    if (!isValid) {
-                        file.delete()
-                        return@withContext Result.failure(
-                            SecurityException("APK bütünlük doğrulaması başarısız oldu: İndirilen dosyanın hash değeri beklenen değer ile uyuşmuyor.")
-                        )
-                    }
+                // SHA-256 zorunlu (yukarıda doğrulandı)
+                if (!verifyApkHash(file, expectedHash)) {
+                    file.delete()
+                    return@withContext Result.failure(
+                        SecurityException("APK bütünlük doğrulaması başarısız oldu: İndirilen dosyanın hash değeri beklenen değer ile uyuşmuyor.")
+                    )
+                }
+
+                // Paket adı, imza sertifikası ve sürüm kodu kontrolü
+                val identityError = verifyApkIdentity(file)
+                if (identityError != null) {
+                    file.delete()
+                    return@withContext Result.failure(SecurityException(identityError))
                 }
 
                 Result.success(file)
@@ -296,11 +309,73 @@ class UpdateManager(
         }
     }
 
+    /**
+     * İndirilen APK'nın kimliğini doğrular: aynı paket adı, yüklü uygulamayla aynı imza sertifikası
+     * ve daha yüksek sürüm kodu (downgrade engeli). Sorun varsa hata mesajı, yoksa null döner.
+     */
+    @Suppress("DEPRECATION")
+    fun verifyApkIdentity(apkFile: File): String? {
+        val pm = context.packageManager
+        return try {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+            } else {
+                android.content.pm.PackageManager.GET_SIGNATURES
+            }
+            val archive = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
+                ?: return "APK dosyası okunamadı veya bozuk."
+            if (archive.packageName != context.packageName) {
+                return "APK paket adı uyuşmuyor."
+            }
+            val installed = pm.getPackageInfo(context.packageName, flags)
+
+            val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) installed.longVersionCode else installed.versionCode.toLong()
+            val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) archive.longVersionCode else archive.versionCode.toLong()
+            if (archiveVersion <= installedVersion) {
+                return "APK sürümü mevcut sürümden yeni değil (downgrade reddedildi)."
+            }
+
+            fun certs(info: android.content.pm.PackageInfo): Set<String> {
+                val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    info.signingInfo?.apkContentsSigners
+                } else {
+                    info.signatures
+                } ?: return emptySet()
+                return sigs.map { s ->
+                    MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
+                        .joinToString("") { "%02x".format(it) }
+                }.toSet()
+            }
+            val archiveCerts = certs(archive)
+            if (archiveCerts.isEmpty() || archiveCerts != certs(installed)) {
+                return "APK imza sertifikası yüklü uygulamayla eşleşmiyor."
+            }
+            null
+        } catch (e: Exception) {
+            "APK kimliği doğrulanamadı: ${e.message}"
+        }
+    }
+
     fun verifyApkHash(apkFile: File, expectedHash: String): Boolean {
         return Companion.verifyApkHash(apkFile, expectedHash)
     }
 
     companion object {
+        private val SHA256_PATTERN = Regex("^(?:sha-?256:)?[a-fA-F0-9]{64}$", RegexOption.IGNORE_CASE)
+
+        /** Yalnızca HTTPS ve GitHub'a ait alanlardan indirmeye izin verir. */
+        fun isTrustedDownloadUrl(raw: String): Boolean {
+            return try {
+                val uri = java.net.URI(raw)
+                val host = uri.host?.lowercase() ?: return false
+                uri.scheme.equals("https", ignoreCase = true) &&
+                    uri.userInfo == null &&
+                    (host == "github.com" || host.endsWith(".githubusercontent.com"))
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         fun verifyApkHash(apkFile: File, expectedHash: String): Boolean {
             if (!apkFile.exists() || !apkFile.isFile || expectedHash.isBlank()) {
                 return false

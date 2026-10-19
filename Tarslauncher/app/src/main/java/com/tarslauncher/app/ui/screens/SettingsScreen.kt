@@ -96,8 +96,8 @@ fun SettingsScreen(
     onDeletePwa: (pwaId: String) -> Unit = {},
     isSyncing: Boolean = false,
     lastBackupTime: Long = 0L,
-    onBackupToCloud: () -> Unit = {},
-    onRestoreFromCloud: () -> Unit = {},
+    onExportBackup: (Uri) -> Unit = {},
+    onImportBackup: (Uri) -> Unit = {},
     onCheckForUpdates: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -110,26 +110,17 @@ fun SettingsScreen(
     // Default launcher state
     var isDefaultLauncherSet by remember { mutableStateOf(false) }
 
-    // TARS Agent Master Kill Switch & Qwen Model state
-    val agentPrefs = remember { com.tarslauncher.app.agent.data.AgentPreferences(context) }
-    var isAgentEnabled by remember { mutableStateOf(agentPrefs.isAgentEnabled()) }
-    var isQwenEnabled by remember { mutableStateOf(agentPrefs.isQwenEnabled()) }
-    
     // Refresh launcher status when screen becomes visible (user returns from settings)
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isDefaultLauncherSet = isDefaultLauncher(context)
-                isAgentEnabled = agentPrefs.isAgentEnabled()
-                isQwenEnabled = agentPrefs.isQwenEnabled()
             }
         }
         
         lifecycleOwner.lifecycle.addObserver(observer)
         isDefaultLauncherSet = isDefaultLauncher(context)
-        isAgentEnabled = agentPrefs.isAgentEnabled()
-        isQwenEnabled = agentPrefs.isQwenEnabled()
         
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
@@ -144,15 +135,17 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showNotesDialog by remember { mutableStateOf(false) }
-    var showAuthDialog by remember { mutableStateOf(false) }
-    var showAgentSheet by remember { mutableStateOf(false) }
 
-    val authManager = remember { com.tarslauncher.app.data.sync.GoogleAuthManager(context) }
-    val workspaceRepo = remember { com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository(context, authManager) }
-    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
-    val currentUser by authManager.authUserFlow.collectAsState(initial = authManager.currentUser)
-    val isGoogleLinked = currentUser != null && currentUser?.isAnonymous == false
-    val googleUserLabel = currentUser?.email ?: currentUser?.displayName ?: "Google Hesabı"
+    val workspaceRepo = remember { com.tarslauncher.app.data.notes.LocalNotesRepository.get(context) }
+    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState()
+
+    // Yerel yedek: Storage Access Framework ile kullanıcının seçtiği dosya (ağ yok, ek izin yok)
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> if (uri != null) onExportBackup(uri) }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) onImportBackup(uri) }
     
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -164,15 +157,11 @@ fun SettingsScreen(
         buttonColorMode,
         selectedIconPack,
         isDefaultLauncherSet,
-        isAgentEnabled,
-        isQwenEnabled,
         installedPwas.size,
         appVersion,
         isSyncing,
         lastBackupTime,
-        workspaceItems.size,
-        isGoogleLinked,
-        googleUserLabel
+        workspaceItems.size
     ) {
         listOf(
             SettingsItem.Category(
@@ -238,26 +227,6 @@ fun SettingsScreen(
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "TARS Agent (Kill Switch)",
-                    description = if (isAgentEnabled) "Ajan ve Dynamic Island aktif" else "Ajan tamamen kapalı (devre dışı)",
-                    type = SettingType.TOGGLE,
-                    currentValue = isAgentEnabled,
-                    onValueChange = { newValue ->
-                        val enabled = newValue as Boolean
-                        isAgentEnabled = enabled
-                        agentPrefs.setAgentEnabled(enabled)
-                        com.tarslauncher.app.agent.ui.AgentViewModel.getInstance()?.onToggleAgentEnabled(enabled)
-                        if (!enabled) {
-                            com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.stopAgentTask()
-                            com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.overlayNotch?.hide()
-                        } else {
-                            if (com.tarslauncher.app.agent.service.TarsAccessibilityService.isConnected()) {
-                                com.tarslauncher.app.agent.service.TarsAccessibilityService.getInstance()?.overlayNotch?.showIdle()
-                            }
-                        }
-                    }
-                ),
-                SettingsItem.Setting(
                     title = "Default Launcher",
                     description = if (isDefaultLauncherSet) "TARS is set as default" else "Set TARS as default home screen",
                     type = SettingType.LAUNCHER_STATUS,
@@ -290,32 +259,20 @@ fun SettingsScreen(
             )
         ),
         SettingsItem.Category(
-            title = "CLOUD BACKUP (SUPABASE)",
+            title = "LOCAL BACKUP",
             icon = "",
             children = listOf(
                 SettingsItem.Setting(
-                    title = "Backup to Cloud",
-                    description = if (isSyncing) "Syncing..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout & settings to Supabase",
+                    title = "Export Backup",
+                    description = if (isSyncing) "Working..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout, settings & notes to a file",
                     type = SettingType.BUTTON,
-                    onClick = onBackupToCloud
+                    onClick = { exportLauncher.launch("tars-backup.json") }
                 ),
                 SettingsItem.Setting(
-                    title = "Restore from Cloud",
-                    description = if (isSyncing) "Restoring..." else "Download and apply cloud backup",
+                    title = "Import Backup",
+                    description = if (isSyncing) "Working..." else "Restore from a backup file",
                     type = SettingType.BUTTON,
-                    onClick = onRestoreFromCloud
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "ACCOUNT & AUTH (GOOGLE)",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Google Auth & Bulut Hesap",
-                    description = if (isGoogleLinked) "Bağlı: $googleUserLabel" else "Anonim oturum — Google ile bağlamak için açın",
-                    type = SettingType.BUTTON,
-                    onClick = { showAuthDialog = true }
+                    onClick = { importLauncher.launch(arrayOf("application/json", "text/plain")) }
                 )
             )
         ),
@@ -328,30 +285,6 @@ fun SettingsScreen(
                     description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
                     type = SettingType.BUTTON,
                     onClick = { showNotesDialog = true }
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "YAPAY ZEKA & LLM YÖNETİMİ",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "TARS Agent Konsolu",
-                    description = "Dynamic Island ve komut konsolu",
-                    type = SettingType.BUTTON,
-                    onClick = { showAgentSheet = true }
-                ),
-                SettingsItem.Setting(
-                    title = "Qwen Modeli",
-                    description = if (isQwenEnabled) "Açık: Qwen 3.8-27B (Groq) aktif" else "Kapalı: Cohere North Mini (OpenRouter) aktif",
-                    type = SettingType.TOGGLE,
-                    currentValue = isQwenEnabled,
-                    onValueChange = { newValue ->
-                        val enabled = newValue as Boolean
-                        isQwenEnabled = enabled
-                        agentPrefs.setQwenEnabled(enabled)
-                        com.tarslauncher.app.agent.ui.AgentViewModel.getInstance()?.onToggleQwenEnabled(enabled)
-                    }
                 )
             )
         ),
@@ -673,40 +606,6 @@ fun SettingsScreen(
     if (showNotesDialog) {
         ManageNotesDialog(
             onDismiss = { showNotesDialog = false }
-        )
-    }
-
-    if (showAuthDialog) {
-        ManageAuthDialog(
-            onDismiss = { showAuthDialog = false }
-        )
-    }
-
-    if (showAgentSheet) {
-        val agentViewModel = remember(context) {
-            val owner = context as? androidx.lifecycle.ViewModelStoreOwner
-            if (owner != null) {
-                androidx.lifecycle.ViewModelProvider(
-                    owner,
-                    com.tarslauncher.app.agent.ui.AgentViewModel.Factory(context.applicationContext as android.app.Application)
-                )[com.tarslauncher.app.agent.ui.AgentViewModel::class.java]
-            } else {
-                com.tarslauncher.app.agent.ui.AgentViewModel(context.applicationContext as android.app.Application)
-            }
-        }
-        com.tarslauncher.app.agent.ui.AgentBottomSheet(
-            viewModel = agentViewModel,
-            onDismissRequest = {
-                showAgentSheet = false
-                isQwenEnabled = agentPrefs.isQwenEnabled()
-                isAgentEnabled = agentPrefs.isAgentEnabled()
-            },
-            onOpenWorkspace = {
-                showAgentSheet = false
-                isQwenEnabled = agentPrefs.isQwenEnabled()
-                isAgentEnabled = agentPrefs.isAgentEnabled()
-                showNotesDialog = true
-            }
         )
     }
 

@@ -36,8 +36,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.tarslauncher.app.data.model.WorkspaceItem
 import com.tarslauncher.app.data.model.WorkspaceItemType
-import com.tarslauncher.app.data.sync.GoogleAuthManager
-import com.tarslauncher.app.data.workspace.FirebaseWorkspaceRepository
+import com.tarslauncher.app.data.notes.LocalNotesRepository
 import kotlinx.coroutines.launch
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -63,14 +62,9 @@ fun ManageNotesDialog(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    val authManager = remember { GoogleAuthManager(context) }
-    val workspaceRepo = remember { FirebaseWorkspaceRepository(context, authManager) }
-    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState(initial = emptyList())
+    val workspaceRepo = remember { LocalNotesRepository.get(context) }
+    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState()
     var newNoteInput by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        authManager.ensureSessionUid()
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -156,7 +150,7 @@ fun ManageNotesDialog(
                                 },
                                 onDelete = {
                                     coroutineScope.launch {
-                                        workspaceRepo.deleteByQuery(item.id)
+                                        workspaceRepo.delete(item.id)
                                     }
                                 }
                             )
@@ -327,170 +321,5 @@ private fun MonochromeNoteRow(
                 .clickable { onDelete() }
                 .padding(horizontal = 6.dp)
         )
-    }
-}
-
-/**
- * Dedicated full-monochrome, zero-corner (`RectangleShape`), pitch-black (`#000000`)
- * Google Auth & Cloud Account screen accessible from Settings -> ACCOUNT & AUTH (GOOGLE).
- */
-@Composable
-fun ManageAuthDialog(
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val authManager = remember { GoogleAuthManager(context) }
-    val currentUser by authManager.authUserFlow.collectAsState(initial = authManager.currentUser)
-
-    val isGoogleLinked = currentUser != null && currentUser?.isAnonymous == false
-    val userDisplayLabel = currentUser?.email ?: currentUser?.displayName ?: "Google Hesabı"
-    var authStatusMessage by remember { mutableStateOf<String?>(null) }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        coroutineScope.launch {
-            val authRes = authManager.handleGoogleSignInResult(result.data)
-            if (authRes.isSuccess) {
-                val user = authRes.getOrNull()
-                authStatusMessage = "GOOGLE HESABI BAĞLANDI: ${user?.email ?: user?.displayName ?: "Aktif"}"
-            } else {
-                val err = authRes.exceptionOrNull()?.localizedMessage ?: "Bilinmeyen hata"
-                authStatusMessage = if (result.resultCode == Activity.RESULT_CANCELED) {
-                    "GİRİŞ İPTAL EDİLDİ."
-                } else {
-                    "GİRİŞ HATASI: $err"
-                }
-            }
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MonoBlack,
-            shape = RectangleShape
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MonoBlack)
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 18.dp)
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "G O O G L E   A U T H",
-                        color = MonoWhite,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraLight,
-                        letterSpacing = 3.sp
-                    )
-
-                    Text(
-                        text = "×",
-                        color = MonoMuted,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Light,
-                        modifier = Modifier
-                            .clickable { onDismiss() }
-                            .padding(horizontal = 6.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-                HorizontalDivider(thickness = 1.dp, color = MonoLine)
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "DURUM",
-                    color = MonoMuted,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 2.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = if (isGoogleLinked) "- BAĞLI (SUPABASE): $userDisplayLabel" else "- ANONİM BULUT OTURUMU (SUPABASE)",
-                    color = MonoWhite,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Light
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider(thickness = 1.dp, color = MonoLine)
-                Spacer(modifier = Modifier.height(24.dp))
-
-                if (isGoogleLinked) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(BorderStroke(1.dp, MonoWhite), RectangleShape)
-                            .clickable {
-                                coroutineScope.launch {
-                                    authManager.signOut()
-                                    authManager.ensureSessionUid()
-                                    authStatusMessage = "OTURUM KAPATILDI."
-                                }
-                            }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "GOOGLE OTURUMUNU KAPAT",
-                            color = MonoWhite,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 2.sp
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MonoWhite, RectangleShape)
-                            .clickable {
-                                authStatusMessage = null
-                                val client = authManager.getGoogleSignInClient()
-                                googleSignInLauncher.launch(client.signInIntent)
-                            }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "GOOGLE İLE GİRİŞ YAP",
-                            color = MonoBlack,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp
-                        )
-                    }
-                }
-
-                if (!authStatusMessage.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        text = "- ${authStatusMessage.orEmpty()}",
-                        color = MonoMuted,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-        }
     }
 }

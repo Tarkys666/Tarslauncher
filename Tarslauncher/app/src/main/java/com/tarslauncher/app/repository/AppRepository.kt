@@ -21,7 +21,7 @@ class AppRepository(
     private val context: Context = context.applicationContext
     private val packageManager: PackageManager = this.context.packageManager
     private val gson = Gson()
-    val cloudSyncManager: com.tarslauncher.app.data.sync.CloudSyncManager = com.tarslauncher.app.data.sync.CloudSyncManager(this.context, dataStore)
+    val backupManager: com.tarslauncher.app.data.backup.LocalBackupManager = com.tarslauncher.app.data.backup.LocalBackupManager(this.context, dataStore)
     val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(this.context)
 
     @Volatile

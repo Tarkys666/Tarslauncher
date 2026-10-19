@@ -1,7 +1,8 @@
 {
-  "versionCode": 48,
-  "versionName": "1.8.13",
-  "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v1.8.13/TarsLauncher-release.apk",
-  "apkSize": 12500000,
-  "releaseNotes": "TARS v1.8.13: Qwen 3.8-27B varsayılan model yapıldı, OpenRouter için otomatik failover ve çalışan Cohere modeli entegrasyonu sağlandı."
+    "apkSize":  1476877,
+    "sha256":  "66a70e63c57cd70f2900a867a2da54b9073cf6d384a527e5f1a4218a4f674857",
+    "versionName":  "2.0.0",
+    "downloadUrl":  "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.0/TarsLauncher-release.apk",
+    "versionCode":  49,
+    "releaseNotes":  "TARS v2.0.0: LLM, Google/Supabase hesabı ve erişilebilirlik servisi tamamen kaldırıldı. Tamamen yerel notlar, uygulama içi Dynamic Island, yerel dosya yedeği, SHA-256 + imza doğrulamalı güncelleyici. APK 12 MB -\u003e 1.4 MB."
 }

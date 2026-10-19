@@ -232,37 +232,34 @@ class LauncherViewModel(
         viewModelScope.launch { appRepository.updateAppDrawerIconSize(size) }
     }
 
-    fun backupToCloud(onResult: (Boolean, String) -> Unit) {
+    fun exportBackup(target: android.net.Uri, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true) }
-            val currentSettings = _uiState.value.settings
-            val result = appRepository.cloudSyncManager.backupLayout(currentSettings)
+            val result = appRepository.backupManager.export(target)
             if (result.isSuccess) {
                 val time = result.getOrNull() ?: System.currentTimeMillis()
                 _uiState.update { it.copy(isSyncing = false, lastBackupTime = time) }
-                onResult(true, "Buluta yedekleme başarılı!")
+                onResult(true, "Yedek dosyası kaydedildi.")
             } else {
                 _uiState.update { it.copy(isSyncing = false) }
-                val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Yedekleme başarısız oldu."
-                onResult(false, errorMsg)
+                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Yedekleme başarısız oldu.")
             }
         }
     }
 
-    fun restoreFromCloud(onResult: (Boolean, String) -> Unit) {
+    fun importBackup(source: android.net.Uri, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true) }
-            val result = appRepository.cloudSyncManager.restoreLayout()
+            val result = appRepository.backupManager.import(source)
             if (result.isSuccess) {
                 val lastTime = appRepository.getLastBackupTime()
                 _uiState.update { it.copy(isSyncing = false, lastBackupTime = lastTime) }
                 appRepository.invalidateAppCache()
                 refreshAppList()
-                onResult(true, "Buluttan geri yükleme başarılı!")
+                onResult(true, "Yedek geri yüklendi.")
             } else {
                 _uiState.update { it.copy(isSyncing = false) }
-                val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Geri yükleme başarısız oldu."
-                onResult(false, errorMsg)
+                onResult(false, result.exceptionOrNull()?.localizedMessage ?: "Geri yükleme başarısız oldu.")
             }
         }
     }
