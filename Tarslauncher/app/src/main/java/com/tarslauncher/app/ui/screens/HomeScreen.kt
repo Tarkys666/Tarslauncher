@@ -712,7 +712,7 @@ fun DualRowAppDrawer(
                     activeScrollRow = 1
                 }
                 if (activeScrollRow == 1 && available.x != 0f) {
-                    bottomListState.dispatchRawDelta(-available.x)
+                    bottomListState.dispatchRawDelta(available.x)
                 }
                 return Offset.Zero
             }
@@ -726,7 +726,7 @@ fun DualRowAppDrawer(
                     activeScrollRow = 2
                 }
                 if (activeScrollRow == 2 && available.x != 0f) {
-                    topListState.dispatchRawDelta(-available.x)
+                    topListState.dispatchRawDelta(available.x)
                 }
                 return Offset.Zero
             }
