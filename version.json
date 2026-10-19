@@ -1,8 +1,8 @@
 {
-    "apkSize":  1476613,
-    "sha256":  "d31f8d342ffe970efdbd77db44ba5bfcafade842763c018eabd1e6aee1c19795",
+    "apkSize":  1459881,
+    "sha256":  "3e0ece13e6529600a5d2affc803cb2fda32031d2fad146dd4523ffb47fc2c08b",
     "versionName":  "2.0.0",
     "downloadUrl":  "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.0/TarsLauncher-release.apk",
     "versionCode":  49,
-    "releaseNotes":  "TARS v2.0.0: Dynamic Island ve tüm LLM/bulut bileşenleri kaldırıldı. Yerel notlar, yerel SAF dosya yedeği, sertleştirilmiş güvenli güncelleyici, OOM/çökme korumaları, LRU ikon önbelleği ve ultra optimize 1.4 MB APK."
+    "releaseNotes":  "TARS v2.0.0: Ultra minimal saf Android başlatıcısı. Dynamic Island, LLM, bulut servisleri ve not sistemi tamamen kaldırıldı. Yerel SAF dosya yedeği, sertleştirilmiş güvenli güncelleyici, OOM/çökme korumaları, LRU ikon önbelleği ve ultra optimize 1.39 MB APK."
 }

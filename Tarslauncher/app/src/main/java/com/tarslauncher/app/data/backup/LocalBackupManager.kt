@@ -11,8 +11,6 @@ import com.tarslauncher.app.data.datastore.LauncherDataStore
 import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.LauncherSettings
 import com.tarslauncher.app.data.model.PwaInfo
-import com.tarslauncher.app.data.model.WorkspaceItem
-import com.tarslauncher.app.data.notes.LocalNotesRepository
 import com.tarslauncher.app.utils.PwaLauncherHelper
 import com.tarslauncher.app.utils.SecurityHelper
 import kotlinx.coroutines.Dispatchers
@@ -20,16 +18,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
- * Tamamen yerel yedekleme: düzen, ayarlar, PWA'lar ve notlar tek bir JSON dosyasına
- * (Storage Access Framework ile kullanıcının seçtiği konuma) yazılır / oradan okunur.
- * Ağ erişimi, hesap veya anahtar yoktur. İçe aktarma sıkı doğrulamadan geçer.
+ * Completely local backup: layout, settings, and PWAs are written to / read from
+ * a single JSON file via Storage Access Framework (SAF).
+ * No network, account, or external permissions required.
  */
 class LocalBackupManager(
     context: Context,
     private val dataStore: LauncherDataStore = LauncherDataStore(context.applicationContext)
 ) {
     private val appContext = context.applicationContext
-    private val notes = LocalNotesRepository.get(appContext)
     private val gson = Gson()
 
     suspend fun export(target: Uri): Result<Long> = withContext(Dispatchers.IO) {
@@ -53,10 +50,9 @@ class LocalBackupManager(
                 addProperty("pwasJson", dataStore.getPwasJson() ?: "[]")
                 addProperty("usageStatsJson", dataStore.getUsageStatsJson() ?: "[]")
                 add("settings", settings)
-                add("notes", gson.toJsonTree(notes.snapshot()))
             }
             val out = appContext.contentResolver.openOutputStream(target, "w")
-                ?: return@withContext Result.failure(Exception("Hedef dosya açılamadı."))
+                ?: return@withContext Result.failure(Exception("Unable to open destination file."))
             out.bufferedWriter(Charsets.UTF_8).use { it.write(gson.toJson(root)) }
             dataStore.setLastBackupTime(now)
             Result.success(now)
@@ -75,15 +71,15 @@ class LocalBackupManager(
                     val n = input.read(chunk)
                     if (n < 0) break
                     total += n
-                    if (total > MAX_BYTES) throw SecurityException("Yedek dosyası çok büyük.")
+                    if (total > MAX_BYTES) throw SecurityException("Backup file is too large.")
                     buf.write(chunk, 0, n)
                 }
                 buf.toString(Charsets.UTF_8.name())
-            } ?: return@withContext Result.failure(Exception("Yedek dosyası açılamadı."))
+            } ?: return@withContext Result.failure(Exception("Unable to open backup file."))
 
             val root = JsonParser.parseString(text).asJsonObject
             if (root.get("format")?.asString != FORMAT) {
-                return@withContext Result.failure(Exception("Geçersiz yedek biçimi."))
+                return@withContext Result.failure(Exception("Invalid backup format."))
             }
 
             root.stringOrNull("foldersJson")?.takeIf { isJsonArray(it) }?.let { dataStore.saveFoldersJson(it) }
@@ -129,19 +125,13 @@ class LocalBackupManager(
                 )
             }
 
-            root.getAsJsonArray("notes")?.let { arr ->
-                val items: List<WorkspaceItem> =
-                    gson.fromJson(arr, object : TypeToken<List<WorkspaceItem>>() {}.type) ?: emptyList()
-                notes.replaceAll(items)
-            }
-
             val at = root.get("updatedAt")?.takeIf { !it.isJsonNull }?.asLong ?: System.currentTimeMillis()
             dataStore.setLastBackupTime(at)
             Result.success(at)
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             if (t is OutOfMemoryError || t is StackOverflowError) {
-                Result.failure(Exception("Yedek dosyası okunamadı veya çok büyük/karmaşık."))
+                Result.failure(Exception("Backup file could not be read or is too large/complex."))
             } else if (t is Exception) {
                 Result.failure(t)
             } else {

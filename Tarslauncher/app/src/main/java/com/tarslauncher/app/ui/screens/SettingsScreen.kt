@@ -135,10 +135,6 @@ fun SettingsScreen(
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
-    var showNotesDialog by remember { mutableStateOf(false) }
-
-    val workspaceRepo = remember { com.tarslauncher.app.data.notes.LocalNotesRepository.get(context) }
-    val workspaceItems by workspaceRepo.workspaceItemsFlow.collectAsState()
 
     // Local backup: Storage Access Framework file picker (offline, zero permissions)
     val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -161,8 +157,7 @@ fun SettingsScreen(
         installedPwas.size,
         appVersion,
         isSyncing,
-        lastBackupTime,
-        workspaceItems.size
+        lastBackupTime
     ) {
         listOf(
             SettingsItem.Category(
@@ -269,7 +264,7 @@ fun SettingsScreen(
             children = listOf(
                 SettingsItem.Setting(
                     title = "Export Backup",
-                    description = if (isSyncing) "Exporting..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.US).format(Date(lastBackupTime)) else "Save layout, settings and notes to a file",
+                    description = if (isSyncing) "Exporting..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.US).format(Date(lastBackupTime)) else "Save layout and settings to a file",
                     type = SettingType.BUTTON,
                     onClick = { exportLauncher.launch("tars-backup.json") },
                     enabled = !isSyncing,
@@ -277,24 +272,11 @@ fun SettingsScreen(
                 ),
                 SettingsItem.Setting(
                     title = "Import Backup",
-                    description = if (isSyncing) "Importing..." else "Restore layout, settings and notes from a file",
+                    description = if (isSyncing) "Importing..." else "Restore layout and settings from a file",
                     type = SettingType.BUTTON,
                     onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
                     enabled = !isSyncing,
                     buttonLabel = "IMPORT"
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "NOTES",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Notes",
-                    description = if (workspaceItems.isEmpty()) "No saved notes" else "${workspaceItems.size} note(s) saved",
-                    type = SettingType.BUTTON,
-                    onClick = { showNotesDialog = true },
-                    buttonLabel = "VIEW"
                 )
             )
         ),
@@ -602,13 +584,6 @@ fun SettingsScreen(
             }
         )
     }
-
-    if (showNotesDialog) {
-        ManageNotesDialog(
-            onDismiss = { showNotesDialog = false }
-        )
-    }
-
 }
 
 @Composable
