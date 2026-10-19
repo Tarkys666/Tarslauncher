@@ -1,8 +1,8 @@
 {
     "apkSize": 1221565,
-    "sha256": "a1a50317c7506f24ae42cf5cb3a8d2b509cc89611292da9db0a1a301757dc222",
+    "sha256": "aad015ef27b92726d4b90899d2cb7065e1713a97dac7bb42dc32e1fa31ac1399",
     "versionName": "2.0.8",
     "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.8/TarsLauncher-release.apk",
     "versionCode": 57,
-    "releaseNotes": "TARS v2.0.8: Varsayılan ve yerel depolamadaki eski RedGIFs PWA referansları tamamen kaldırıldı ve temizlendi."
+    "releaseNotes": "TARS v2.0.8: Varsay\u0131lan ve yerel depolamadaki eski RedGIFs PWA referanslar\u0131 tamamen kald\u0131r\u0131ld\u0131 ve temizlendi."
 }
