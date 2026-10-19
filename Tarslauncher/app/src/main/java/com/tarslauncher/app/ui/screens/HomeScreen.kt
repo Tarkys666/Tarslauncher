@@ -52,7 +52,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
@@ -514,13 +517,17 @@ fun FolderGrid(
                 selectedFolderId = null
             },
             onAppRemove = { app ->
-                val updatedFolder = currentFolder.copy(
-                    apps = currentFolder.apps.filter { it.packageName != app.packageName }
-                )
+                val current = folders.find { it.id == selectedFolderId } ?: currentFolder
+                val remainingApps = current.apps.filter { it.packageName != app.packageName }
+                val updatedFolder = current.copy(apps = remainingApps)
                 val updatedFolders = folders.map {
                     if (it.id == updatedFolder.id) updatedFolder else it
                 }
                 onFoldersUpdate(updatedFolders)
+                if (remainingApps.isEmpty()) {
+                    showFolderAppsDialog = false
+                    selectedFolderId = null
+                }
             },
             onDeletePwa = onDeletePwa,
             iconPackLoader = iconPackLoader
@@ -964,7 +971,7 @@ fun FolderAppsDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(folder.apps, key = { it.packageName }) { app ->
+                itemsIndexed(folder.apps, key = { index, app -> "${app.packageName}_$index" }) { _, app ->
                     FolderAppItem(
                         app = app,
                         onClick = { onAppClick(app) },
@@ -997,7 +1004,16 @@ fun FolderAppsDialog(
                     // Minimal Icon & Name
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier
+                            .padding(bottom = 16.dp)
+                            .clickable {
+                                appToManage?.let { app ->
+                                    onAppClick(app)
+                                    showManageDialog = false
+                                    appToManage = null
+                                    onDismiss()
+                                }
+                            }
                     ) {
                          val icon = remember(appToManage?.packageName) {
                              appToManage?.icon?.let { drawableToBitmap(it).asImageBitmap() }
@@ -1015,7 +1031,16 @@ fun FolderAppsDialog(
                         letterSpacing = 1.sp,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .clickable {
+                                appToManage?.let { app ->
+                                    onAppClick(app)
+                                    showManageDialog = false
+                                    appToManage = null
+                                    onDismiss()
+                                }
+                            }
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -1030,20 +1055,23 @@ fun FolderAppsDialog(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // REMOVE
+                        // REMOVE FROM FOLDER
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    appToManage?.let { onAppRemove(it) }
+                                    appToManage?.let { app ->
+                                        onAppRemove(app)
+                                    }
                                     showManageDialog = false
                                     appToManage = null
+                                    onDismiss()
                                 }
                                 .padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "REMOVE",
+                                text = "REMOVE FROM FOLDER",
                                 color = Color.White,
                                 fontSize = 11.sp,
                                 letterSpacing = 2.sp,
@@ -1056,7 +1084,7 @@ fun FolderAppsDialog(
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
 
-                        val isCustomPwa = appToManage!!.packageName.startsWith("pwa_") || appToManage!!.pwaId != null
+                        val isCustomPwa = appToManage!!.isPwa || appToManage!!.packageName.startsWith("pwa_") || !appToManage!!.pwaId.isNullOrBlank()
                         if (isCustomPwa) {
                             if (!appToManage!!.webUrl.isNullOrBlank()) {
                                 // OPEN IN BROWSER
@@ -1071,6 +1099,7 @@ fun FolderAppsDialog(
                                             }
                                             showManageDialog = false
                                             appToManage = null
+                                            onDismiss()
                                         }
                                         .padding(vertical = 16.dp),
                                     contentAlignment = Alignment.Center
@@ -1090,7 +1119,7 @@ fun FolderAppsDialog(
                                 )
                             }
 
-                            // DELETE PWA
+                            // UNINSTALL FROM DEVICE (PWA)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1098,15 +1127,17 @@ fun FolderAppsDialog(
                                         appToManage?.let { app ->
                                             val pwaId = app.pwaId ?: app.packageName.removePrefix("pwa_")
                                             onDeletePwa(pwaId)
+                                            onAppRemove(app)
                                         }
                                         showManageDialog = false
                                         appToManage = null
+                                        onDismiss()
                                     }
                                     .padding(vertical = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "DELETE PWA",
+                                    text = "UNINSTALL FROM DEVICE",
                                     color = Color(0xFFFF4444),
                                     fontSize = 11.sp,
                                     letterSpacing = 2.sp,
@@ -1114,7 +1145,7 @@ fun FolderAppsDialog(
                                 )
                             }
                         } else {
-                            // UNINSTALL
+                            // UNINSTALL FROM DEVICE (Native App)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1123,20 +1154,33 @@ fun FolderAppsDialog(
                                             try {
                                                 val intent = Intent(Intent.ACTION_DELETE).apply {
                                                     data = Uri.parse("package:${app.packageName}")
+                                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                    putExtra(Intent.EXTRA_RETURN_RESULT, true)
                                                 }
                                                 context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                                            } catch (_: Exception) {
+                                                try {
+                                                    @Suppress("DEPRECATION")
+                                                    val fallback = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+                                                        data = Uri.parse("package:${app.packageName}")
+                                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                    }
+                                                    context.startActivity(fallback)
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "Unable to uninstall app", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
+                                            onAppRemove(app)
                                         }
                                         showManageDialog = false
                                         appToManage = null
+                                        onDismiss()
                                     }
                                     .padding(vertical = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "UNINSTALL",
+                                    text = "UNINSTALL FROM DEVICE",
                                     color = Color(0xFFFF4444),
                                     fontSize = 11.sp,
                                     letterSpacing = 2.sp,
@@ -1159,6 +1203,7 @@ fun FolderAppItem(
     onLongClick: () -> Unit,
     iconPackLoader: IconPackLoader?
 ) {
+    val haptic = LocalHapticFeedback.current
     val appIcon = rememberAppIcon(app, iconPackLoader)
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -1170,7 +1215,10 @@ fun FolderAppItem(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-                onLongClick = onLongClick
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                }
             ),
         contentAlignment = Alignment.Center
     ) {

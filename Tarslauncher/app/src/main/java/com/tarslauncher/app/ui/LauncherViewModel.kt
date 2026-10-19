@@ -155,15 +155,20 @@ class LauncherViewModel(
 
     fun deletePwa(pwaId: String) {
         viewModelScope.launch {
-            appRepository.deletePwa(pwaId)
-            val pwaPackageName = "pwa_$pwaId"
+            val cleanId = pwaId.removePrefix(PwaInfo.PACKAGE_PREFIX)
+            val pwaPackageName = "${PwaInfo.PACKAGE_PREFIX}$cleanId"
+            appRepository.deletePwa(cleanId)
             val updatedFolders = _uiState.value.folders.map { folder ->
-                folder.copy(apps = folder.apps.filter { it.packageName != pwaPackageName })
+                folder.copy(apps = folder.apps.filter {
+                    it.packageName != pwaPackageName && it.packageName != pwaId && it.pwaId != cleanId && it.pwaId != pwaId
+                })
             }
             _uiState.update { state ->
                 state.copy(
-                    installedApps = state.installedApps.filter { it.packageName != pwaPackageName },
-                    installedPwas = state.installedPwas.filter { it.id != pwaId },
+                    installedApps = state.installedApps.filter {
+                        it.packageName != pwaPackageName && it.packageName != pwaId && it.pwaId != cleanId && it.pwaId != pwaId
+                    },
+                    installedPwas = state.installedPwas.filter { it.id != cleanId && it.id != pwaId },
                     folders = updatedFolders
                 )
             }
