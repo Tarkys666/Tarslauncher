@@ -27,6 +27,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -85,6 +90,7 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onAppClick: (AppInfo) -> Unit,
     showAppDrawer: Boolean,
+    dualAppDrawer: Boolean = false,
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color,
@@ -162,11 +168,19 @@ fun HomeScreen(
     }
     
     // Responsive app drawer height (memoized)
-    val appDrawerHeight = remember(screenHeight) {
-        when {
-            screenHeight < 600.dp -> 80.dp
-            screenHeight < 800.dp -> 100.dp
-            else -> 120.dp
+    val appDrawerHeight = remember(screenHeight, dualAppDrawer) {
+        if (dualAppDrawer) {
+            when {
+                screenHeight < 600.dp -> 135.dp
+                screenHeight < 800.dp -> 155.dp
+                else -> 175.dp
+            }
+        } else {
+            when {
+                screenHeight < 600.dp -> 80.dp
+                screenHeight < 800.dp -> 100.dp
+                else -> 120.dp
+            }
         }
     }
     
@@ -258,7 +272,7 @@ fun HomeScreen(
                         .height(appDrawerHeight) // Responsive height
                         .navigationBarsPadding() // Alt navigation bar için padding
                         .padding(top = 4.dp) // Settings butonuna yaklaşmak için minimal boşluk
-                        .padding(bottom = 24.dp), // Alt navigation bar ile arasında boşluk
+                        .padding(bottom = if (dualAppDrawer) 12.dp else 24.dp), // Alt navigation bar ile arasında boşluk
                     contentAlignment = Alignment.Center
                 ) {
                     val onAppLongClickMemo: (AppInfo) -> Unit = remember {
@@ -270,11 +284,22 @@ fun HomeScreen(
                         }
                     }
 
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp))
-                    ) {
+                    if (dualAppDrawer) {
+                        DualRowAppDrawer(
+                            installedApps = installedApps,
+                            onAppClick = onAppClick,
+                            onAppLongClick = onAppLongClickMemo,
+                            onAddPwaClick = { showAddPwaDialog = true },
+                            iconPackLoader = iconPackLoader,
+                            iconSize = appDrawerIconSize,
+                            screenWidth = screenWidth
+                        )
+                    } else {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp))
+                        ) {
                         items(
                             items = installedApps,
                             key = { it.packageName },
@@ -318,6 +343,7 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
             }
         }
         
@@ -628,6 +654,179 @@ fun AppIconWithoutName(
                     color = Color.White,
                     fontSize = (iconSize * 0.3f).sp // Font boyutu icon boyutuna göre
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun DualRowAppDrawer(
+    installedApps: List<AppInfo>,
+    onAppClick: (AppInfo) -> Unit,
+    onAppLongClick: (AppInfo) -> Unit,
+    onAddPwaClick: () -> Unit,
+    iconPackLoader: IconPackLoader?,
+    iconSize: Int,
+    screenWidth: Dp
+) {
+    val topApps = remember(installedApps) {
+        installedApps.filterIndexed { index, _ -> index % 2 == 0 }
+    }
+    val bottomApps = remember(installedApps) {
+        installedApps.filterIndexed { index, _ -> index % 2 == 1 }
+    }
+
+    val loopMultiplier = 1000
+    val topSize = topApps.size
+    val topTotalCount = if (topSize > 0) topSize * loopMultiplier else 0
+    val topInitialIndex = if (topSize > 0) (topTotalCount / 2) - ((topTotalCount / 2) % topSize) else 0
+
+    val bottomCycleSize = bottomApps.size + 1
+    val bottomTotalCount = bottomCycleSize * loopMultiplier
+    val bottomInitialIndex = (bottomTotalCount / 2) - ((bottomTotalCount / 2) % bottomCycleSize)
+
+    val topListState = rememberLazyListState(initialFirstVisibleItemIndex = topInitialIndex)
+    val bottomListState = rememberLazyListState(initialFirstVisibleItemIndex = bottomInitialIndex)
+
+    var activeScrollRow by remember { mutableIntStateOf(0) }
+
+    var isCentered by remember { mutableStateOf(false) }
+    LaunchedEffect(topSize, bottomApps.size) {
+        if (!isCentered && topSize > 0) {
+            topListState.scrollToItem(topInitialIndex)
+            bottomListState.scrollToItem(bottomInitialIndex)
+            isCentered = true
+        }
+    }
+
+    LaunchedEffect(topListState.isScrollInProgress, bottomListState.isScrollInProgress) {
+        if (!topListState.isScrollInProgress && !bottomListState.isScrollInProgress) {
+            activeScrollRow = 0
+        }
+    }
+
+    val topNestedScrollConnection = remember(bottomListState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag) {
+                    activeScrollRow = 1
+                }
+                if (activeScrollRow == 1 && available.x != 0f) {
+                    bottomListState.dispatchRawDelta(-available.x)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val bottomNestedScrollConnection = remember(topListState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag) {
+                    activeScrollRow = 2
+                }
+                if (activeScrollRow == 2 && available.x != 0f) {
+                    topListState.dispatchRawDelta(-available.x)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val itemSpacing = remember(screenWidth) { (screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // TOP ROW (Opposite scrolling relative to bottom row)
+        LazyRow(
+            state = topListState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .nestedScroll(topNestedScrollConnection),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
+        ) {
+            if (topTotalCount > 0) {
+                items(
+                    count = topTotalCount,
+                    key = { index -> "top_${index}_${topApps[index % topSize].packageName}" },
+                    contentType = { "app_icon" }
+                ) { index ->
+                    val app = topApps[index % topSize]
+                    AppIconWithoutName(
+                        app = app,
+                        onAppClick = onAppClick,
+                        onAppLongClick = onAppLongClick,
+                        iconPackLoader = iconPackLoader,
+                        iconSize = iconSize
+                    )
+                }
+            }
+        }
+
+        // BOTTOM ROW (Opposite scrolling relative to top row)
+        LazyRow(
+            state = bottomListState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .nestedScroll(bottomNestedScrollConnection),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
+        ) {
+            if (bottomTotalCount > 0) {
+                items(
+                    count = bottomTotalCount,
+                    key = { index ->
+                        val posInCycle = index % bottomCycleSize
+                        if (posInCycle < bottomApps.size) {
+                            "bottom_${index}_${bottomApps[posInCycle].packageName}"
+                        } else {
+                            "bottom_add_pwa_$index"
+                        }
+                    },
+                    contentType = { index ->
+                        if ((index % bottomCycleSize) < bottomApps.size) "app_icon" else "add_pwa"
+                    }
+                ) { index ->
+                    val posInCycle = index % bottomCycleSize
+                    if (posInCycle < bottomApps.size) {
+                        val app = bottomApps[posInCycle]
+                        AppIconWithoutName(
+                            app = app,
+                            onAppClick = onAppClick,
+                            onAppLongClick = onAppLongClick,
+                            iconPackLoader = iconPackLoader,
+                            iconSize = iconSize
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size((iconSize + 18).dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onAddPwaClick() }
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(iconSize.dp)
+                                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                    .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = (iconSize * 0.5f).sp,
+                                    fontWeight = FontWeight.Light
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

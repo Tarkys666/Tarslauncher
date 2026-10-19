@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class LauncherSettings(
     val showAppDrawer: Boolean = true,
+    val dualAppDrawer: Boolean = false,
     val gridSize: GridSize = GridSize.DEFAULT,
     val buttonColorMode: String = "black",
     val showTarsHeader: Boolean = true,

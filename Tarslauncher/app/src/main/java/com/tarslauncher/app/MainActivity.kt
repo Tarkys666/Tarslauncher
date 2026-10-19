@@ -140,6 +140,7 @@ fun LauncherMain(
     val onAddPwa = remember(viewModel) { { name: String, url: String -> viewModel.addPwa(name, url) } }
     val onDeletePwa = remember(viewModel) { { pwaId: String -> viewModel.deletePwa(pwaId) } }
     val onShowAppDrawerChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAppDrawer(v) } }
+    val onDualAppDrawerChange = remember(viewModel) { { v: Boolean -> viewModel.updateDualAppDrawer(v) } }
     val onGridSizeChange = remember(viewModel) { { g: GridSize -> viewModel.updateGridSize(g) } }
     val onIconPackSelected = remember(viewModel) { { p: String? -> viewModel.updateSelectedIconPack(p) } }
     val onButtonColorModeChange = remember(viewModel) { { m: String -> viewModel.updateButtonColorMode(m) } }
@@ -177,6 +178,7 @@ fun LauncherMain(
                     onSettingsClick = onSettingsClick,
                     onAppClick = onAppClick,
                     showAppDrawer = uiState.showAppDrawer,
+                    dualAppDrawer = uiState.dualAppDrawer,
                     gridSize = uiState.gridSize,
                     iconPackLoader = iconPackLoader,
                     buttonColor = getButtonColor,
@@ -192,6 +194,8 @@ fun LauncherMain(
                     onBackClick = onBackClick,
                     showAppDrawer = uiState.showAppDrawer,
                     onShowAppDrawerChange = onShowAppDrawerChange,
+                    dualAppDrawer = uiState.dualAppDrawer,
+                    onDualAppDrawerChange = onDualAppDrawerChange,
                     gridSize = uiState.gridSize,
                     onGridSizeChange = onGridSizeChange,
                     installedIconPacks = uiState.iconPacks,

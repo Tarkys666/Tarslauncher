@@ -80,6 +80,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     showAppDrawer: Boolean,
     onShowAppDrawerChange: (Boolean) -> Unit,
+    dualAppDrawer: Boolean = false,
+    onDualAppDrawerChange: (Boolean) -> Unit = {},
     gridSize: GridSize,
     onGridSizeChange: (GridSize) -> Unit,
     installedIconPacks: List<IconPackInfo>,
@@ -149,6 +151,7 @@ fun SettingsScreen(
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
         showAppDrawer,
+        dualAppDrawer,
         showTarsHeader,
         showClock,
         appDrawerIconSize,
@@ -173,6 +176,15 @@ fun SettingsScreen(
                         currentValue = showAppDrawer,
                         onValueChange = { onShowAppDrawerChange(it as Boolean) }
                     ))
+                    if (showAppDrawer) {
+                        add(SettingsItem.Setting(
+                            title = "Dual Row App Drawer",
+                            description = "Two interconnected rows scrolling in opposite directions",
+                            type = SettingType.TOGGLE,
+                            currentValue = dualAppDrawer,
+                            onValueChange = { onDualAppDrawerChange(it as Boolean) }
+                        ))
+                    }
                     add(SettingsItem.Setting(
                         title = "TARS Header",
                         description = "Show TARS text on home screen",

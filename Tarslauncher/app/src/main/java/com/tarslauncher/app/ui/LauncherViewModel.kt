@@ -225,6 +225,10 @@ class LauncherViewModel(
         viewModelScope.launch { appRepository.updateShowAppDrawer(show) }
     }
 
+    fun updateDualAppDrawer(enabled: Boolean) {
+        viewModelScope.launch { appRepository.updateDualAppDrawer(enabled) }
+    }
+
     fun updateGridSize(gridSize: GridSize) {
         viewModelScope.launch { appRepository.updateGridSize(gridSize) }
     }

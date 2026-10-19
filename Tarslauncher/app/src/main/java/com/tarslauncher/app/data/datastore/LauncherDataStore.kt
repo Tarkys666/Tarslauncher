@@ -28,6 +28,7 @@ class LauncherDataStore(private val context: Context) {
         private const val TAG = "LauncherDataStore"
 
         val KEY_SHOW_APP_DRAWER = booleanPreferencesKey("show_app_drawer")
+        val KEY_DUAL_APP_DRAWER = booleanPreferencesKey("dual_app_drawer")
         val KEY_GRID_SIZE = stringPreferencesKey("grid_size")
         val KEY_BUTTON_COLOR_MODE = stringPreferencesKey("button_color_mode")
         val KEY_SHOW_TARS_HEADER = booleanPreferencesKey("show_tars_header")
@@ -80,6 +81,7 @@ class LauncherDataStore(private val context: Context) {
         .map { preferences ->
             LauncherSettings(
                 showAppDrawer = preferences[KEY_SHOW_APP_DRAWER] ?: true,
+                dualAppDrawer = preferences[KEY_DUAL_APP_DRAWER] ?: false,
                 gridSize = GridSize.fromString(preferences[KEY_GRID_SIZE]),
                 buttonColorMode = preferences[KEY_BUTTON_COLOR_MODE] ?: "black",
                 showTarsHeader = preferences[KEY_SHOW_TARS_HEADER] ?: true,
@@ -95,6 +97,8 @@ class LauncherDataStore(private val context: Context) {
         .distinctUntilChanged()
 
     suspend fun updateShowAppDrawer(show: Boolean) = setPreference(KEY_SHOW_APP_DRAWER, show)
+
+    suspend fun updateDualAppDrawer(enabled: Boolean) = setPreference(KEY_DUAL_APP_DRAWER, enabled)
 
     suspend fun updateGridSize(gridSize: GridSize) = setPreference(KEY_GRID_SIZE, gridSize.serialize())
 
@@ -133,6 +137,7 @@ class LauncherDataStore(private val context: Context) {
         try {
             context.dataStore.edit { prefs ->
                 prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
+                prefs[KEY_DUAL_APP_DRAWER] = settings.dualAppDrawer
                 prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
                 prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
                 prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
