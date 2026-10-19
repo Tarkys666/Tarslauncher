@@ -27,79 +27,7 @@ object SecurityHelper {
         return packageName.matches(PACKAGE_NAME_REGEX)
     }
 
-    /**
-     * Creates a validated launch Intent for the specified package and optional activity.
-     */
-    fun createSafeLaunchIntent(
-        context: Context,
-        packageName: String,
-        activityName: String? = null
-    ): Intent? {
-        if (!validatePackageName(packageName)) {
-            Log.w(TAG, "Invalid package name rejected: $packageName")
-            return null
-        }
 
-        val packageManager = context.packageManager
-
-        // If explicit activity name is provided, verify component
-        if (!activityName.isNullOrBlank()) {
-            val component = ComponentName(packageName, activityName)
-            val explicitIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                setComponent(component)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            }
-
-            val resolved = packageManager.resolveActivity(explicitIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            if (resolved?.activityInfo?.packageName == packageName) {
-                return explicitIntent
-            }
-        }
-
-        // Fallback to PackageManager launch intent
-        return runCatching {
-            packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        }.getOrNull()
-    }
-
-    /**
-     * Safely starts an activity with explicit component resolution and error handling.
-     */
-    fun safeStartActivity(context: Context, intent: Intent): Boolean {
-        return try {
-            val packageManager = context.packageManager
-            val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-
-            if (resolveInfo == null) {
-                Log.w(TAG, "No activity resolved for intent: ${intent.action}")
-                return false
-            }
-
-            // Ensure the resolved component matches expected package if component was set
-            intent.component?.let { component ->
-                if (resolveInfo.activityInfo?.packageName != component.packageName) {
-                    Log.w(TAG, "Component mismatch: expected ${component.packageName}, resolved ${resolveInfo.activityInfo?.packageName}")
-                    return false
-                }
-            }
-
-            if (context !is android.app.Activity) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-
-            context.startActivity(intent)
-            true
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException starting activity", e)
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start activity safely", e)
-            false
-        }
-    }
 
     /**
      * Helper to safely launch an app directly by package and optional activity name

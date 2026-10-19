@@ -49,6 +49,7 @@ class AppRepository(
     fun invalidateAppCache() {
         cachedInstalledApps = null
         cachedPwas = null
+        com.tarslauncher.app.utils.clearIconBitmapCache()
     }
 
     suspend fun getLastBackupTime(): Long = withContext(Dispatchers.IO) {

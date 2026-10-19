@@ -121,8 +121,6 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         }
     }
     
-    val motionScale = remember { StaticMotionDurationScale(0.5f) }
-
     val onFoldersUpdate = remember(viewModel) { { f: List<FolderInfo> -> viewModel.updateFolders(f) } }
     val onSettingsClick = remember(viewModel) { { viewModel.setScreen("settings") } }
     val onBackClick = remember(viewModel) { { viewModel.setScreen("home") } }
@@ -138,12 +136,11 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
     val onAddPwa = remember(viewModel) { { name: String, url: String -> viewModel.addPwa(name, url) } }
     val onDeletePwa = remember(viewModel) { { pwaId: String -> viewModel.deletePwa(pwaId) } }
 
-    CompositionLocalProvider(LocalMotionDurationScale provides motionScale) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Transparent)
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent)
+    ) {
             if (uiState.currentScreen == "home") {
                 HomeScreen(
                     installedApps = uiState.installedApps,
@@ -234,4 +231,3 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
             )
         }
     }
-}

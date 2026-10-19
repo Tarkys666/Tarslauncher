@@ -30,19 +30,9 @@ class PinShortcutActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            window.setHideOverlayWindows(true)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            handlePinShortcut()
-        } else {
-            finish()
-        }
+        handlePinShortcut()
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun handlePinShortcut() {
         val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
         if (launcherApps == null) {
@@ -157,7 +147,6 @@ class PinShortcutActivity : ComponentActivity() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun saveAndAcceptShortcut(
         pinItemRequest: LauncherApps.PinItemRequest,
         label: String,
