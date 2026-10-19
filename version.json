@@ -1,8 +1,8 @@
 {
     "apkSize": 1221565,
-    "sha256": "6a9b27fca9343a05f62cb113b24cb43386c2d9bfe1f1a544391c7d996eff7243",
+    "sha256": "1819c4de869b495d3df40fada8e4d84b17216686786b99cd2a87173e4a693966",
     "versionName": "2.0.9",
     "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.9/TarsLauncher-release.apk",
     "versionCode": 58,
-    "releaseNotes": "TARS v2.0.9: Folder içi uygulama yönetimi düzeltildi; 'REMOVE FROM FOLDER' ve 'UNINSTALL FROM DEVICE' İngilizce olarak adlandırılıp kaldırılma ve cihazdan silinme hataları giderildi."
+    "releaseNotes": "TARS v2.0.9: Folder i\u00e7i uygulama y\u00f6netimi d\u00fczeltildi; 'REMOVE FROM FOLDER' ve 'UNINSTALL FROM DEVICE' \u0130ngilizce olarak adland\u0131r\u0131l\u0131p kald\u0131r\u0131lma ve cihazdan silinme hatalar\u0131 giderildi."
 }
