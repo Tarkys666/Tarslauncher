@@ -12,14 +12,30 @@ import java.io.ByteArrayOutputStream
 
 import android.graphics.Rect
 
+import androidx.collection.LruCache
+
 private const val DEFAULT_ICON_SIZE = 192
 private const val MAX_ICON_SIZE = 384
 
-fun drawableToBitmap(drawable: Drawable): Bitmap {
+// Fast in-memory LRU cache for rendered app icon bitmaps to eliminate
+// repetitive main-thread canvas allocations during Compose recomposition cycles.
+private val iconBitmapCache = LruCache<String, Bitmap>(200)
+
+fun clearIconBitmapCache() {
+    iconBitmapCache.evictAll()
+}
+
+fun drawableToBitmap(drawable: Drawable, cacheKey: String? = null): Bitmap {
+    val key = cacheKey ?: (drawable.constantState?.let { "cs_${System.identityHashCode(it)}" } ?: "id_${System.identityHashCode(drawable)}")
+    iconBitmapCache.get(key)?.let { cached ->
+        if (!cached.isRecycled) return cached
+    }
+
     // 1. Fast-path: Reuse existing bitmap directly if within safe dimensions
     if (drawable is BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
         val existing = drawable.bitmap
         if (existing.width in 48..MAX_ICON_SIZE && existing.height in 48..MAX_ICON_SIZE) {
+            iconBitmapCache.put(key, existing)
             return existing
         }
     }
@@ -40,6 +56,7 @@ fun drawableToBitmap(drawable: Drawable): Bitmap {
     drawable.draw(canvas)
     drawable.bounds = oldBounds
 
+    iconBitmapCache.put(key, bitmap)
     return bitmap
 }
 

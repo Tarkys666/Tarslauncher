@@ -14,7 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -302,7 +302,7 @@ fun ManagePwasDialog(
                                     )
                                 } else {
                                     Icon(
-                                        imageVector = Icons.Default.Language,
+                                        imageVector = Icons.Default.Info,
                                         contentDescription = null,
                                         tint = Color.White.copy(alpha = 0.7f),
                                         modifier = Modifier.size(24.dp)

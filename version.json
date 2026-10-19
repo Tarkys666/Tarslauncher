@@ -1,8 +1,8 @@
 {
-    "apkSize":  1476877,
-    "sha256":  "66a70e63c57cd70f2900a867a2da54b9073cf6d384a527e5f1a4218a4f674857",
+    "apkSize":  1476613,
+    "sha256":  "d31f8d342ffe970efdbd77db44ba5bfcafade842763c018eabd1e6aee1c19795",
     "versionName":  "2.0.0",
     "downloadUrl":  "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.0/TarsLauncher-release.apk",
     "versionCode":  49,
-    "releaseNotes":  "TARS v2.0.0: LLM, Google/Supabase hesabı ve erişilebilirlik servisi tamamen kaldırıldı. Tamamen yerel notlar, uygulama içi Dynamic Island, yerel dosya yedeği, SHA-256 + imza doğrulamalı güncelleyici. APK 12 MB -\u003e 1.4 MB."
+    "releaseNotes":  "TARS v2.0.0: Dynamic Island ve tüm LLM/bulut bileşenleri kaldırıldı. Yerel notlar, yerel SAF dosya yedeği, sertleştirilmiş güvenli güncelleyici, OOM/çökme korumaları, LRU ikon önbelleği ve ultra optimize 1.4 MB APK."
 }

@@ -54,8 +54,12 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.gestures.detectTapGestures
 
+import androidx.core.content.ContextCompat
 import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.PwaInfo
+
+private val AppInfo.componentName: String?
+    get() = activityName.ifBlank { pwaId ?: shortcutId }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,9 +154,10 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    // App drawer kapalıyken sistem butonları için otomatik padding ekle
-                    .padding(bottom = if (!showAppDrawer) 48.dp else 0.dp)
-                    .navigationBarsPadding(),
+                    .then(
+                        if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = 16.dp)
+                        else Modifier
+                    ),
                 horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
             ) {
                 Box(
@@ -214,7 +219,7 @@ fun HomeScreen(
                     ) {
                         items(
                             items = installedApps,
-                            key = { it.packageName },
+                            key = { "app_${it.packageName}_${it.componentName ?: ""}" },
                             contentType = { "app_icon" }
                         ) { app ->
                             AppIconWithoutName(
@@ -278,19 +283,6 @@ fun HomeScreen(
             )
         }
 
-        // Yerel notlu Dynamic Island (overlay izni / erişilebilirlik / ağ yok)
-        var showAllNotes by remember { mutableStateOf(false) }
-        NotesDynamicIsland(
-            onOpenAllNotes = { showAllNotes = true },
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(1f)
-                .statusBarsPadding()
-                .padding(top = 4.dp)
-        )
-        if (showAllNotes) {
-            ManageNotesDialog(onDismiss = { showAllNotes = false })
-        }
 
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
         Box(
@@ -1018,11 +1010,12 @@ fun ClockHeader(
                 if (!isRegistered) {
                     updateTime()
                     try {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
-                        } else {
-                            context.registerReceiver(receiver, filter)
-                        }
+                        ContextCompat.registerReceiver(
+                            context,
+                            receiver,
+                            filter,
+                            ContextCompat.RECEIVER_NOT_EXPORTED
+                        )
                         isRegistered = true
                     } catch (_: Exception) {}
                 }

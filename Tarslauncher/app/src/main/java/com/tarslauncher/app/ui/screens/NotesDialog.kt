@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 private val MonoBlack = Color(0xFF000000)
 private val MonoWhite = Color(0xFFFFFFFF)
 private val MonoMuted = Color(0xFF888888)
-private val MonoDim = Color(0xFF555555)
+private val MonoDim = Color(0xFF888888)
 private val MonoLine = Color(0xFF222222)
 private val MonoBorder = Color(0xFF333333)
 private val MonoDisabledBg = Color(0xFF141414)
@@ -84,6 +84,7 @@ fun ManageNotesDialog(
                     .background(MonoBlack)
                     .statusBarsPadding()
                     .navigationBarsPadding()
+                    .imePadding()
             ) {
                 // ─── 1. ULTRA-MINIMAL HEADER ─────────────────────────────────
                 Row(
@@ -101,15 +102,19 @@ fun ManageNotesDialog(
                         letterSpacing = 3.sp
                     )
 
-                    Text(
-                        text = "×",
-                        color = MonoMuted,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Light,
+                    Box(
                         modifier = Modifier
-                            .clickable { onDismiss() }
-                            .padding(horizontal = 6.dp)
-                    )
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "×",
+                            color = MonoMuted,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Light
+                        )
+                    }
                 }
 
                 HorizontalDivider(thickness = 1.dp, color = MonoLine)
@@ -139,7 +144,7 @@ fun ManageNotesDialog(
                     ) {
                         itemsIndexed(
                             items = workspaceItems,
-                            key = { _, item -> item.id }
+                            key = { index, item -> "${item.id}_$index" }
                         ) { index, item ->
                             MonochromeNoteRow(
                                 item = item,
@@ -184,7 +189,7 @@ fun ManageNotesDialog(
 
                     BasicTextField(
                         value = newNoteInput,
-                        onValueChange = { newNoteInput = it },
+                        onValueChange = { newNoteInput = it.take(WorkspaceItem.MAX_TITLE_LENGTH) },
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = 12.dp),
@@ -312,14 +317,18 @@ private fun MonochromeNoteRow(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Text(
-            text = "×",
-            color = MonoDim,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Light,
+        Box(
             modifier = Modifier
-                .clickable { onDelete() }
-                .padding(horizontal = 6.dp)
-        )
+                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                .clickable { onDelete() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "×",
+                color = MonoDim,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Light
+            )
+        }
     }
 }

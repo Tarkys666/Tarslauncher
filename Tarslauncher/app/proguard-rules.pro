@@ -2,7 +2,7 @@
 # Aggressive obfuscation to prevent reverse engineering
 
 # Enable all optimizations
--optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
+-optimizations *
 -allowaccessmodification
 
 # Obfuscation settings

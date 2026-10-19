@@ -131,6 +131,12 @@ object SecurityHelper {
             return false
         }
 
+        val activityInfo = resolveInfo.activityInfo
+        if (activityInfo?.exported == false && packageName != context.packageName) {
+            Log.w(TAG, "Activity is not exported and belongs to a different package: $packageName")
+            return false
+        }
+
         return try {
             if (context !is android.app.Activity) {
                 targetIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -152,6 +158,23 @@ object SecureBroadcastHelper {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingRefreshRunnable: Runnable? = null
     private const val DEBOUNCE_INTERVAL = 300L
+
+    /**
+     * Cancels any pending debounced refresh runnable and clears references to prevent leaks.
+     */
+    fun cancelPending() {
+        pendingRefreshRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            pendingRefreshRunnable = null
+        }
+    }
+
+    /**
+     * Cleans up pending tasks. Alias for cancelPending.
+     */
+    fun cleanup() {
+        cancelPending()
+    }
 
     fun createSecurePackageReceiver(onRefresh: (packageName: String?) -> Unit): BroadcastReceiver {
         return object : BroadcastReceiver() {

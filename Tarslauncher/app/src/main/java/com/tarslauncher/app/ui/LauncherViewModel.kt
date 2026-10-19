@@ -62,7 +62,7 @@ class LauncherViewModel(
     companion object {
         private val APP_COMPARATOR = compareByDescending<AppInfo> { it.isFavorite }
             .thenByDescending { it.usageCount }
-            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            .thenBy(String.CASE_INSENSITIVE_ORDER) { (it.name as String?).takeIf { n -> !n.isNullOrBlank() } ?: "" }
     }
 
     fun refreshAppList() {
@@ -70,52 +70,65 @@ class LauncherViewModel(
         refreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            coroutineScope {
-                val appsDeferred = async { appRepository.getInstalledApps() }
-                val usageDeferred = async { appRepository.getUsageStats() }
-                val iconPacksDeferred = async { appRepository.getInstalledIconPacks() }
-                val pwasDeferred = async { appRepository.getInstalledPwas() }
+            try {
+                coroutineScope {
+                    val appsDeferred = async { appRepository.getInstalledApps() }
+                    val usageDeferred = async { appRepository.getUsageStats() }
+                    val iconPacksDeferred = async { appRepository.getInstalledIconPacks() }
+                    val pwasDeferred = async { appRepository.getInstalledPwas() }
 
-                val appsResult = appsDeferred.await()
-                if (appsResult is RepositoryResult.Error) {
+                    val appsResult = appsDeferred.await()
+                    if (appsResult is RepositoryResult.Error) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = appsResult.message
+                            )
+                        }
+                        return@coroutineScope
+                    }
+
+                    val baseApps = appsResult.getOrDefault(emptyList())
+                    val usageStats = usageDeferred.await().getOrDefault(emptyList())
+                    val usageMap = usageStats.associateBy {
+                        it.packageName?.takeIf { pkg -> pkg.isNotBlank() } ?: "unknown"
+                    }
+
+                    val installedApps = baseApps.map { app ->
+                        val stats = usageMap[app.packageName]
+                        val count = stats?.usageCount ?: 0
+                        app.copy(
+                            usageCount = count,
+                            isFavorite = (stats?.isFavorite ?: false) || count >= 10
+                        )
+                    }.sortedWith(APP_COMPARATOR)
+
+                    val currentGridSize = _uiState.value.settings.gridSize
+                    val foldersResult = appRepository.getFolders(currentGridSize.totalCells, installedApps)
+                    val folders = foldersResult.getOrDefault(emptyList())
+                    val iconPacks = iconPacksDeferred.await().getOrDefault(emptyList())
+                    val installedPwas = pwasDeferred.await().getOrDefault(emptyList())
+                    val pwaPresets = appRepository.getPopularPwaPresets()
+
                     _uiState.update {
                         it.copy(
+                            installedApps = installedApps,
+                            iconPacks = iconPacks,
+                            folders = folders,
+                            installedPwas = installedPwas,
+                            pwaPresets = pwaPresets,
                             isLoading = false,
-                            errorMessage = appsResult.message
+                            errorMessage = null
                         )
                     }
-                    return@coroutineScope
                 }
-
-                val baseApps = appsResult.getOrDefault(emptyList())
-                val usageStats = usageDeferred.await().getOrDefault(emptyList())
-                val usageMap = usageStats.associateBy { it.packageName }
-
-                val installedApps = baseApps.map { app ->
-                    val stats = usageMap[app.packageName]
-                    val count = stats?.usageCount ?: 0
-                    app.copy(
-                        usageCount = count,
-                        isFavorite = (stats?.isFavorite ?: false) || count >= 10
-                    )
-                }.sortedWith(APP_COMPARATOR)
-
-                val currentGridSize = _uiState.value.settings.gridSize
-                val foldersResult = appRepository.getFolders(currentGridSize.totalCells, installedApps)
-                val folders = foldersResult.getOrDefault(emptyList())
-                val iconPacks = iconPacksDeferred.await().getOrDefault(emptyList())
-                val installedPwas = pwasDeferred.await().getOrDefault(emptyList())
-                val pwaPresets = appRepository.getPopularPwaPresets()
-
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("LauncherViewModel", "Failed to refresh app list", e)
                 _uiState.update {
                     it.copy(
-                        installedApps = installedApps,
-                        iconPacks = iconPacks,
-                        folders = folders,
-                        installedPwas = installedPwas,
-                        pwaPresets = pwaPresets,
                         isLoading = false,
-                        errorMessage = null
+                        errorMessage = e.localizedMessage ?: "Uygulamalar yüklenirken bir hata oluştu."
                     )
                 }
             }
@@ -168,6 +181,8 @@ class LauncherViewModel(
         }
     }
 
+    private var usagePersistJob: kotlinx.coroutines.Job? = null
+
     fun incrementAppUsage(app: AppInfo) {
         val currentList = _uiState.value.installedApps
         val index = currentList.indexOfFirst { it.packageName == app.packageName }
@@ -183,9 +198,11 @@ class LauncherViewModel(
 
         _uiState.update { it.copy(installedApps = updatedList) }
 
-        // Persist only active items to eliminate disk write amplification
-        viewModelScope.launch(Dispatchers.IO) {
-            val stats = updatedList
+        // Debounced background write to eliminate disk write amplification
+        usagePersistJob?.cancel()
+        usagePersistJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(1000L) // 1 second debounce window
+            val stats = _uiState.value.installedApps
                 .filter { it.usageCount > 0 || it.isFavorite }
                 .map { AppUsageStats(it.packageName, it.usageCount, it.isFavorite) }
             appRepository.saveUsageStats(stats)

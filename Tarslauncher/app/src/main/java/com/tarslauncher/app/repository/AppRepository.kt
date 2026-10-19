@@ -12,6 +12,8 @@ import com.tarslauncher.app.utils.SecurityHelper
 import com.tarslauncher.app.utils.base64ToDrawable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class AppRepository(
@@ -27,6 +29,13 @@ class AppRepository(
     @Volatile
     private var cachedInstalledApps: List<AppInfo>? = null
 
+    @Volatile
+    private var cachedPwas: List<PwaInfo>? = null
+
+    private val pwaMutex = Mutex()
+    private val foldersMutex = Mutex()
+    private val usageStatsMutex = Mutex()
+
     companion object {
         private const val TAG = "AppRepository"
         private val PWA_LIST_TYPE = object : TypeToken<List<PwaInfo>>() {}.type
@@ -39,6 +48,7 @@ class AppRepository(
 
     fun invalidateAppCache() {
         cachedInstalledApps = null
+        cachedPwas = null
     }
 
     suspend fun getLastBackupTime(): Long = withContext(Dispatchers.IO) {
@@ -186,11 +196,13 @@ class AppRepository(
     }
 
     suspend fun saveUsageStats(stats: List<AppUsageStats>) = withContext(Dispatchers.IO) {
-        try {
-            val json = gson.toJson(stats)
-            dataStore.saveUsageStatsJson(json)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving usage stats", e)
+        usageStatsMutex.withLock {
+            try {
+                val json = gson.toJson(stats)
+                dataStore.saveUsageStatsJson(json)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving usage stats", e)
+            }
         }
     }
 
@@ -229,27 +241,33 @@ class AppRepository(
     }
 
     suspend fun saveFolders(folders: List<FolderInfo>) = withContext(Dispatchers.IO) {
-        try {
-            val persistList = folders.map { f ->
-                PersistFolder(id = f.id, apps = f.apps.map { it.packageName })
+        foldersMutex.withLock {
+            try {
+                val persistList = folders.map { f ->
+                    PersistFolder(id = f.id, apps = f.apps.map { it.packageName })
+                }
+                val json = gson.toJson(persistList)
+                dataStore.saveFoldersJson(json)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving folders", e)
             }
-            val json = gson.toJson(persistList)
-            dataStore.saveFoldersJson(json)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving folders", e)
         }
     }
 
     // PWA (Progressive Web Apps) Management
-    suspend fun getInstalledPwas(): RepositoryResult<List<PwaInfo>> = withContext(Dispatchers.IO) {
+    suspend fun getInstalledPwas(forceRefresh: Boolean = false): RepositoryResult<List<PwaInfo>> = withContext(Dispatchers.IO) {
         try {
-            val json = dataStore.getPwasJson()
-            if (!json.isNullOrBlank()) {
-                val list: List<PwaInfo> = gson.fromJson(json, PWA_LIST_TYPE) ?: emptyList()
-                RepositoryResult.Success(list)
-            } else {
-                RepositoryResult.Success(emptyList())
+            if (!forceRefresh && cachedPwas != null) {
+                return@withContext RepositoryResult.Success(cachedPwas!!)
             }
+            val json = dataStore.getPwasJson()
+            val list: List<PwaInfo> = if (!json.isNullOrBlank()) {
+                gson.fromJson(json, PWA_LIST_TYPE) ?: emptyList()
+            } else {
+                emptyList()
+            }
+            cachedPwas = list
+            RepositoryResult.Success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Error loading PWAs", e)
             RepositoryResult.Error(e, "Web uygulamaları yüklenemedi.")
@@ -257,31 +275,37 @@ class AppRepository(
     }
 
     suspend fun savePwa(pwa: PwaInfo): RepositoryResult<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
-            currentList.removeAll { it.id == pwa.id || (pwa.url.isNotBlank() && it.url == pwa.url) }
-            currentList.add(pwa)
-            val json = gson.toJson(currentList)
-            dataStore.savePwasJson(json)
-            invalidateAppCache()
-            RepositoryResult.Success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving PWA", e)
-            RepositoryResult.Error(e, "Web uygulaması kaydedilemedi.")
+        pwaMutex.withLock {
+            try {
+                val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
+                currentList.removeAll { it.id == pwa.id || (pwa.url.isNotBlank() && it.url == pwa.url) }
+                currentList.add(pwa)
+                val json = gson.toJson(currentList)
+                dataStore.savePwasJson(json)
+                cachedPwas = currentList
+                invalidateAppCache()
+                RepositoryResult.Success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving PWA", e)
+                RepositoryResult.Error(e, "Web uygulaması kaydedilemedi.")
+            }
         }
     }
 
     suspend fun deletePwa(pwaId: String): RepositoryResult<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
-            currentList.removeAll { it.id == pwaId }
-            val json = gson.toJson(currentList)
-            dataStore.savePwasJson(json)
-            invalidateAppCache()
-            RepositoryResult.Success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting PWA", e)
-            RepositoryResult.Error(e, "Web uygulaması silinemedi.")
+        pwaMutex.withLock {
+            try {
+                val currentList = (getInstalledPwas() as? RepositoryResult.Success)?.data?.toMutableList() ?: mutableListOf()
+                currentList.removeAll { it.id == pwaId }
+                val json = gson.toJson(currentList)
+                dataStore.savePwasJson(json)
+                cachedPwas = currentList
+                invalidateAppCache()
+                RepositoryResult.Success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting PWA", e)
+                RepositoryResult.Error(e, "Web uygulaması silinemedi.")
+            }
         }
     }
 

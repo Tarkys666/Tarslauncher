@@ -53,7 +53,9 @@ sealed class SettingsItem {
         val type: SettingType,
         val currentValue: Any? = null,
         val onValueChange: ((Any) -> Unit)? = null,
-        val onClick: (() -> Unit)? = null
+        val onClick: (() -> Unit)? = null,
+        val enabled: Boolean = true,
+        val buttonLabel: String? = null
     ) : SettingsItem()
 }
 
@@ -200,7 +202,8 @@ fun SettingsScreen(
                     title = "Grid Size",
                     description = "Current: $gridSize",
                     type = SettingType.BUTTON,
-                    onClick = { showGridSizeDialog = true }
+                    onClick = { showGridSizeDialog = true },
+                    buttonLabel = "SELECT"
                 ))
                 add(SettingsItem.Setting(
                     title = "Button Color",
@@ -218,7 +221,8 @@ fun SettingsScreen(
                     title = "Icon Pack",
                     description = selectedIconPack ?: "Default",
                     type = SettingType.BUTTON,
-                    onClick = { showIconPackDialog = true }
+                    onClick = { showIconPackDialog = true },
+                    buttonLabel = "SELECT"
                 )
             )
         ),
@@ -248,13 +252,15 @@ fun SettingsScreen(
                     title = "Add Web App (PWA)",
                     description = "Install websites as native apps with Presets or URL",
                     type = SettingType.BUTTON,
-                    onClick = { showAddPwaDialog = true }
+                    onClick = { showAddPwaDialog = true },
+                    buttonLabel = "ADD"
                 ),
                 SettingsItem.Setting(
                     title = "Manage Web Apps",
                     description = "${installedPwas.size} web app(s) installed",
                     type = SettingType.BUTTON,
-                    onClick = { showManagePwasDialog = true }
+                    onClick = { showManagePwasDialog = true },
+                    buttonLabel = "MANAGE"
                 )
             )
         ),
@@ -266,13 +272,17 @@ fun SettingsScreen(
                     title = "Export Backup",
                     description = if (isSyncing) "Working..." else if (lastBackupTime > 0) "Last: " + SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(lastBackupTime)) else "Save layout, settings & notes to a file",
                     type = SettingType.BUTTON,
-                    onClick = { exportLauncher.launch("tars-backup.json") }
+                    onClick = { exportLauncher.launch("tars-backup.json") },
+                    enabled = !isSyncing,
+                    buttonLabel = "EXPORT"
                 ),
                 SettingsItem.Setting(
                     title = "Import Backup",
                     description = if (isSyncing) "Working..." else "Restore from a backup file",
                     type = SettingType.BUTTON,
-                    onClick = { importLauncher.launch(arrayOf("application/json", "text/plain")) }
+                    onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
+                    enabled = !isSyncing,
+                    buttonLabel = "IMPORT"
                 )
             )
         ),
@@ -284,7 +294,8 @@ fun SettingsScreen(
                     title = "Notlarım",
                     description = if (workspaceItems.isEmpty()) "Henüz not yok" else "${workspaceItems.size} kayıtlı not",
                     type = SettingType.BUTTON,
-                    onClick = { showNotesDialog = true }
+                    onClick = { showNotesDialog = true },
+                    buttonLabel = "AÇ"
                 )
             )
         ),
@@ -301,13 +312,15 @@ fun SettingsScreen(
                     title = "Check for Updates",
                     description = "Check GitHub for new releases",
                     type = SettingType.BUTTON,
-                    onClick = onCheckForUpdates
+                    onClick = onCheckForUpdates,
+                    buttonLabel = "CHECK"
                 ),
                 SettingsItem.Setting(
                     title = "Privacy Policy",
                     description = "Tarslauncher – Privacy Policy",
                     type = SettingType.BUTTON,
-                    onClick = { showPrivacyPolicyDialog = true }
+                    onClick = { showPrivacyPolicyDialog = true },
+                    buttonLabel = "VIEW"
                 )
             )
         )
@@ -321,6 +334,7 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(Color.Black)
             .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(top = 64.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
             .verticalScroll(scrollState)
     ) {
@@ -729,19 +743,40 @@ fun SettingsItemView(
                     )
                 }
                 SettingType.BUTTON -> {
+                    val label = setting.buttonLabel ?: when {
+                        setting.title.contains("Export", ignoreCase = true) -> "EXPORT"
+                        setting.title.contains("Import", ignoreCase = true) -> "IMPORT"
+                        setting.title.contains("Check", ignoreCase = true) || setting.title.contains("Update", ignoreCase = true) -> "CHECK"
+                        setting.title.contains("Manage", ignoreCase = true) -> "MANAGE"
+                        setting.title.contains("Add", ignoreCase = true) -> "ADD"
+                        setting.title.contains("Grid", ignoreCase = true) || setting.title.contains("Icon", ignoreCase = true) -> "SELECT"
+                        setting.title.contains("Privacy", ignoreCase = true) -> "VIEW"
+                        setting.title.contains("Notlar", ignoreCase = true) -> "AÇ"
+                        else -> "OPEN"
+                    }
+
                     Button(
                         onClick = { setting.onClick?.invoke() },
+                        enabled = setting.enabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
-                            contentColor = Color.White
+                            containerColor = Color(0xFF1E1E1E),
+                            contentColor = Color.White,
+                            disabledContainerColor = Color(0xFF141414),
+                            disabledContentColor = Color(0xFF666666)
                         ),
-                        border = BorderStroke(1.dp, Color.Black),
-                        shape = RoundedCornerShape(6.dp)
+                        border = BorderStroke(
+                            1.dp,
+                            if (setting.enabled) Color(0xFF444444) else Color(0xFF262626)
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "OPEN",
-                            color = Color.White,
-                            fontSize = 10.sp
+                            text = label,
+                            color = if (setting.enabled) Color.White else Color(0xFF666666),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }

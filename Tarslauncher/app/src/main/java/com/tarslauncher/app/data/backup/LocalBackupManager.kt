@@ -13,6 +13,8 @@ import com.tarslauncher.app.data.model.LauncherSettings
 import com.tarslauncher.app.data.model.PwaInfo
 import com.tarslauncher.app.data.model.WorkspaceItem
 import com.tarslauncher.app.data.notes.LocalNotesRepository
+import com.tarslauncher.app.utils.PwaLauncherHelper
+import com.tarslauncher.app.utils.SecurityHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -53,7 +55,7 @@ class LocalBackupManager(
                 add("settings", settings)
                 add("notes", gson.toJsonTree(notes.snapshot()))
             }
-            val out = appContext.contentResolver.openOutputStream(target, "wt")
+            val out = appContext.contentResolver.openOutputStream(target, "w")
                 ?: return@withContext Result.failure(Exception("Hedef dosya açılamadı."))
             out.bufferedWriter(Charsets.UTF_8).use { it.write(gson.toJson(root)) }
             dataStore.setLastBackupTime(now)
@@ -88,8 +90,26 @@ class LocalBackupManager(
             root.stringOrNull("usageStatsJson")?.takeIf { isJsonArray(it) }?.let { dataStore.saveUsageStatsJson(it) }
             root.stringOrNull("pwasJson")?.let { raw ->
                 val pwas: List<PwaInfo> = gson.fromJson(raw, object : TypeToken<List<PwaInfo>>() {}.type) ?: emptyList()
-                // Yalnızca https adresli PWA'lar içe aktarılır.
-                val safe = pwas.filter { it.url.startsWith("https://", ignoreCase = true) }.take(MAX_PWAS)
+                val pm = appContext.packageManager
+                val safe = pwas.mapNotNull { pwa ->
+                    val cleanUrl = PwaLauncherHelper.sanitizeWebUrl(pwa.url)
+                    val isValidPackage = !pwa.shortcutPackage.isNullOrBlank() &&
+                        SecurityHelper.validatePackageName(pwa.shortcutPackage) &&
+                        runCatching { pm.getPackageInfo(pwa.shortcutPackage, 0) }.isSuccess
+
+                    val safePackage = if (isValidPackage) pwa.shortcutPackage else null
+                    val safeShortcutId = if (isValidPackage) pwa.shortcutId else null
+
+                    if (cleanUrl != null || (safePackage != null && !safeShortcutId.isNullOrBlank())) {
+                        pwa.copy(
+                            url = cleanUrl ?: "",
+                            shortcutPackage = safePackage,
+                            shortcutId = safeShortcutId
+                        )
+                    } else {
+                        null
+                    }
+                }.take(MAX_PWAS)
                 dataStore.savePwasJson(gson.toJson(safe))
             }
 
@@ -118,8 +138,15 @@ class LocalBackupManager(
             val at = root.get("updatedAt")?.takeIf { !it.isJsonNull }?.asLong ?: System.currentTimeMillis()
             dataStore.setLastBackupTime(at)
             Result.success(at)
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            if (t is OutOfMemoryError || t is StackOverflowError) {
+                Result.failure(Exception("Yedek dosyası okunamadı veya çok büyük/karmaşık."))
+            } else if (t is Exception) {
+                Result.failure(t)
+            } else {
+                Result.failure(Exception(t))
+            }
         }
     }
 

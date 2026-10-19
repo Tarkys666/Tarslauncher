@@ -13,14 +13,18 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.res.ResourcesCompat
 import com.tarslauncher.app.utils.drawableToBitmap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 
 @Stable
-class IconPackLoader(private val context: Context, private val packPackageName: String) {
+class IconPackLoader(context: Context, private val packPackageName: String) {
 
+    private val appContext: Context = context.applicationContext
     private val iconMap = ConcurrentHashMap<String, String>()
     private val packageFallbackMap = ConcurrentHashMap<String, String>()
     private val resIdCache = ConcurrentHashMap<String, Int>()
@@ -41,10 +45,12 @@ class IconPackLoader(private val context: Context, private val packPackageName: 
     fun load() {
         if (isLoaded) return
         try {
-            val resources = context.packageManager.getResourcesForApplication(packPackageName)
+            val resources = appContext.packageManager.getResourcesForApplication(packPackageName)
             packResources = resources
             loadAppFilter(resources)
-            isLoaded = true
+            CoroutineScope(Dispatchers.Main).launch {
+                isLoaded = true
+            }
         } catch (_: PackageManager.NameNotFoundException) {
             // İkon paketi bulunamadı veya kaldırıldı
         }

@@ -103,10 +103,16 @@ class PinShortcutActivity : ComponentActivity() {
             null
         }
 
+        val callerLabel = try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(shortcutInfo.`package`, 0)).toString()
+        } catch (e: Exception) {
+            shortcutPackage ?: "Bilinmeyen Uygulama"
+        }
+
         val dialogMessage = if (!sanitizedUrl.isNullOrBlank()) {
-            "\"$label\" kısayolunu ana ekranınıza eklemek istiyor musunuz?\n\nHedef: $sanitizedUrl"
+            "$callerLabel uygulaması, \"$label\" kısayolunu ana ekranınıza eklemek istiyor.\n\nHedef: $sanitizedUrl"
         } else {
-            "\"$label\" kısayolunu ana ekranınıza eklemek istiyor musunuz?"
+            "$callerLabel uygulaması, \"$label\" kısayolunu ana ekranınıza eklemek istiyor."
         }
 
         var isAccepted = false

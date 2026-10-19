@@ -148,7 +148,7 @@ class UpdateManager(
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         var targetFile: File? = null
-        if (!isTrustedDownloadUrl(downloadUrl)) {
+        if (!isTrustedDownloadUrl(downloadUrl, repoOwner, repoName)) {
             return@withContext Result.failure(SecurityException("Güvenilmeyen indirme adresi reddedildi."))
         }
         if (expectedHash.isNullOrBlank() || !SHA256_PATTERN.matches(expectedHash.trim())) {
@@ -166,7 +166,11 @@ class UpdateManager(
                 }
             }
 
-            val file = File(updatesDir, "TarsLauncher-v$versionName.apk")
+            val safeVersionName = versionName.replace(Regex("[^a-zA-Z0-9._-]"), "").ifEmpty { "update" }
+            val file = File(updatesDir, "TarsLauncher-v$safeVersionName.apk")
+            if (!file.canonicalFile.startsWith(updatesDir.canonicalFile)) {
+                return@withContext Result.failure(SecurityException("Geçersiz dosya yolu."))
+            }
             targetFile = file
 
             // Download supporting redirects (GitHub redirects releases to S3/CDN)
@@ -194,10 +198,15 @@ class UpdateManager(
                         val location = connection.getHeaderField("Location")
                             ?: return@withContext Result.failure(Exception("İndirme yönlendirme adresi bulunamadı."))
                         connection.disconnect()
-                        if (!isTrustedDownloadUrl(location)) {
+                        val resolvedUrl = try {
+                            java.net.URI(currentUrl).resolve(location).toString()
+                        } catch (e: Exception) {
+                            location
+                        }
+                        if (!isTrustedDownloadUrl(resolvedUrl, repoOwner, repoName)) {
                             return@withContext Result.failure(SecurityException("Güvenilmeyen yönlendirme adresi reddedildi."))
                         }
-                        currentUrl = location
+                        currentUrl = resolvedUrl
                         redirects++
                         if (redirects > maxRedirects) {
                             return@withContext Result.failure(Exception("Çok fazla yönlendirme hatası."))
@@ -318,15 +327,24 @@ class UpdateManager(
         val pm = context.packageManager
         return try {
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES or android.content.pm.PackageManager.GET_SIGNATURES
             } else {
                 android.content.pm.PackageManager.GET_SIGNATURES
             }
-            val archive = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
+            var archive = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
                 ?: return "APK dosyası okunamadı veya bozuk."
             if (archive.packageName != context.packageName) {
                 return "APK paket adı uyuşmuyor."
             }
+
+            // Android 9-13 getPackageArchiveInfo bug fallback: if neither signingInfo nor signatures are returned
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && archive.signingInfo == null && archive.signatures == null) {
+                val fallbackArchive = pm.getPackageArchiveInfo(apkFile.absolutePath, android.content.pm.PackageManager.GET_SIGNATURES)
+                if (fallbackArchive != null) {
+                    archive = fallbackArchive
+                }
+            }
+
             val installed = pm.getPackageInfo(context.packageName, flags)
 
             val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) installed.longVersionCode else installed.versionCode.toLong()
@@ -336,18 +354,33 @@ class UpdateManager(
             }
 
             fun certs(info: android.content.pm.PackageInfo): Set<String> {
-                val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    info.signingInfo?.apkContentsSigners
-                } else {
-                    info.signatures
-                } ?: return emptySet()
-                return sigs.map { s ->
-                    MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
-                        .joinToString("") { "%02x".format(it) }
-                }.toSet()
+                val hashes = mutableSetOf<String>()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && info.signingInfo != null) {
+                    val sInfo = info.signingInfo
+                    sInfo?.apkContentsSigners?.forEach { s ->
+                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
+                            .joinToString("") { "%02x".format(it) })
+                    }
+                    sInfo?.signingCertificateHistory?.forEach { s ->
+                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
+                            .joinToString("") { "%02x".format(it) })
+                    }
+                }
+                if (hashes.isEmpty()) {
+                    info.signatures?.forEach { s ->
+                        hashes.add(MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
+                            .joinToString("") { "%02x".format(it) })
+                    }
+                }
+                return hashes
             }
             val archiveCerts = certs(archive)
-            if (archiveCerts.isEmpty() || archiveCerts != certs(installed)) {
+            val installedCerts = certs(installed)
+            val matches = archiveCerts.isNotEmpty() && (
+                archiveCerts == installedCerts ||
+                (installedCerts.containsAll(archiveCerts) && archiveCerts.intersect(installedCerts).isNotEmpty())
+            )
+            if (!matches) {
                 return "APK imza sertifikası yüklü uygulamayla eşleşmiyor."
             }
             null
@@ -363,14 +396,36 @@ class UpdateManager(
     companion object {
         private val SHA256_PATTERN = Regex("^(?:sha-?256:)?[a-fA-F0-9]{64}$", RegexOption.IGNORE_CASE)
 
-        /** Yalnızca HTTPS ve GitHub'a ait alanlardan indirmeye izin verir. */
-        fun isTrustedDownloadUrl(raw: String): Boolean {
+        /**
+         * Yalnızca HTTPS ve GitHub'a ait alanlardan veya release yönlendirmelerinden (CDN / S3) indirmeye izin verir.
+         * İndirme URL'sinin repository yolu (/Tarkys666/Tarslauncher/) ile başladığını doğrular.
+         */
+        fun isTrustedDownloadUrl(
+            raw: String,
+            repoOwner: String = "Tarkys666",
+            repoName: String = "Tarslauncher"
+        ): Boolean {
             return try {
                 val uri = java.net.URI(raw)
                 val host = uri.host?.lowercase() ?: return false
-                uri.scheme.equals("https", ignoreCase = true) &&
-                    uri.userInfo == null &&
-                    (host == "github.com" || host.endsWith(".githubusercontent.com"))
+                if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) {
+                    return false
+                }
+                val isGitHub = host == "github.com"
+                val isGitHubCdn = host == "objects.githubusercontent.com" || host.endsWith(".githubusercontent.com")
+                val isGitHubS3 = host.endsWith(".amazonaws.com") &&
+                    (host.startsWith("github-production-release-asset-") || host.contains("github"))
+
+                val expectedRepoPath = "/${repoOwner.trim('/')}/${repoName.trim('/')}/".lowercase()
+
+                when {
+                    isGitHub -> {
+                        val path = uri.path?.lowercase().orEmpty()
+                        path.startsWith(expectedRepoPath)
+                    }
+                    isGitHubCdn || isGitHubS3 -> true
+                    else -> false
+                }
             } catch (e: Exception) {
                 false
             }

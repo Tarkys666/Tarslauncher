@@ -103,36 +103,91 @@ class LauncherDataStore(private val context: Context) {
         context.dataStore.edit { it[KEY_FOLDERS_JSON] = json }
     }
 
-    suspend fun getFoldersJson(): String? {
-        return context.dataStore.data.first()[KEY_FOLDERS_JSON]
+    suspend fun getFoldersJson(): String? = try {
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    Log.e(TAG, "Error reading folders from DataStore", exception)
+                    emit(emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .first()[KEY_FOLDERS_JSON]
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to get folders json", e)
+        null
     }
 
     suspend fun saveUsageStatsJson(json: String) {
         context.dataStore.edit { it[KEY_USAGE_STATS_JSON] = json }
     }
 
-    suspend fun getUsageStatsJson(): String? {
-        return context.dataStore.data.first()[KEY_USAGE_STATS_JSON]
+    suspend fun getUsageStatsJson(): String? = try {
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    Log.e(TAG, "Error reading usage stats from DataStore", exception)
+                    emit(emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .first()[KEY_USAGE_STATS_JSON]
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to get usage stats json", e)
+        null
     }
 
     suspend fun savePwasJson(json: String) {
         context.dataStore.edit { it[KEY_PWAS_JSON] = json }
     }
 
-    suspend fun getPwasJson(): String? {
-        return context.dataStore.data.first()[KEY_PWAS_JSON]
+    suspend fun getPwasJson(): String? = try {
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    Log.e(TAG, "Error reading pwas from DataStore", exception)
+                    emit(emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .first()[KEY_PWAS_JSON]
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to get pwas json", e)
+        null
     }
 
-    suspend fun isPwasSeeded(): Boolean {
-        return context.dataStore.data.first()[KEY_PWAS_SEEDED] ?: false
+    suspend fun isPwasSeeded(): Boolean = try {
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) emit(emptyPreferences()) else throw exception
+            }
+            .first()[KEY_PWAS_SEEDED] ?: false
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to read pwas seeded status", e)
+        false
     }
 
     suspend fun setPwasSeeded(seeded: Boolean) {
         context.dataStore.edit { it[KEY_PWAS_SEEDED] = seeded }
     }
 
-    suspend fun getLastBackupTime(): Long {
-        return context.dataStore.data.first()[KEY_LAST_BACKUP_TIME] ?: 0L
+    suspend fun getLastBackupTime(): Long = try {
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    Log.e(TAG, "Error reading last backup time from DataStore", exception)
+                    emit(emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .first()[KEY_LAST_BACKUP_TIME] ?: 0L
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to get last backup time", e)
+        0L
     }
 
     suspend fun setLastBackupTime(time: Long) {
