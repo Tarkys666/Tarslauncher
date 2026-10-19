@@ -13,6 +13,8 @@ import java.io.ByteArrayOutputStream
 import android.graphics.Rect
 
 import androidx.collection.LruCache
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 
 private const val DEFAULT_ICON_SIZE = 192
 private const val MAX_ICON_SIZE = 384
@@ -20,9 +22,20 @@ private const val MAX_ICON_SIZE = 384
 // Fast in-memory LRU cache for rendered app icon bitmaps to eliminate
 // repetitive main-thread canvas allocations during Compose recomposition cycles.
 private val iconBitmapCache = LruCache<String, Bitmap>(200)
+private val appImageBitmapCache = LruCache<String, ImageBitmap>(200)
 
 fun clearIconBitmapCache() {
     iconBitmapCache.evictAll()
+    appImageBitmapCache.evictAll()
+}
+
+fun getAppImageBitmap(packageName: String, drawable: Drawable?): ImageBitmap? {
+    if (drawable == null) return null
+    appImageBitmapCache.get(packageName)?.let { return it }
+    val bitmap = drawableToBitmap(drawable, packageName)
+    val imageBitmap = bitmap.asImageBitmap()
+    appImageBitmapCache.put(packageName, imageBitmap)
+    return imageBitmap
 }
 
 fun drawableToBitmap(drawable: Drawable, cacheKey: String? = null): Bitmap {

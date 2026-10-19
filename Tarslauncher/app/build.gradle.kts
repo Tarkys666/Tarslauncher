@@ -73,7 +73,11 @@ android {
         // Disable split APKs to generate single APK
         ndk {
             abiFilters.clear()
-        }    }
+        }
+
+        // Strip unused localized strings and assets from AndroidX/Material libraries
+        resourceConfigurations += listOf("en")
+    }
 
     buildTypes {
         release {

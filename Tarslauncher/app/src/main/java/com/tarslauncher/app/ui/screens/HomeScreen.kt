@@ -50,6 +50,7 @@ import com.tarslauncher.app.IconPackLoader
 import com.tarslauncher.app.data.model.AppInfo
 import com.tarslauncher.app.data.model.FolderInfo
 import com.tarslauncher.app.utils.drawableToBitmap
+import com.tarslauncher.app.utils.getAppImageBitmap
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -92,45 +93,55 @@ fun HomeScreen(
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
     
-    // Responsive padding values based on screen size
-    val clockTopPadding = (screenHeight * 0.08f).coerceAtLeast(32.dp).coerceAtMost(64.dp)
-    val commandBarSpacerHeight = (screenHeight * 0.25f).coerceAtLeast(150.dp).coerceAtMost(250.dp)
+    // Responsive padding values based on screen size (memoized)
+    val clockTopPadding = remember(screenHeight) { (screenHeight * 0.08f).coerceAtLeast(32.dp).coerceAtMost(64.dp) }
+    val commandBarSpacerHeight = remember(screenHeight) { (screenHeight * 0.25f).coerceAtLeast(150.dp).coerceAtMost(250.dp) }
     
-    // Responsive font sizes
-    val clockFontSize = when {
-        screenWidth < 360.dp -> 36.sp
-        screenWidth < 480.dp -> 42.sp
-        else -> 48.sp
+    // Responsive font sizes (memoized)
+    val clockFontSize = remember(screenWidth) {
+        when {
+            screenWidth < 360.dp -> 36.sp
+            screenWidth < 480.dp -> 42.sp
+            else -> 48.sp
+        }
     }
     
-    val tarsFontSize = when {
-        screenWidth < 360.dp -> 12.sp
-        screenWidth < 480.dp -> 14.sp
-        else -> 16.sp
+    val tarsFontSize = remember(screenWidth) {
+        when {
+            screenWidth < 360.dp -> 12.sp
+            screenWidth < 480.dp -> 14.sp
+            else -> 16.sp
+        }
     }
     
-    // Responsive button sizes
-    val buttonHeight = when {
-        screenHeight < 600.dp -> 28.dp
-        screenHeight < 800.dp -> 32.dp
-        else -> 36.dp
+    // Responsive button sizes (memoized)
+    val buttonHeight = remember(screenHeight) {
+        when {
+            screenHeight < 600.dp -> 28.dp
+            screenHeight < 800.dp -> 32.dp
+            else -> 36.dp
+        }
     }
     
-    val buttonFontSize = when {
-        screenWidth < 360.dp -> 7.sp
-        screenWidth < 480.dp -> 8.sp
-        else -> 9.sp
+    val buttonFontSize = remember(screenWidth) {
+        when {
+            screenWidth < 360.dp -> 7.sp
+            screenWidth < 480.dp -> 8.sp
+            else -> 9.sp
+        }
     }
     
-    // Responsive app drawer height
-    val appDrawerHeight = when {
-        screenHeight < 600.dp -> 80.dp
-        screenHeight < 800.dp -> 100.dp
-        else -> 120.dp
+    // Responsive app drawer height (memoized)
+    val appDrawerHeight = remember(screenHeight) {
+        when {
+            screenHeight < 600.dp -> 80.dp
+            screenHeight < 800.dp -> 100.dp
+            else -> 120.dp
+        }
     }
     
-    // Responsive padding
-    val mainPadding = (screenWidth * 0.04f).coerceAtLeast(12.dp).coerceAtMost(20.dp)
+    // Responsive padding (memoized)
+    val mainPadding = remember(screenWidth) { (screenWidth * 0.04f).coerceAtLeast(12.dp).coerceAtMost(20.dp) }
 
     Box(
         modifier = Modifier
@@ -483,7 +494,7 @@ fun FolderItem(
                                     val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
                                         val activityName = app.activityName
                                         iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-                                            ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
+                                            ?: getAppImageBitmap(app.packageName, app.icon)
                                     }
 
                                     if (appIcon != null) {
@@ -518,7 +529,7 @@ fun AppIconWithoutName(
     val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
         val activityName = app.activityName
         iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-            ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
+            ?: getAppImageBitmap(app.packageName, app.icon)
     }
     
     val interactionSource = remember { MutableInteractionSource() }
@@ -676,7 +687,7 @@ fun FolderSelectItem(
                                 val isPackLoaded = iconPackLoader?.isLoaded == true
                                 val appIcon = remember(app.packageName, iconPackLoader, isPackLoaded) {
                                     iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
-                                        ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
+                                        ?: getAppImageBitmap(app.packageName, app.icon)
                                 }
 
                                 if (appIcon != null) {
@@ -925,7 +936,7 @@ fun FolderAppItem(
         try {
             val activityName = app.activityName
             iconPackLoader?.getImageBitmapForApp(app.packageName, activityName, app.icon)
-                ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
+                ?: getAppImageBitmap(app.packageName, app.icon)
         } catch (e: Exception) {
             null
         }

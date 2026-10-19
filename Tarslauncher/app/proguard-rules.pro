@@ -10,7 +10,6 @@
 # -classobfuscationdictionary dictionary.txt
 # -packageobfuscationdictionary dictionary.txt
 -repackageclasses ''
--flattenpackagehierarchy
 
 # Remove debugging information
 -renamesourcefileattribute SourceFile
@@ -24,7 +23,6 @@
 # Keep data model classes and their fields for Gson serialization
 -keep class com.tarslauncher.app.data.model.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.model.** { *; }
--keep class com.tarslauncher.app.data.sync.** { *; }
 -keep class com.tarslauncher.app.data.updater.** { *; }
 -keepclassmembers class com.tarslauncher.app.data.updater.** { *; }
 

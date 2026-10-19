@@ -148,7 +148,7 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
         val drawable = getIconForApp(appPackageName, appActivityName) ?: fallbackIcon ?: return null
 
         return try {
-            val bitmap = drawableToBitmap(drawable).asImageBitmap()
+            val bitmap = drawableToBitmap(drawable, componentString).asImageBitmap()
             imageBitmapCache.put(componentString, bitmap)
             bitmap
         } catch (_: Exception) {

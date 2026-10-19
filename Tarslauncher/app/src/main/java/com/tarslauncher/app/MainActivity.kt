@@ -135,6 +135,30 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
     }
     val onAddPwa = remember(viewModel) { { name: String, url: String -> viewModel.addPwa(name, url) } }
     val onDeletePwa = remember(viewModel) { { pwaId: String -> viewModel.deletePwa(pwaId) } }
+    val onShowAppDrawerChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAppDrawer(v) } }
+    val onGridSizeChange = remember(viewModel) { { g: GridSize -> viewModel.updateGridSize(g) } }
+    val onIconPackSelected = remember(viewModel) { { p: String? -> viewModel.updateSelectedIconPack(p) } }
+    val onButtonColorModeChange = remember(viewModel) { { m: String -> viewModel.updateButtonColorMode(m) } }
+    val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
+    val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
+    val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
+    val onExportBackup = remember(context, viewModel) {
+        { uri: android.net.Uri ->
+            viewModel.exportBackup(uri) { _, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val onImportBackup = remember(context, viewModel) {
+        { uri: android.net.Uri ->
+            viewModel.importBackup(uri) { _, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val onCheckForUpdates = remember(viewModel) {
+        { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
+    }
 
     Box(
         modifier = Modifier
@@ -163,20 +187,20 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                 SettingsScreen(
                     onBackClick = onBackClick,
                     showAppDrawer = uiState.showAppDrawer,
-                    onShowAppDrawerChange = { viewModel.updateShowAppDrawer(it) },
+                    onShowAppDrawerChange = onShowAppDrawerChange,
                     gridSize = uiState.gridSize,
-                    onGridSizeChange = { viewModel.updateGridSize(it) },
+                    onGridSizeChange = onGridSizeChange,
                     installedIconPacks = uiState.iconPacks,
                     selectedIconPack = uiState.selectedIconPack,
-                    onIconPackSelected = { viewModel.updateSelectedIconPack(it) },
+                    onIconPackSelected = onIconPackSelected,
                     buttonColorMode = uiState.buttonColorMode,
-                    onButtonColorModeChange = { viewModel.updateButtonColorMode(it) },
+                    onButtonColorModeChange = onButtonColorModeChange,
                     showTarsHeader = uiState.showTarsHeader,
-                    onShowTarsHeaderChange = { viewModel.updateShowTarsHeader(it) },
+                    onShowTarsHeaderChange = onShowTarsHeaderChange,
                     showClock = uiState.showClock,
-                    onShowClockChange = { viewModel.updateShowClock(it) },
+                    onShowClockChange = onShowClockChange,
                     appDrawerIconSize = uiState.appDrawerIconSize,
-                    onAppDrawerIconSizeChange = { viewModel.updateAppDrawerIconSize(it) },
+                    onAppDrawerIconSizeChange = onAppDrawerIconSizeChange,
                     appVersion = BuildConfig.VERSION_NAME,
                     installedPwas = uiState.installedPwas,
                     pwaPresets = uiState.pwaPresets,
@@ -184,19 +208,9 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
                     onDeletePwa = onDeletePwa,
                     isSyncing = uiState.isSyncing,
                     lastBackupTime = uiState.lastBackupTime,
-                    onExportBackup = { uri ->
-                        viewModel.exportBackup(uri) { _, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onImportBackup = { uri ->
-                        viewModel.importBackup(uri) { _, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onCheckForUpdates = {
-                        viewModel.checkForUpdates(BuildConfig.VERSION_NAME)
-                    }
+                    onExportBackup = onExportBackup,
+                    onImportBackup = onImportBackup,
+                    onCheckForUpdates = onCheckForUpdates
                 )
             }
 
