@@ -29,34 +29,36 @@ class UpdateManager(
     private val gson = Gson()
 
     suspend fun checkForUpdate(currentVersion: String): Result<UpdateInfo> = withContext(Dispatchers.IO) {
-        // 1. Try static version.json first (Immune to GitHub 60 req/hr API rate limits and 403)
+        // 1. Try GitHub Releases API first (authoritative release hash directly from GitHub)
+        val apiResult = checkViaGitHubApi(currentVersion)
+        if (apiResult.isSuccess && apiResult.getOrNull()?.expectedHash != null) {
+            return@withContext apiResult
+        }
+
+        // 2. Fallback to static version.json with cache-busting if API failed (e.g. rate limit) or had no hash
         val staticResult = checkViaStaticVersion(currentVersion)
         if (staticResult.isSuccess && staticResult.getOrNull()?.hasUpdate == true) {
             return@withContext staticResult
         }
 
-        // 2. Fallback to GitHub Releases API if static version does not show an update or failed
-        val apiResult = checkViaGitHubApi(currentVersion)
         if (apiResult.isSuccess) {
             return@withContext apiResult
         }
 
-        // 3. If GitHub API failed (e.g. rate limit), return static result if available
-        if (staticResult.isSuccess) {
-            return@withContext staticResult
-        }
-
-        apiResult
+        staticResult
     }
 
     private fun checkViaStaticVersion(currentVersion: String): Result<UpdateInfo> {
         return try {
-            val rawUrl = "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json"
+            val rawUrl = "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json?t=${System.currentTimeMillis()}"
             val url = URL(rawUrl)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 8000
                 readTimeout = 10000
+                useCaches = false
+                setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+                setRequestProperty("Pragma", "no-cache")
                 setRequestProperty("User-Agent", "TarsLauncher-Android")
             }
 
@@ -124,9 +126,29 @@ class UpdateManager(
                 it.name.orEmpty().endsWith(".apk", ignoreCase = true) 
             } ?: return Result.failure(Exception("Sürüm içinde APK dosyası bulunamadı."))
 
-            val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
-            val hashInBody = Regex("(?i)(?:sha[-_]?256|hash)[\\s:=]+([a-fA-F0-9]{64})")
+            var hashInBody = Regex("(?i)(?:sha[-_]?256|hash)[\\s:=]+([a-fA-F0-9]{64})")
                 .find(release.body.orEmpty())?.groupValues?.get(1)
+
+            if (hashInBody.isNullOrBlank()) {
+                val shaAsset = release.assets?.firstOrNull { it.name.orEmpty().endsWith(".sha256", ignoreCase = true) }
+                if (shaAsset != null && !shaAsset.downloadUrl.isNullOrBlank()) {
+                    try {
+                        val shaUrl = URL(shaAsset.downloadUrl)
+                        val shaConn = (shaUrl.openConnection() as HttpURLConnection).apply {
+                            requestMethod = "GET"
+                            connectTimeout = 8000
+                            readTimeout = 8000
+                            setRequestProperty("User-Agent", "TarsLauncher-Android")
+                        }
+                        if (shaConn.responseCode in 200..299) {
+                            val shaText = shaConn.inputStream.bufferedReader().use { it.readText() }
+                            hashInBody = Regex("([a-fA-F0-9]{64})").find(shaText)?.groupValues?.get(1)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val isNewer = isNewerVersion(remoteVersion = tagName, currentVersion = currentVersion)
 
             val updateInfo = UpdateInfo(
                 versionName = tagName,
