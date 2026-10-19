@@ -109,10 +109,27 @@ fun OnboardingScreen(onOnboardingComplete: () -> Unit) {
                             1 -> StepFolderTutorial()
                             2 -> StepDefaultLauncher(
                                 onSetDefaultClick = {
-                                    try {
-                                        context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-                                    } catch (e: Exception) {
-                                        // Fallback or ignore
+                                    var launched = false
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                        val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
+                                        if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true) {
+                                            val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
+                                            try {
+                                                context.startActivity(intent)
+                                                launched = true
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
+                                    if (!launched) {
+                                        try {
+                                            val intent = android.content.Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {
+                                            try {
+                                                val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        }
                                     }
                                 }
                             )

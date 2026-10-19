@@ -160,11 +160,7 @@ class PinShortcutActivity : ComponentActivity() {
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             val iconBase64 = iconDrawable?.let { drawable ->
                 val bitmap = drawableToBitmap(drawable)
-                val base64 = bitmapToBase64(bitmap)
-                if (drawable !is android.graphics.drawable.BitmapDrawable || drawable.bitmap != bitmap) {
-                    bitmap.recycle()
-                }
-                base64
+                bitmapToBase64(bitmap)
             }
 
             val pwaInfo = PwaInfo(

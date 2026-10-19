@@ -10,6 +10,8 @@ import com.tarslauncher.app.data.datastore.LauncherDataStore
 import com.tarslauncher.app.data.model.*
 import com.tarslauncher.app.utils.SecurityHelper
 import com.tarslauncher.app.utils.base64ToDrawable
+import com.tarslauncher.app.utils.getAppImageBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
@@ -153,9 +155,15 @@ class AppRepository(
                 )
             }
 
+            // Pre-warm icons in background to prevent first-render UI jank
+            for (app in apps) {
+                getAppImageBitmap(app.packageName, app.icon)
+            }
+
             cachedInstalledApps = apps
             RepositoryResult.Success(apps)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to load installed apps", e)
             RepositoryResult.Error(e, "Uygulamalar yüklenirken bir hata oluştu.")
         }
@@ -176,6 +184,7 @@ class AppRepository(
             }.sortedBy { it.name }
             RepositoryResult.Success(list)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to load icon packs", e)
             RepositoryResult.Error(e, "İkon paketleri yüklenirken hata oluştu.")
         }
@@ -191,6 +200,7 @@ class AppRepository(
                 RepositoryResult.Success(emptyList())
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Error parsing usage stats", e)
             RepositoryResult.Error(e, "Kullanım istatistikleri okunamadı.")
         }
@@ -270,6 +280,7 @@ class AppRepository(
             cachedPwas = list
             RepositoryResult.Success(list)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Error loading PWAs", e)
             RepositoryResult.Error(e, "Web uygulamaları yüklenemedi.")
         }

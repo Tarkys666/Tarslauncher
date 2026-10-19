@@ -62,6 +62,9 @@ import com.tarslauncher.app.data.model.PwaInfo
 private val AppInfo.componentName: String?
     get() = activityName.ifBlank { pwaId ?: shortcutId }
 
+private val FolderShape = RoundedCornerShape(8.dp)
+private val SpacedBy4Dp = Arrangement.spacedBy(4.dp)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -230,7 +233,7 @@ fun HomeScreen(
                     ) {
                         items(
                             items = installedApps,
-                            key = { "app_${it.packageName}_${it.componentName ?: ""}" },
+                            key = { it.packageName },
                             contentType = { "app_icon" }
                         ) { app ->
                             AppIconWithoutName(
@@ -383,6 +386,13 @@ fun FolderGrid(
     val cols = gridSize.columns
     val rows = gridSize.rows
     
+    val onFolderClick: (String) -> Unit = remember {
+        { folderId ->
+            selectedFolderId = folderId
+            showFolderAppsDialog = true
+        }
+    }
+
     // Stable column layout with fixed positioning
     Column(
         modifier = Modifier
@@ -405,10 +415,7 @@ fun FolderGrid(
                         key(folder.id) {
                             FolderItem(
                                 folder = folder,
-                                onClick = {
-                                    selectedFolderId = folder.id
-                                    showFolderAppsDialog = true
-                                },
+                                onFolderClick = onFolderClick,
                                 iconPackLoader = iconPackLoader,
                                 buttonColor = buttonColor
                             )
@@ -454,7 +461,7 @@ fun FolderGrid(
 @Composable
 fun FolderItem(
     folder: FolderInfo,
-    onClick: () -> Unit,
+    onFolderClick: (String) -> Unit,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color
 ) {
@@ -463,11 +470,11 @@ fun FolderItem(
     Box(
         modifier = Modifier
             .size(45.dp)
-            .background(buttonColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+            .background(buttonColor.copy(alpha = 0.1f), FolderShape)
             .clickable(
                 indication = null,
                 interactionSource = interactionSource,
-                onClick = onClick
+                onClick = { onFolderClick(folder.id) }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -480,7 +487,7 @@ fun FolderItem(
             repeat(2) { rowIndex ->
                 Row(
                     modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = SpacedBy4Dp
                 ) {
                     repeat(2) { colIndex ->
                         val appIndex = rowIndex * 2 + colIndex
@@ -656,8 +663,8 @@ fun FolderSelectItem(
     Box(
         modifier = Modifier
             .size(45.dp)
-            .background(cardColor, RoundedCornerShape(8.dp))
-            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.8f)), RoundedCornerShape(8.dp))
+            .background(cardColor, FolderShape)
+            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.8f)), FolderShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -674,7 +681,7 @@ fun FolderSelectItem(
             repeat(2) { rowIndex ->
                 Row(
                     modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = SpacedBy4Dp
                 ) {
                     repeat(2) { colIndex ->
                         val appIndex = rowIndex * 2 + colIndex
@@ -1041,9 +1048,7 @@ fun ClockHeader(
 
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_START,
-                    Lifecycle.Event.ON_RESUME -> register()
-                    Lifecycle.Event.ON_PAUSE,
+                    Lifecycle.Event.ON_START -> register()
                     Lifecycle.Event.ON_STOP -> unregister()
                     else -> {}
                 }

@@ -88,7 +88,7 @@ class LocalBackupManager(
                 val pwas: List<PwaInfo> = gson.fromJson(raw, object : TypeToken<List<PwaInfo>>() {}.type) ?: emptyList()
                 val pm = appContext.packageManager
                 val safe = pwas.mapNotNull { pwa ->
-                    val cleanUrl = PwaLauncherHelper.sanitizeWebUrl(pwa.url)
+                    val cleanUrl = pwa.url?.let { PwaLauncherHelper.sanitizeWebUrl(it) }
                     val isValidPackage = !pwa.shortcutPackage.isNullOrBlank() &&
                         SecurityHelper.validatePackageName(pwa.shortcutPackage) &&
                         runCatching { pm.getPackageInfo(pwa.shortcutPackage, 0) }.isSuccess

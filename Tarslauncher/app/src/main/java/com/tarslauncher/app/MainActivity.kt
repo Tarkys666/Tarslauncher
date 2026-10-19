@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,15 +35,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var viewModel: LauncherViewModel
     
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        
-        // Window'u Şeffaf yap ki sistem wallpaper'i görünsün
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
-        window.setFlags(
-            android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        )
         
         repository = AppRepository(applicationContext)
         val onboardingManager = OnboardingManager(this)
@@ -63,7 +57,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent
                 ) {
-                    LauncherMain(viewModel = viewModel, onboardingManager = onboardingManager)
+                    LauncherMain(
+                        viewModel = viewModel,
+                        onboardingManager = onboardingManager,
+                        repository = repository
+                    )
                 }
             }
         }
@@ -71,13 +69,18 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingManager) {
+fun LauncherMain(
+    viewModel: LauncherViewModel,
+    onboardingManager: OnboardingManager,
+    repository: AppRepository
+) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     
     // Güvenli broadcast receiver ile uygulama değişikliklerini dinle
     DisposableEffect(context) {
         val receiver = SecureBroadcastHelper.createSecurePackageReceiver {
+            repository.invalidateAppCache()
             viewModel.refreshAppList()
         }
         
@@ -96,6 +99,7 @@ fun LauncherMain(viewModel: LauncherViewModel, onboardingManager: OnboardingMana
         }
         
         onDispose {
+            SecureBroadcastHelper.cancelPending()
             try {
                 context.unregisterReceiver(receiver)
             } catch (e: Exception) {

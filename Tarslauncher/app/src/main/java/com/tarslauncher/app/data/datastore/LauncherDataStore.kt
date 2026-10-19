@@ -3,6 +3,7 @@ package com.tarslauncher.app.data.datastore
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.tarslauncher.app.data.model.GridSize
@@ -14,7 +15,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "tars_settings")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "tars_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        emptyPreferences()
+    }
+)
 
 class LauncherDataStore(private val context: Context) {
 
@@ -66,41 +72,73 @@ class LauncherDataStore(private val context: Context) {
         .distinctUntilChanged()
 
     suspend fun updateShowAppDrawer(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_APP_DRAWER] = show }
+        try {
+            context.dataStore.edit { it[KEY_SHOW_APP_DRAWER] = show }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update showAppDrawer", e)
+        }
     }
 
     suspend fun updateGridSize(gridSize: GridSize) {
-        context.dataStore.edit { it[KEY_GRID_SIZE] = gridSize.serialize() }
+        try {
+            context.dataStore.edit { it[KEY_GRID_SIZE] = gridSize.serialize() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update gridSize", e)
+        }
     }
 
     suspend fun updateButtonColorMode(mode: String) {
-        context.dataStore.edit { it[KEY_BUTTON_COLOR_MODE] = mode }
+        try {
+            context.dataStore.edit { it[KEY_BUTTON_COLOR_MODE] = mode }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update buttonColorMode", e)
+        }
     }
 
     suspend fun updateShowTarsHeader(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_TARS_HEADER] = show }
+        try {
+            context.dataStore.edit { it[KEY_SHOW_TARS_HEADER] = show }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update showTarsHeader", e)
+        }
     }
 
     suspend fun updateShowClock(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_CLOCK] = show }
+        try {
+            context.dataStore.edit { it[KEY_SHOW_CLOCK] = show }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update showClock", e)
+        }
     }
 
     suspend fun updateSelectedIconPack(iconPackPackage: String?) {
-        context.dataStore.edit {
-            if (iconPackPackage.isNullOrBlank()) {
-                it.remove(KEY_SELECTED_ICON_PACK)
-            } else {
-                it[KEY_SELECTED_ICON_PACK] = iconPackPackage
+        try {
+            context.dataStore.edit {
+                if (iconPackPackage.isNullOrBlank()) {
+                    it.remove(KEY_SELECTED_ICON_PACK)
+                } else {
+                    it[KEY_SELECTED_ICON_PACK] = iconPackPackage
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update selectedIconPack", e)
         }
     }
 
     suspend fun updateAppDrawerIconSize(size: Int) {
-        context.dataStore.edit { it[KEY_APP_DRAWER_ICON_SIZE] = size }
+        try {
+            context.dataStore.edit { it[KEY_APP_DRAWER_ICON_SIZE] = size }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update appDrawerIconSize", e)
+        }
     }
 
     suspend fun saveFoldersJson(json: String) {
-        context.dataStore.edit { it[KEY_FOLDERS_JSON] = json }
+        try {
+            context.dataStore.edit { it[KEY_FOLDERS_JSON] = json }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save folders json", e)
+        }
     }
 
     suspend fun getFoldersJson(): String? = try {
@@ -120,7 +158,11 @@ class LauncherDataStore(private val context: Context) {
     }
 
     suspend fun saveUsageStatsJson(json: String) {
-        context.dataStore.edit { it[KEY_USAGE_STATS_JSON] = json }
+        try {
+            context.dataStore.edit { it[KEY_USAGE_STATS_JSON] = json }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save usage stats json", e)
+        }
     }
 
     suspend fun getUsageStatsJson(): String? = try {
@@ -140,7 +182,11 @@ class LauncherDataStore(private val context: Context) {
     }
 
     suspend fun savePwasJson(json: String) {
-        context.dataStore.edit { it[KEY_PWAS_JSON] = json }
+        try {
+            context.dataStore.edit { it[KEY_PWAS_JSON] = json }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save pwas json", e)
+        }
     }
 
     suspend fun getPwasJson(): String? = try {
@@ -171,7 +217,11 @@ class LauncherDataStore(private val context: Context) {
     }
 
     suspend fun setPwasSeeded(seeded: Boolean) {
-        context.dataStore.edit { it[KEY_PWAS_SEEDED] = seeded }
+        try {
+            context.dataStore.edit { it[KEY_PWAS_SEEDED] = seeded }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set pwas seeded", e)
+        }
     }
 
     suspend fun getLastBackupTime(): Long = try {
@@ -191,22 +241,30 @@ class LauncherDataStore(private val context: Context) {
     }
 
     suspend fun setLastBackupTime(time: Long) {
-        context.dataStore.edit { it[KEY_LAST_BACKUP_TIME] = time }
+        try {
+            context.dataStore.edit { it[KEY_LAST_BACKUP_TIME] = time }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set last backup time", e)
+        }
     }
 
     suspend fun saveAllSettings(settings: LauncherSettings) {
-        context.dataStore.edit { prefs ->
-            prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
-            prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
-            prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
-            prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
-            prefs[KEY_SHOW_CLOCK] = settings.showClock
-            if (settings.selectedIconPack.isNullOrBlank()) {
-                prefs.remove(KEY_SELECTED_ICON_PACK)
-            } else {
-                prefs[KEY_SELECTED_ICON_PACK] = settings.selectedIconPack
+        try {
+            context.dataStore.edit { prefs ->
+                prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
+                prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
+                prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
+                prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
+                prefs[KEY_SHOW_CLOCK] = settings.showClock
+                if (settings.selectedIconPack.isNullOrBlank()) {
+                    prefs.remove(KEY_SELECTED_ICON_PACK)
+                } else {
+                    prefs[KEY_SELECTED_ICON_PACK] = settings.selectedIconPack
+                }
+                prefs[KEY_APP_DRAWER_ICON_SIZE] = settings.appDrawerIconSize
             }
-            prefs[KEY_APP_DRAWER_ICON_SIZE] = settings.appDrawerIconSize
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save all settings", e)
         }
     }
 

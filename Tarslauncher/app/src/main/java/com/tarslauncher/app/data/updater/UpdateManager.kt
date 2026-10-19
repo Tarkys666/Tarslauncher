@@ -260,7 +260,7 @@ class UpdateManager(
                 }
 
                 // Paket adı, imza sertifikası ve sürüm kodu kontrolü
-                val identityError = verifyApkIdentity(file)
+                val identityError = verifyApkIdentity(file, expectedHash)
                 if (identityError != null) {
                     file.delete()
                     return@withContext Result.failure(SecurityException(identityError))
@@ -271,8 +271,8 @@ class UpdateManager(
                 activeConnection?.disconnect()
             }
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
             targetFile?.let { if (it.exists()) it.delete() }
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure(e)
         }
     }
@@ -287,11 +287,20 @@ class UpdateManager(
 
     fun openInstallPermissionSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                data = Uri.parse("package:${context.packageName}")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(fallbackIntent)
+                } catch (_: Exception) {}
             }
-            context.startActivity(intent)
         }
     }
 
@@ -323,7 +332,7 @@ class UpdateManager(
      * ve daha yüksek sürüm kodu (downgrade engeli). Sorun varsa hata mesajı, yoksa null döner.
      */
     @Suppress("DEPRECATION")
-    fun verifyApkIdentity(apkFile: File): String? {
+    fun verifyApkIdentity(apkFile: File, expectedHash: String? = null): String? {
         val pm = context.packageManager
         return try {
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -381,6 +390,11 @@ class UpdateManager(
                 (installedCerts.containsAll(archiveCerts) && archiveCerts.intersect(installedCerts).isNotEmpty())
             )
             if (!matches) {
+                if (archiveCerts.isEmpty() && !expectedHash.isNullOrBlank() && verifyApkHash(apkFile, expectedHash)) {
+                    // Android 12-14 getPackageArchiveInfo bug fallback: archive certificates could not be read,
+                    // but the APK SHA-256 hash was successfully verified against the authoritative release manifest.
+                    return null
+                }
                 return "APK imza sertifikası yüklü uygulamayla eşleşmiyor."
             }
             null
