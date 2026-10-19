@@ -232,33 +232,29 @@ fun HomeScreen(
                         }
 
                         item(key = "add_pwa_button", contentType = "add_pwa") {
-                            Card(
+                            Box(
                                 modifier = Modifier
                                     .size((appDrawerIconSize + 18).dp)
-                                    .clickable { showAddPwaDialog = true },
-                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                                shape = RoundedCornerShape(8.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { showAddPwaDialog = true }
+                                    .padding(4.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(4.dp),
+                                        .size(appDrawerIconSize.dp)
+                                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                        .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(appDrawerIconSize.dp)
-                                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                                            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "+",
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            fontSize = (appDrawerIconSize * 0.5f).sp,
-                                            fontWeight = FontWeight.Light
-                                        )
-                                    }
+                                    Text(
+                                        text = "+",
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = (appDrawerIconSize * 0.5f).sp,
+                                        fontWeight = FontWeight.Light
+                                    )
                                 }
                             }
                         }
@@ -452,18 +448,17 @@ fun FolderItem(
     buttonColor: Color
 ) {
     val isPackLoaded = iconPackLoader?.isLoaded == true
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
         modifier = Modifier
             .size(45.dp)
+            .background(buttonColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
             .clickable(
                 indication = null,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 onClick = onClick
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = buttonColor.copy(alpha = 0.1f)
-        ),
-        shape = RoundedCornerShape(8.dp)
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
@@ -526,44 +521,39 @@ fun AppIconWithoutName(
             ?: (app.icon?.let { drawableToBitmap(it).asImageBitmap() })
     }
     
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
         modifier = Modifier
-            .size((iconSize + 18).dp) // Card boyutu icon boyutuna göre ayarlanır
+            .size((iconSize + 18).dp)
             .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = { onAppClick(app) },
                 onLongClick = { onAppLongClick(app) }
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        ),
-        shape = RoundedCornerShape(8.dp)
+            )
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (appIcon != null) {
-                Image(
-                    bitmap = appIcon,
-                    contentDescription = app.name,
-                    modifier = Modifier.size(iconSize.dp)
+        if (appIcon != null) {
+            Image(
+                bitmap = appIcon,
+                contentDescription = app.name,
+                modifier = Modifier.size(iconSize.dp)
+            )
+        } else {
+            // Fallback icon
+            Box(
+                modifier = Modifier
+                    .size(iconSize.dp)
+                    .background(Color.Gray, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = app.name.take(2).uppercase(),
+                    color = Color.White,
+                    fontSize = (iconSize * 0.3f).sp // Font boyutu icon boyutuna göre
                 )
-            } else {
-                // Fallback icon
-                Box(
-                    modifier = Modifier
-                        .size(iconSize.dp)
-                        .background(Color.Gray, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = app.name.take(2).uppercase(),
-                        color = Color.White,
-                        fontSize = (iconSize * 0.3f).sp // Font boyutu icon boyutuna göre
-                    )
-                }
             }
         }
     }
@@ -650,15 +640,19 @@ fun FolderSelectItem(
         Color.Red.copy(alpha = 0.1f)
     }
     
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
         modifier = Modifier
             .size(45.dp)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = cardColor
-        ),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.8f)),
-        shape = RoundedCornerShape(8.dp)
+            .background(cardColor, RoundedCornerShape(8.dp))
+            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.8f)), RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
@@ -937,10 +931,14 @@ fun FolderAppItem(
         }
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
         modifier = Modifier
             .size(48.dp)
             .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
