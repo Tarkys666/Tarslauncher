@@ -1,8 +1,8 @@
 {
-    "apkSize": 1225356,
-    "sha256": "ec45937fe1e08936a0ff03b61823494371cc0fe1e22fa08d7ef0e0964b90c065",
-    "versionName": "2.0.10",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.10/TarsLauncher-release.apk",
-    "versionCode": 59,
-    "releaseNotes": "TARS v2.0.10: 3D d\u00f6nen ASCII Elmas (ASCII Diamond) arka plan deste\u011fi eklendi; ayarlar men\u00fcs\u00fcnden aktif edildi\u011finde saat ve TARS logosu otomatik olarak gizlenir, s\u0131f\u0131r arka plan pil/CPU t\u00fcketimi ve tam AMOLED uyumu sa\u011fland\u0131."
+    "apkSize": 1225888,
+    "sha256": "b0412be1fc0d6df0aaa10534b12db1c9204438f1bd32c13524f6b897b7d4ef8c",
+    "versionName": "2.0.11",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.11/TarsLauncher-release.apk",
+    "versionCode": 60,
+    "releaseNotes": "TARS v2.0.11: 3D ASCII Elmas arka plan\u0131 Android WebView y\u00fckleme ve responsive \u00f6l\u00e7ekleme hatalar\u0131 d\u00fczeltildi; loadDataWithBaseURL, touch deste\u011fi ve 60 FPS optimizasyonu sa\u011fland\u0131."
 }

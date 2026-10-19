@@ -2,7 +2,15 @@ package com.tarslauncher.app.ui.screens
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.util.Log
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.ui.viewinterop.AndroidView
 import android.content.Intent
 import android.graphics.Bitmap
@@ -1269,7 +1277,6 @@ fun ClockHeader(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var currentTime by remember { mutableStateOf("00:00") }
-
     if (showClock) {
         DisposableEffect(context, lifecycleOwner) {
             fun updateTime() {
@@ -1366,19 +1373,27 @@ fun ClockHeader(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun AsciiDiamondBackground(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    val htmlContent = remember {
+        try {
+            context.assets.open("ascii_diamond.html").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e("AsciiDiamond", "Failed to load ascii_diamond.html from assets", e)
+            ""
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     webViewRef?.onPause()
-                    webViewRef?.pauseTimers()
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     webViewRef?.onResume()
-                    webViewRef?.resumeTimers()
                 }
                 else -> {}
             }
@@ -1394,18 +1409,49 @@ fun AsciiDiamondBackground(modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
                 setBackgroundColor(android.graphics.Color.BLACK)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = android.view.View.OVER_SCROLL_NEVER
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.allowFileAccess = true
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                loadUrl("file:///android_asset/ascii_diamond.html")
+                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+
+                settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    allowFileAccess = true
+                    allowContentAccess = true
+                    loadWithOverviewMode = true
+                    useWideViewPort = true
+                    cacheMode = WebSettings.LOAD_NO_CACHE
+                }
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                        Log.d("AsciiDiamondJS", "$consoleMessage")
+                        return true
+                    }
+                }
+
+                webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        Log.e("AsciiDiamond", "WebView error: ${error?.description}")
+                    }
+                }
+
+                loadDataWithBaseURL("https://localhost/", htmlContent, "text/html", "UTF-8", null)
                 webViewRef = this
             }
+        },
+        update = { webView ->
+            webView.onResume()
         },
         modifier = modifier.fillMaxSize()
     )
