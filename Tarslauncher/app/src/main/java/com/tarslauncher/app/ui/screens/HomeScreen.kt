@@ -7,6 +7,12 @@ import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -14,6 +20,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,6 +98,22 @@ fun HomeScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     
+    // Swipe down to hide settings button, swipe up to show
+    var isSettingsButtonVisible by remember { mutableStateOf(true) }
+    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+    val verticalDragState = rememberDraggableState { delta ->
+        dragAccumulator += delta
+        if (dragAccumulator > 30f) {
+            // Dragged down -> hide settings button
+            isSettingsButtonVisible = false
+            dragAccumulator = 0f
+        } else if (dragAccumulator < -30f) {
+            // Dragged up -> show settings button
+            isSettingsButtonVisible = true
+            dragAccumulator = 0f
+        }
+    }
+    
     val context = LocalContext.current
     
     // Responsive layout calculations
@@ -150,6 +175,19 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .draggable(
+                state = verticalDragState,
+                orientation = Orientation.Vertical,
+                onDragStarted = { dragAccumulator = 0f },
+                onDragStopped = { velocity ->
+                    if (velocity > 250f) {
+                        isSettingsButtonVisible = false
+                    } else if (velocity < -250f) {
+                        isSettingsButtonVisible = true
+                    }
+                    dragAccumulator = 0f
+                }
+            )
     ) {
         // Main content column - sadece butonlar ve command bar için
         Column(
@@ -164,40 +202,46 @@ fun HomeScreen(
             // App drawer ile butonlar arasında esnek boşluk - daha küçük weight
             Spacer(modifier = Modifier.weight(0.15f))
             
-            // Responsive Ayarlar Butonu
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .then(
-                        if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = 16.dp)
-                        else Modifier
-                    ),
-                horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
+            // Responsive Ayarlar Butonu (Aşağı kaydırma ile gizlenir, yukarı kaydırma ile görünür)
+            AnimatedVisibility(
+                visible = isSettingsButtonVisible,
+                enter = fadeIn(animationSpec = tween(220)) + slideInVertically(animationSpec = tween(250)) { it },
+                exit = fadeOut(animationSpec = tween(180)) + slideOutVertically(animationSpec = tween(220)) { it },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .padding(bottom = (screenHeight * 0.01f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
-                        .height(buttonHeight)
-                        .background(buttonColor, RoundedCornerShape(4.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            onSettingsClick()
-                        }
-                        .padding(
-                            horizontal = (screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp),
-                            vertical = (screenHeight * 0.005f).coerceAtLeast(3.dp).coerceAtMost(6.dp)
+                        .then(
+                            if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = 16.dp)
+                            else Modifier
                         ),
-                    contentAlignment = Alignment.Center
+                    horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
                 ) {
-                    Text(
-                        text = "SETTINGS",
-                        color = Color.White,
-                        fontSize = buttonFontSize,
-                        fontWeight = FontWeight.ExtraLight,
-                        letterSpacing = 0.5.sp
-                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = (screenHeight * 0.01f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
+                            .height(buttonHeight)
+                            .background(buttonColor, RoundedCornerShape(4.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                onSettingsClick()
+                            }
+                            .padding(
+                                horizontal = (screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp),
+                                vertical = (screenHeight * 0.005f).coerceAtLeast(3.dp).coerceAtMost(6.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "SETTINGS",
+                            color = Color.White,
+                            fontSize = buttonFontSize,
+                            fontWeight = FontWeight.ExtraLight,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
 

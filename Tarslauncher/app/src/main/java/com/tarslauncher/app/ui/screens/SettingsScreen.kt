@@ -338,16 +338,17 @@ fun SettingsScreen(
             Button(
                 onClick = onBackClick,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Black.copy(alpha = 0.8f),
+                    containerColor = Color.Black,
                     contentColor = Color.White
                 ),
-                border = BorderStroke(1.dp, Color.Black)
+                border = BorderStroke(1.dp, Color.Transparent),
+                shape = RoundedCornerShape(4.dp)
             ) {
                 Text(
                     text = "← BACK",
                     color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraLight,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Light,
                     letterSpacing = 1.sp
                 )
             }
@@ -426,12 +427,13 @@ fun SettingsScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (gridSize == option) 
-                                        Color.White.copy(alpha = 0.2f) 
+                                        Color(0xFF1E1E1E) 
                                     else 
                                         Color.Black,
                                     contentColor = Color.White
                                 ),
-                                border = BorderStroke(1.dp, Color.Gray),
+                                border = BorderStroke(1.dp, Color.Transparent),
+                                shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(40.dp)
@@ -439,7 +441,8 @@ fun SettingsScreen(
                                 Text(
                                     text = option.serialize(),
                                     color = Color.White,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Light
                                 )
                             }
                         }
@@ -463,12 +466,13 @@ fun SettingsScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (gridSize == option) 
-                                        Color.White.copy(alpha = 0.2f) 
+                                        Color(0xFF1E1E1E) 
                                     else 
                                         Color.Black,
                                     contentColor = Color.White
                                 ),
-                                border = BorderStroke(1.dp, Color.Gray),
+                                border = BorderStroke(1.dp, Color.Transparent),
+                                shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(40.dp)
@@ -476,7 +480,8 @@ fun SettingsScreen(
                                 Text(
                                     text = option.serialize(),
                                     color = Color.White,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Light
                                 )
                             }
                         }
@@ -500,12 +505,13 @@ fun SettingsScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (gridSize == option) 
-                                        Color.White.copy(alpha = 0.2f) 
+                                        Color(0xFF1E1E1E) 
                                     else 
                                         Color.Black,
                                     contentColor = Color.White
                                 ),
-                                border = BorderStroke(1.dp, Color.Gray),
+                                border = BorderStroke(1.dp, Color.Transparent),
+                                shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(40.dp)
@@ -513,7 +519,8 @@ fun SettingsScreen(
                                 Text(
                                     text = option.serialize(),
                                     color = Color.White,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Light
                                 )
                             }
                         }
@@ -537,12 +544,13 @@ fun SettingsScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (gridSize == option) 
-                                        Color.White.copy(alpha = 0.2f) 
+                                        Color(0xFF1E1E1E) 
                                     else 
                                         Color.Black,
                                     contentColor = Color.White
                                 ),
-                                border = BorderStroke(1.dp, Color.Gray),
+                                border = BorderStroke(1.dp, Color.Transparent),
+                                shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(40.dp)
@@ -550,7 +558,8 @@ fun SettingsScreen(
                                 Text(
                                     text = option.serialize(),
                                     color = Color.White,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Light
                                 )
                             }
                         }
@@ -562,10 +571,17 @@ fun SettingsScreen(
                             containerColor = Color.Black,
                             contentColor = Color.White
                         ),
-                        border = BorderStroke(1.dp, Color.Black),
+                        border = BorderStroke(1.dp, Color.Transparent),
+                        shape = RoundedCornerShape(4.dp),
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
-                        Text("CLOSE", color = Color.White)
+                        Text(
+                            text = "CLOSE",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp
+                        )
                     }
                 }
             }
@@ -737,24 +753,21 @@ fun SettingsItemView(
                         onClick = { setting.onClick?.invoke() },
                         enabled = setting.enabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1E1E1E),
+                            containerColor = Color.Black,
                             contentColor = Color.White,
-                            disabledContainerColor = Color(0xFF141414),
-                            disabledContentColor = Color(0xFF666666)
+                            disabledContainerColor = Color.Black,
+                            disabledContentColor = Color(0xFF555555)
                         ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (setting.enabled) Color(0xFF444444) else Color(0xFF262626)
-                        ),
-                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, Color.Transparent),
+                        shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = label,
-                            color = if (setting.enabled) Color.White else Color(0xFF666666),
+                            color = if (setting.enabled) Color.White else Color(0xFF555555),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.5.sp
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp
                         )
                     }
                 }
@@ -764,10 +777,9 @@ fun SettingsItemView(
                             listOf("normal", "black").forEach { mode ->
                                 val isSelected = buttonColorMode == mode
                                 
-                                // Animated button color for smooth selection feedback
                                 val buttonBgColor by animateColorAsState(
                                     targetValue = if (isSelected)
-                                        Color.White.copy(alpha = 0.2f)
+                                        Color(0xFF1E1E1E)
                                     else
                                         Color.Black,
                                     animationSpec = tween(durationMillis = 250),
@@ -780,26 +792,17 @@ fun SettingsItemView(
                                         containerColor = buttonBgColor,
                                         contentColor = Color.White
                                     ),
-                                    border = BorderStroke(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = Color.Black
-                                    ),
+                                    border = BorderStroke(1.dp, Color.Transparent),
                                     shape = RoundedCornerShape(4.dp),
-                                    modifier = Modifier
-                                        .size(width = 60.dp, height = 32.dp)
-                                        .graphicsLayer {
-                                            // Smooth selection animation
-                                            scaleX = if (isSelected) 1.05f else 1.0f
-                                            scaleY = if (isSelected) 1.05f else 1.0f
-                                            alpha = if (isSelected) 1.0f else 0.8f
-                                        },
+                                    modifier = Modifier.size(width = 60.dp, height = 32.dp),
                                     contentPadding = PaddingValues(4.dp)
                                 ) {
                                     Text(
                                         text = mode.uppercase(),
-                                        color = Color.White,
-                                        fontSize = 8.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        color = if (isSelected) Color.White else Color(0xFF888888),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Light,
+                                        letterSpacing = 0.5.sp
                                     )
                                 }
                             }
@@ -809,34 +812,22 @@ fun SettingsItemView(
                 SettingType.LAUNCHER_STATUS -> {
                     val isDefault = setting.currentValue as? Boolean ?: false
                     
-                    // Animated button color based on launcher status
-                    val launcherButtonColor by animateColorAsState(
-                        targetValue = if (isDefault) 
-                            Color.Green.copy(alpha = 0.3f) 
-                        else 
-                            Color.Red.copy(alpha = 0.3f),
-                        animationSpec = tween(durationMillis = 300),
-                        label = "launcherButtonColor"
-                    )
-                    
                     Button(
                         onClick = { setting.onClick?.invoke() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = launcherButtonColor
+                            containerColor = Color.Black,
+                            contentColor = Color.White
                         ),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .graphicsLayer {
-                                // Subtle pulse effect for non-default state
-                                scaleX = if (!isDefault) 1.02f else 1.0f
-                                scaleY = if (!isDefault) 1.02f else 1.0f
-                            }
+                        border = BorderStroke(1.dp, Color.Transparent),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = if (isDefault) "✓ SET" else "SET",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = if (isDefault) FontWeight.Bold else FontWeight.Normal
+                            text = if (isDefault) "✓ DEFAULT" else "SET DEFAULT",
+                            color = if (isDefault) Color.White else Color(0xFF888888),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp
                         )
                     }
                 }
@@ -894,14 +885,15 @@ fun IconPackSelectionDialog(
                 containerColor = Color.Black
             ),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color.Black)
+            border = BorderStroke(1.dp, Color.Transparent)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     "Select Icon Pack",
                     color = Color.White,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Light
+                    fontWeight = FontWeight.Light,
+                    letterSpacing = 1.sp
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyColumn(
@@ -918,13 +910,16 @@ fun IconPackSelectionDialog(
                                 containerColor = Color.Black,
                                 contentColor = Color.White
                             ),
-                            border = BorderStroke(1.dp, Color.Black),
+                            border = BorderStroke(1.dp, Color.Transparent),
+                            shape = RoundedCornerShape(4.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = "Default",
                                 color = Color.White,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Light,
+                                letterSpacing = 0.5.sp
                             )
                         }
                     }
@@ -938,13 +933,16 @@ fun IconPackSelectionDialog(
                                 containerColor = Color.Black,
                                 contentColor = Color.White
                             ),
-                            border = BorderStroke(1.dp, Color.Black),
+                            border = BorderStroke(1.dp, Color.Transparent),
+                            shape = RoundedCornerShape(4.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = iconPack.name,
                                 color = Color.White,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Light,
+                                letterSpacing = 0.5.sp
                             )
                         }
                     }
@@ -953,11 +951,20 @@ fun IconPackSelectionDialog(
                 Button(
                     onClick = onDismiss,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Gray.copy(alpha = 0.3f)
+                        containerColor = Color.Black,
+                        contentColor = Color.White
                     ),
+                    border = BorderStroke(1.dp, Color.Transparent),
+                    shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 ) {
-                    Text("CLOSE", color = Color.White)
+                    Text(
+                        text = "CLOSE",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
         }
