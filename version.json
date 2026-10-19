@@ -1,8 +1,8 @@
 {
-    "apkSize": 1221565,
-    "sha256": "b9fe6993f1b2c80154863684d54ff3cfa269ee6556439a7e5089384dc9474224",
+    "apkSize": 1221561,
+    "sha256": "a4154a0fd51f3928f81267625c9153552f99e6694d18a22a0f3dcf68531086a1",
     "versionName": "2.0.7",
     "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.7/TarsLauncher-release.apk",
     "versionCode": 56,
-    "releaseNotes": "TARS v2.0.7: Yedekleme ve geri yükleme arayüzü ve kodları tamamen kaldırıldı; veriler tamamen yerel kalıcı depolamaya geçirildi."
+    "releaseNotes": "TARS v2.0.7: Yedekleme ve geri y\u00fckleme aray\u00fcz\u00fc ve kodlar\u0131 tamamen kald\u0131r\u0131ld\u0131; veriler tamamen yerel kal\u0131c\u0131 depolamaya ge\u00e7irildi."
 }
