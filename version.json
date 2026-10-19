@@ -1,8 +1,8 @@
 {
-    "apkSize": 1221565,
-    "sha256": "c8eb77783452b76c46bc42f2e82f5fbb8d96e6bda886785cb0210e6211ac92cb",
+    "apkSize": 1221561,
+    "sha256": "8b2d36c652322585d9cdb3c12f36d4a80cb36296b2b646d49114bd2d1e94d9b3",
     "versionName": "2.0.6",
     "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.6/TarsLauncher-release.apk",
     "versionCode": 55,
-    "releaseNotes": "TARS v2.0.6: Çift sıralı ters senkronize kaydırma yönü düzeltildi (1. drawer sağa kayınca 2. drawer sola kayar)."
+    "releaseNotes": "TARS v2.0.6: \u00c7ift s\u0131ral\u0131 ters senkronize kayd\u0131rma y\u00f6n\u00fc d\u00fczeltildi (1. drawer sa\u011fa kay\u0131nca 2. drawer sola kayar)."
 }
