@@ -1,8 +1,8 @@
 {
     "apkSize": 1221565,
-    "sha256": "ef510bc3057c72f1018d5a39119587d8d064b1a40061c3087319f60facc2297c",
-    "versionName": "2.0.3",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.3/TarsLauncher-release.apk",
-    "versionCode": 52,
-    "releaseNotes": "TARS v2.0.3: Kapsamlı DRY refactoring, 520+ satır mükerrer kod temizliği, merkezi JSON ve IO uzantıları, klasör ve grid butonları sadeleştirmesi, 5-aşamalı R8 optimizasyonu."
+    "sha256": "98a20d28d1afa9c7c635d6f459d3466051c81178be6afbf3da940cf0fc6e1c1b",
+    "versionName": "2.0.4",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.4/TarsLauncher-release.apk",
+    "versionCode": 53,
+    "releaseNotes": "TARS v2.0.4: Çift sıralı ters senkronize uygulama çekmecesi (Dual Row Interconnected App Drawer), konveyör bant akışı, performans ve UX güncellemeleri."
 }
