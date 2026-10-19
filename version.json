@@ -1,8 +1,8 @@
 {
-    "apkSize": 1221565,
-    "sha256": "1819c4de869b495d3df40fada8e4d84b17216686786b99cd2a87173e4a693966",
-    "versionName": "2.0.9",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.9/TarsLauncher-release.apk",
-    "versionCode": 58,
-    "releaseNotes": "TARS v2.0.9: Folder i\u00e7i uygulama y\u00f6netimi d\u00fczeltildi; 'REMOVE FROM FOLDER' ve 'UNINSTALL FROM DEVICE' \u0130ngilizce olarak adland\u0131r\u0131l\u0131p kald\u0131r\u0131lma ve cihazdan silinme hatalar\u0131 giderildi."
+    "apkSize": 1225356,
+    "sha256": "7921092ba20ac4b82ffffb4b1121558879a02dbcc09cc08e7a4688f30c150c0a",
+    "versionName": "2.0.10",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.10/TarsLauncher-release.apk",
+    "versionCode": 59,
+    "releaseNotes": "TARS v2.0.10: 3D d\u00f6nen ASCII Elmas (ASCII Diamond) arka plan deste\u011fi eklendi; ayarlar men\u00fcs\u00fcnden aktif edildi\u011finde saat ve TARS logosu otomatik olarak gizlenir, s\u0131f\u0131r arka plan pil/CPU t\u00fcketimi ve tam AMOLED uyumu sa\u011fland\u0131."
 }

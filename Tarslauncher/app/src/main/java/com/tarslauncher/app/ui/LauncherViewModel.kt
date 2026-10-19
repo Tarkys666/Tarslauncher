@@ -248,6 +248,16 @@ class LauncherViewModel(
         viewModelScope.launch { appRepository.updateShowClock(show) }
     }
 
+    fun updateShowAsciiDiamond(enabled: Boolean) {
+        viewModelScope.launch {
+            appRepository.updateShowAsciiDiamond(enabled)
+            if (enabled) {
+                appRepository.updateShowClock(false)
+                appRepository.updateShowTarsHeader(false)
+            }
+        }
+    }
+
     fun updateSelectedIconPack(iconPackPackage: String?) {
         viewModelScope.launch { appRepository.updateSelectedIconPack(iconPackPackage) }
     }

@@ -146,6 +146,7 @@ fun LauncherMain(
     val onButtonColorModeChange = remember(viewModel) { { m: String -> viewModel.updateButtonColorMode(m) } }
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
+    val onShowAsciiDiamondChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAsciiDiamond(v) } }
     val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
     val onCheckForUpdates = remember(viewModel) {
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
@@ -171,6 +172,7 @@ fun LauncherMain(
                     showTarsHeader = uiState.showTarsHeader,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     showClock = uiState.showClock,
+                    showAsciiDiamond = uiState.showAsciiDiamond,
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
                     onDeletePwa = onDeletePwa
@@ -192,7 +194,9 @@ fun LauncherMain(
                     showTarsHeader = uiState.showTarsHeader,
                     onShowTarsHeaderChange = onShowTarsHeaderChange,
                     showClock = uiState.showClock,
+                    showAsciiDiamond = uiState.showAsciiDiamond,
                     onShowClockChange = onShowClockChange,
+                    onShowAsciiDiamondChange = onShowAsciiDiamondChange,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     onAppDrawerIconSizeChange = onAppDrawerIconSizeChange,
                     appVersion = BuildConfig.VERSION_NAME,

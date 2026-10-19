@@ -1,6 +1,9 @@
 package com.tarslauncher.app.ui.screens
 
+import android.annotation.SuppressLint
 import android.app.Application
+import android.webkit.WebView
+import androidx.compose.ui.viewinterop.AndroidView
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -100,6 +103,7 @@ fun HomeScreen(
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
     showClock: Boolean,
+    showAsciiDiamond: Boolean = false,
     pwaPresets: List<PwaInfo> = emptyList(),
     onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
     onDeletePwa: (pwaId: String) -> Unit = {}
@@ -208,6 +212,10 @@ fun HomeScreen(
                 }
             )
     ) {
+        if (showAsciiDiamond) {
+            AsciiDiamondBackground()
+        }
+
         // Main content column - sadece butonlar ve command bar için
         Column(
             modifier = Modifier
@@ -351,6 +359,7 @@ fun HomeScreen(
         }
         
         // ✅ RESPONSIVE SAAT OVERLAY - Her cihaza uyumlu
+        if (!showAsciiDiamond) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -367,6 +376,8 @@ fun HomeScreen(
         }
 
 
+        }
+        
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
         Box(
             modifier = Modifier
@@ -1349,4 +1360,53 @@ fun ClockHeader(
             )
         }
     }
+}
+
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun AsciiDiamondBackground(modifier: Modifier = Modifier) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    webViewRef?.onPause()
+                    webViewRef?.pauseTimers()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    webViewRef?.onResume()
+                    webViewRef?.resumeTimers()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            webViewRef?.destroy()
+            webViewRef = null
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            WebView(ctx).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.allowFileAccess = true
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                loadUrl("file:///android_asset/ascii_diamond.html")
+                webViewRef = this
+            }
+        },
+        modifier = modifier.fillMaxSize()
+    )
 }

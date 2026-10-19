@@ -93,6 +93,8 @@ fun SettingsScreen(
     onShowTarsHeaderChange: (Boolean) -> Unit,
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
+    showAsciiDiamond: Boolean = false,
+    onShowAsciiDiamondChange: (Boolean) -> Unit = {},
     appDrawerIconSize: Int,
     onAppDrawerIconSizeChange: (Int) -> Unit,
     appVersion: String = "1.2.0",
@@ -142,6 +144,7 @@ fun SettingsScreen(
         dualAppDrawer,
         showTarsHeader,
         showClock,
+        showAsciiDiamond,
         appDrawerIconSize,
         gridSize,
         buttonColorMode,
@@ -184,6 +187,13 @@ fun SettingsScreen(
                         type = SettingType.TOGGLE,
                     currentValue = showClock,
                     onValueChange = { onShowClockChange(it as Boolean) }
+                ))
+                add(SettingsItem.Setting(
+                    title = "ASCII Diamond",
+                    description = if (showAsciiDiamond) "Enabled (Clock & TARS logo hidden)" else "3D rotating ASCII Diamond background",
+                    type = SettingType.TOGGLE,
+                    currentValue = showAsciiDiamond,
+                    onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
                 ))
                 add(SettingsItem.Setting(
                     title = "App Drawer Icon Size",

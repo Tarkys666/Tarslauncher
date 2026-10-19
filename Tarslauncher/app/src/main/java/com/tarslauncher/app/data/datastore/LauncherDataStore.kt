@@ -38,6 +38,7 @@ class LauncherDataStore(private val context: Context) {
         val KEY_FOLDERS_JSON = stringPreferencesKey("folders_json")
         val KEY_USAGE_STATS_JSON = stringPreferencesKey("usage_stats_json")
         val KEY_PWAS_JSON = stringPreferencesKey("pwas_json")
+        val KEY_SHOW_ASCII_DIAMOND = booleanPreferencesKey("show_ascii_diamond")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
     }
 
@@ -85,7 +86,8 @@ class LauncherDataStore(private val context: Context) {
                 showTarsHeader = preferences[KEY_SHOW_TARS_HEADER] ?: true,
                 showClock = preferences[KEY_SHOW_CLOCK] ?: true,
                 selectedIconPack = preferences[KEY_SELECTED_ICON_PACK],
-                appDrawerIconSize = preferences[KEY_APP_DRAWER_ICON_SIZE] ?: 32
+                appDrawerIconSize = preferences[KEY_APP_DRAWER_ICON_SIZE] ?: 32,
+                showAsciiDiamond = preferences[KEY_SHOW_ASCII_DIAMOND] ?: false
             )
         }
         .distinctUntilChanged()
@@ -105,6 +107,7 @@ class LauncherDataStore(private val context: Context) {
     suspend fun updateShowTarsHeader(show: Boolean) = setPreference(KEY_SHOW_TARS_HEADER, show)
 
     suspend fun updateShowClock(show: Boolean) = setPreference(KEY_SHOW_CLOCK, show)
+    suspend fun updateShowAsciiDiamond(enabled: Boolean) = setPreference(KEY_SHOW_ASCII_DIAMOND, enabled)
 
     suspend fun updateSelectedIconPack(iconPackPackage: String?) =
         setPreference(KEY_SELECTED_ICON_PACK, iconPackPackage.takeUnless { it.isNullOrBlank() })
@@ -132,6 +135,7 @@ class LauncherDataStore(private val context: Context) {
                 prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
                 prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
                 prefs[KEY_SHOW_CLOCK] = settings.showClock
+                prefs[KEY_SHOW_ASCII_DIAMOND] = settings.showAsciiDiamond
                 if (settings.selectedIconPack.isNullOrBlank()) {
                     prefs.remove(KEY_SELECTED_ICON_PACK)
                 } else {

@@ -11,5 +11,6 @@ data class LauncherSettings(
     val showTarsHeader: Boolean = true,
     val showClock: Boolean = true,
     val selectedIconPack: String? = null,
-    val appDrawerIconSize: Int = 32
+    val appDrawerIconSize: Int = 32,
+    val showAsciiDiamond: Boolean = false
 )

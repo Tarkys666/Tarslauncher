@@ -27,4 +27,5 @@ data class LauncherUiState(
     val showClock: Boolean get() = settings.showClock
     val selectedIconPack: String? get() = settings.selectedIconPack
     val appDrawerIconSize: Int get() = settings.appDrawerIconSize
+    val showAsciiDiamond: Boolean get() = settings.showAsciiDiamond
 }

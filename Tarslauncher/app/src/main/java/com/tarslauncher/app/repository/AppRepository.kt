@@ -350,6 +350,7 @@ class AppRepository(
     suspend fun updateButtonColorMode(mode: String) = dataStore.updateButtonColorMode(mode)
     suspend fun updateShowTarsHeader(show: Boolean) = dataStore.updateShowTarsHeader(show)
     suspend fun updateShowClock(show: Boolean) = dataStore.updateShowClock(show)
+    suspend fun updateShowAsciiDiamond(enabled: Boolean) = dataStore.updateShowAsciiDiamond(enabled)
     suspend fun updateSelectedIconPack(pack: String?) = dataStore.updateSelectedIconPack(pack)
     suspend fun updateAppDrawerIconSize(size: Int) = dataStore.updateAppDrawerIconSize(size)
 }
