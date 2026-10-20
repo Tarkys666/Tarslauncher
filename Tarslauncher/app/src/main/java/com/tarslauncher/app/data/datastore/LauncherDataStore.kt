@@ -86,7 +86,7 @@ class LauncherDataStore(private val context: Context) {
                 showAppDrawer = preferences[KEY_SHOW_APP_DRAWER] ?: true,
                 dualAppDrawer = preferences[KEY_DUAL_APP_DRAWER] ?: false,
                 gridSize = GridSize.fromString(preferences[KEY_GRID_SIZE]),
-                buttonColorMode = preferences[KEY_BUTTON_COLOR_MODE] ?: "black",
+                buttonColorMode = preferences[KEY_BUTTON_COLOR_MODE] ?: "transparent",
                 showTarsHeader = preferences[KEY_SHOW_TARS_HEADER] ?: true,
                 showClock = preferences[KEY_SHOW_CLOCK] ?: true,
                 selectedIconPack = preferences[KEY_SELECTED_ICON_PACK],

@@ -107,7 +107,7 @@ fun HomeScreen(
     dualAppDrawer: Boolean = false,
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
-    buttonColor: Color,
+    buttonColor: Color = Color.Transparent,
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
     showClock: Boolean,

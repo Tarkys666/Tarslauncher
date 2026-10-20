@@ -118,12 +118,7 @@ fun LauncherMain(
         }
     }
     
-    val getButtonColor = remember(uiState.buttonColorMode) {
-        when (uiState.buttonColorMode) {
-            "black" -> Color.Black.copy(alpha = 0.7f)
-            else -> Color.Gray.copy(alpha = 0.3f)
-        }
-    }
+    val getButtonColor = Color.Transparent
     
     val onFoldersUpdate = remember(viewModel) { { f: List<FolderInfo> -> viewModel.updateFolders(f) } }
     val onSettingsClick = remember(viewModel) { { viewModel.setScreen("settings") } }
@@ -143,7 +138,6 @@ fun LauncherMain(
     val onDualAppDrawerChange = remember(viewModel) { { v: Boolean -> viewModel.updateDualAppDrawer(v) } }
     val onGridSizeChange = remember(viewModel) { { g: GridSize -> viewModel.updateGridSize(g) } }
     val onIconPackSelected = remember(viewModel) { { p: String? -> viewModel.updateSelectedIconPack(p) } }
-    val onButtonColorModeChange = remember(viewModel) { { m: String -> viewModel.updateButtonColorMode(m) } }
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
     val onShowAsciiDiamondChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAsciiDiamond(v) } }
@@ -197,8 +191,6 @@ fun LauncherMain(
                     installedIconPacks = uiState.iconPacks,
                     selectedIconPack = uiState.selectedIconPack,
                     onIconPackSelected = onIconPackSelected,
-                    buttonColorMode = uiState.buttonColorMode,
-                    onButtonColorModeChange = onButtonColorModeChange,
                     showTarsHeader = uiState.showTarsHeader,
                     onShowTarsHeaderChange = onShowTarsHeaderChange,
                     showClock = uiState.showClock,

@@ -90,8 +90,6 @@ fun SettingsScreen(
     installedIconPacks: List<IconPackInfo>,
     selectedIconPack: String?,
     onIconPackSelected: (String?) -> Unit,
-    buttonColorMode: String,
-    onButtonColorModeChange: (String) -> Unit,
     showTarsHeader: Boolean,
     onShowTarsHeaderChange: (Boolean) -> Unit,
     showClock: Boolean,
@@ -163,7 +161,6 @@ fun SettingsScreen(
         asciiDiamondSpeed,
         appDrawerIconSize,
         gridSize,
-        buttonColorMode,
         selectedIconPack,
         isDefaultLauncherSet,
         installedPwas.size,
@@ -263,12 +260,6 @@ fun SettingsScreen(
                     type = SettingType.BUTTON,
                     onClick = { showGridSizeDialog = true },
                     buttonLabel = "SELECT"
-                ))
-                add(SettingsItem.Setting(
-                    title = "Button Color",
-                    description = "Current: ${buttonColorMode.uppercase()}",
-                    type = SettingType.SELECTION,
-                    currentValue = buttonColorMode
                 ))
             }
         ),
@@ -399,9 +390,7 @@ fun SettingsScreen(
                     } else {
                         expandedCategories + category.title
                     }
-                },
-                onButtonColorModeChange = onButtonColorModeChange,
-                buttonColorMode = buttonColorMode
+                }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -583,9 +572,7 @@ fun SettingsScreen(
 fun SettingsCategoryItem(
     category: SettingsItem.Category,
     isExpanded: Boolean,
-    onExpandToggle: () -> Unit,
-    onButtonColorModeChange: (String) -> Unit,
-    buttonColorMode: String
+    onExpandToggle: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -631,9 +618,7 @@ fun SettingsCategoryItem(
                     category.children.forEach { setting ->
                         if (setting is SettingsItem.Setting) {
                             SettingsItemView(
-                                setting = setting,
-                                onButtonColorModeChange = onButtonColorModeChange,
-                                buttonColorMode = buttonColorMode
+                                setting = setting
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -646,9 +631,7 @@ fun SettingsCategoryItem(
 
 @Composable
 fun SettingsItemView(
-    setting: SettingsItem.Setting,
-    onButtonColorModeChange: (String) -> Unit,
-    buttonColorMode: String
+    setting: SettingsItem.Setting
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -731,42 +714,7 @@ fun SettingsItemView(
                     }
                 }
                 SettingType.SELECTION -> {
-                    if (setting.title == "Button Color") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("normal", "black").forEach { mode ->
-                                val isSelected = buttonColorMode == mode
-                                
-                                val buttonBgColor by animateColorAsState(
-                                    targetValue = if (isSelected)
-                                        Color(0xFF1E1E1E)
-                                    else
-                                        Color.Black,
-                                    animationSpec = tween(durationMillis = 250),
-                                    label = "buttonBgColor"
-                                )
-                                
-                                Button(
-                                    onClick = { onButtonColorModeChange(mode) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = buttonBgColor,
-                                        contentColor = Color.White
-                                    ),
-                                    border = BorderStroke(1.dp, Color.Transparent),
-                                    shape = RoundedCornerShape(4.dp),
-                                    modifier = Modifier.size(width = 60.dp, height = 32.dp),
-                                    contentPadding = PaddingValues(4.dp)
-                                ) {
-                                    Text(
-                                        text = mode.uppercase(),
-                                        color = if (isSelected) Color.White else Color(0xFF888888),
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Light,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    // No-op
                 }
                 SettingType.LAUNCHER_STATUS -> {
                     val isDefault = setting.currentValue as? Boolean ?: false

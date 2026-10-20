@@ -1,8 +1,8 @@
 {
-    "apkSize": 1276810,
-    "sha256": "d3a9d5d8783daab1ce9387ee8537f642336619ca554fbeb2c89f340452bdf56a",
-    "versionName": "2.0.16",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.16/TarsLauncher-release.apk",
-    "versionCode": 65,
-    "releaseNotes": "Facet Launcher v2.0.16: Kullanici tercihi dogrultusunda %88 olcek ile dengelenmis, Android adaptif squircle ve daire maskelerinde kusursuz oturan Poz 1 (Hero Starburst) 3D ASCII elmas uygulama ikonu guncellendi."
+    "apkSize": 1276814,
+    "sha256": "168a65377ec4cd9d0c98362478b9b86c41721fbd8fcfd51b0f6158dcf4f91e0c",
+    "versionName": "2.0.17",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.17/TarsLauncher-release.apk",
+    "versionCode": 66,
+    "releaseNotes": "Facet Launcher v2.0.17: Ayarlar ekranindaki gereksiz 'Button Color' ayari kaldirildi; ana ekrandaki SETTINGS butonu ve klasor cerceveleri saf minimalist seffaf (arkasiz metin) gorunume kavusturuldu."
 }

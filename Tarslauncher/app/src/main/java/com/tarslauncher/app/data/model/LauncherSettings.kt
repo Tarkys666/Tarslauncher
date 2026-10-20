@@ -7,7 +7,7 @@ data class LauncherSettings(
     val showAppDrawer: Boolean = true,
     val dualAppDrawer: Boolean = false,
     val gridSize: GridSize = GridSize.DEFAULT,
-    val buttonColorMode: String = "black",
+    val buttonColorMode: String = "transparent",
     val showTarsHeader: Boolean = true,
     val showClock: Boolean = true,
     val selectedIconPack: String? = null,
