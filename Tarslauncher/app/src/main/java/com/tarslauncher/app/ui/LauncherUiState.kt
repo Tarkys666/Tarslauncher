@@ -32,4 +32,6 @@ data class LauncherUiState(
     val asciiDiamondOffsetY: Int get() = settings.asciiDiamondOffsetY
     val asciiDiamondFps: Int get() = settings.asciiDiamondFps
     val asciiDiamondSpeed: Int get() = settings.asciiDiamondSpeed
+    val showFolderGrid: Boolean get() = settings.showFolderGrid
+    val appDrawerOffsetY: Int get() = settings.appDrawerOffsetY
 }

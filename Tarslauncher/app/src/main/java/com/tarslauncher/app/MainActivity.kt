@@ -146,6 +146,8 @@ fun LauncherMain(
     val onAsciiDiamondFpsChange = remember(viewModel) { { f: Int -> viewModel.updateAsciiDiamondFps(f) } }
     val onAsciiDiamondSpeedChange = remember(viewModel) { { sp: Int -> viewModel.updateAsciiDiamondSpeed(sp) } }
     val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
+    val onShowFolderGridChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowFolderGrid(s) } }
+    val onAppDrawerOffsetYChange = remember(viewModel) { { o: Int -> viewModel.updateAppDrawerOffsetY(o) } }
     val onCheckForUpdates = remember(viewModel) {
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
     }
@@ -175,6 +177,8 @@ fun LauncherMain(
                     asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
                     asciiDiamondFps = uiState.asciiDiamondFps,
                     asciiDiamondSpeed = uiState.asciiDiamondSpeed,
+                    showFolderGrid = uiState.showFolderGrid,
+                    appDrawerOffsetY = uiState.appDrawerOffsetY,
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
                     onDeletePwa = onDeletePwa
@@ -207,6 +211,10 @@ fun LauncherMain(
                     onAsciiDiamondSpeedChange = onAsciiDiamondSpeedChange,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     onAppDrawerIconSizeChange = onAppDrawerIconSizeChange,
+                    showFolderGrid = uiState.showFolderGrid,
+                    onShowFolderGridChange = onShowFolderGridChange,
+                    appDrawerOffsetY = uiState.appDrawerOffsetY,
+                    onAppDrawerOffsetYChange = onAppDrawerOffsetYChange,
                     appVersion = BuildConfig.VERSION_NAME,
                     installedPwas = uiState.installedPwas,
                     pwaPresets = uiState.pwaPresets,

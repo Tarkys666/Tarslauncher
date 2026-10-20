@@ -1,8 +1,8 @@
 {
     "apkSize": 1276814,
-    "sha256": "9e8ffeea43078244e4b7e24fb4105e9392ce19f960a5dde31f52a1a75ff0bee8",
-    "versionName": "2.0.17",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.17/TarsLauncher-release.apk",
-    "versionCode": 66,
-    "releaseNotes": "Facet Launcher v2.0.17: Ayarlar ekranindaki gereksiz 'Button Color' ayari kaldirildi; ana ekrandaki SETTINGS butonu ve klasor cerceveleri saf minimalist seffaf (arkasiz metin) gorunume kavusturuldu."
+    "sha256": "d8c8f9300faea597bcf05f40cf664851dfba99617eaaaa516e49c078773e7b40",
+    "versionName": "2.0.18",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.18/TarsLauncher-release.apk",
+    "versionCode": 67,
+    "releaseNotes": "Facet Launcher v2.0.18: App Drawer dikey konumunu (alttan yukari 0-200dp) canli onizlemeli dialog ile yonetebilme ve ana ekrandaki ortadaki uygulama izgarasini (Center App Grid) ayarlardan gizleyebilme ozellikleri eklendi."
 }

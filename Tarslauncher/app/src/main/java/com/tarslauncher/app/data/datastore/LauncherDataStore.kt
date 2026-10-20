@@ -43,6 +43,8 @@ class LauncherDataStore(private val context: Context) {
         val KEY_ASCII_DIAMOND_OFFSET_Y = intPreferencesKey("ascii_diamond_offset_y")
         val KEY_ASCII_DIAMOND_FPS = intPreferencesKey("ascii_diamond_fps")
         val KEY_ASCII_DIAMOND_SPEED = intPreferencesKey("ascii_diamond_speed")
+        val KEY_SHOW_FOLDER_GRID = booleanPreferencesKey("show_folder_grid")
+        val KEY_APP_DRAWER_OFFSET_Y = intPreferencesKey("app_drawer_offset_y")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
     }
 
@@ -95,7 +97,9 @@ class LauncherDataStore(private val context: Context) {
                 asciiDiamondScale = preferences[KEY_ASCII_DIAMOND_SCALE] ?: 100,
                 asciiDiamondOffsetY = preferences[KEY_ASCII_DIAMOND_OFFSET_Y] ?: 0,
                 asciiDiamondFps = preferences[KEY_ASCII_DIAMOND_FPS] ?: 60,
-                asciiDiamondSpeed = preferences[KEY_ASCII_DIAMOND_SPEED] ?: 100
+                asciiDiamondSpeed = preferences[KEY_ASCII_DIAMOND_SPEED] ?: 100,
+                showFolderGrid = preferences[KEY_SHOW_FOLDER_GRID] ?: true,
+                appDrawerOffsetY = preferences[KEY_APP_DRAWER_OFFSET_Y] ?: 24
             )
         }
         .distinctUntilChanged()
@@ -120,6 +124,8 @@ class LauncherDataStore(private val context: Context) {
     suspend fun updateAsciiDiamondOffsetY(offsetY: Int) = setPreference(KEY_ASCII_DIAMOND_OFFSET_Y, offsetY)
     suspend fun updateAsciiDiamondFps(fps: Int) = setPreference(KEY_ASCII_DIAMOND_FPS, fps)
     suspend fun updateAsciiDiamondSpeed(speed: Int) = setPreference(KEY_ASCII_DIAMOND_SPEED, speed)
+    suspend fun updateShowFolderGrid(show: Boolean) = setPreference(KEY_SHOW_FOLDER_GRID, show)
+    suspend fun updateAppDrawerOffsetY(offsetY: Int) = setPreference(KEY_APP_DRAWER_OFFSET_Y, offsetY)
 
     suspend fun updateSelectedIconPack(iconPackPackage: String?) =
         setPreference(KEY_SELECTED_ICON_PACK, iconPackPackage.takeUnless { it.isNullOrBlank() })
@@ -152,6 +158,8 @@ class LauncherDataStore(private val context: Context) {
                 prefs[KEY_ASCII_DIAMOND_OFFSET_Y] = settings.asciiDiamondOffsetY
                 prefs[KEY_ASCII_DIAMOND_FPS] = settings.asciiDiamondFps
                 prefs[KEY_ASCII_DIAMOND_SPEED] = settings.asciiDiamondSpeed
+                prefs[KEY_SHOW_FOLDER_GRID] = settings.showFolderGrid
+                prefs[KEY_APP_DRAWER_OFFSET_Y] = settings.appDrawerOffsetY
                 if (settings.selectedIconPack.isNullOrBlank()) {
                     prefs.remove(KEY_SELECTED_ICON_PACK)
                 } else {

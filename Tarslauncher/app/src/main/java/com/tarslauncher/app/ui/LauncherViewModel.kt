@@ -282,6 +282,14 @@ class LauncherViewModel(
         viewModelScope.launch { appRepository.updateAppDrawerIconSize(size) }
     }
 
+    fun updateShowFolderGrid(show: Boolean) {
+        viewModelScope.launch { appRepository.updateShowFolderGrid(show) }
+    }
+
+    fun updateAppDrawerOffsetY(offsetY: Int) {
+        viewModelScope.launch { appRepository.updateAppDrawerOffsetY(offsetY) }
+    }
+
     fun setOnboardingComplete() {
         _uiState.update { it.copy(showOnboarding = false) }
     }

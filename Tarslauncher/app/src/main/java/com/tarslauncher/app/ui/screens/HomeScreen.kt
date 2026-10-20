@@ -116,6 +116,8 @@ fun HomeScreen(
     asciiDiamondOffsetY: Int = 0,
     asciiDiamondFps: Int = 60,
     asciiDiamondSpeed: Int = 100,
+    showFolderGrid: Boolean = true,
+    appDrawerOffsetY: Int = 24,
     pwaPresets: List<PwaInfo> = emptyList(),
     onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
     onDeletePwa: (pwaId: String) -> Unit = {}
@@ -256,7 +258,7 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier
                         .then(
-                            if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = 16.dp)
+                            if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = (appDrawerOffsetY.coerceAtLeast(16)).dp)
                             else Modifier
                         ),
                     horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
@@ -300,7 +302,7 @@ fun HomeScreen(
                         .height(appDrawerHeight) // Responsive height
                         .navigationBarsPadding() // Alt navigation bar için padding
                         .padding(top = 4.dp) // Settings butonuna yaklaşmak için minimal boşluk
-                        .padding(bottom = if (dualAppDrawer) 12.dp else 24.dp), // Alt navigation bar ile arasında boşluk
+                        .padding(bottom = (if (dualAppDrawer) (appDrawerOffsetY - 12).coerceAtLeast(0) else appDrawerOffsetY).dp), // Alt navigation bar ile arasında ayarlanabilir boşluk
                     contentAlignment = Alignment.Center
                 ) {
                     val onAppLongClickMemo: (AppInfo) -> Unit = remember {
@@ -396,24 +398,26 @@ fun HomeScreen(
         }
         
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    horizontal = mainPadding,
-                    vertical = (screenHeight * 0.05f).coerceAtLeast(20.dp).coerceAtMost(40.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            FolderGrid(
-                folders = folders,
-                onFoldersUpdate = onFoldersUpdate,
-                onAppClick = onAppClick,
-                gridSize = gridSize,
-                iconPackLoader = iconPackLoader,
-                buttonColor = buttonColor,
-                onDeletePwa = onDeletePwa
-            )
+        if (showFolderGrid) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = mainPadding,
+                        vertical = (screenHeight * 0.05f).coerceAtLeast(20.dp).coerceAtMost(40.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                FolderGrid(
+                    folders = folders,
+                    onFoldersUpdate = onFoldersUpdate,
+                    onAppClick = onAppClick,
+                    gridSize = gridSize,
+                    iconPackLoader = iconPackLoader,
+                    buttonColor = buttonColor,
+                    onDeletePwa = onDeletePwa
+                )
+            }
         }
     }
     

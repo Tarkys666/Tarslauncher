@@ -357,4 +357,6 @@ class AppRepository(
     suspend fun updateAsciiDiamondSpeed(speed: Int) = dataStore.updateAsciiDiamondSpeed(speed)
     suspend fun updateSelectedIconPack(pack: String?) = dataStore.updateSelectedIconPack(pack)
     suspend fun updateAppDrawerIconSize(size: Int) = dataStore.updateAppDrawerIconSize(size)
+    suspend fun updateShowFolderGrid(show: Boolean) = dataStore.updateShowFolderGrid(show)
+    suspend fun updateAppDrawerOffsetY(offsetY: Int) = dataStore.updateAppDrawerOffsetY(offsetY)
 }
