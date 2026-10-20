@@ -22,7 +22,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -30,15 +30,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle Cache
-        uses: actions/cache@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          cache-read-only: false
 
       - name: Decode Release Keystore from GitHub Secrets
         working-directory: ./Tarslauncher
@@ -56,11 +51,7 @@ jobs:
         working-directory: ./Tarslauncher
         run: chmod +x gradlew
 
-      - name: Run Unit Tests
-        working-directory: ./Tarslauncher
-        run: ./gradlew testReleaseUnitTest --stacktrace
-
-      - name: Build Release APK
+      - name: Build Release APK and Run Unit Tests
         working-directory: ./Tarslauncher
         env:
           RELEASE_STORE_FILE: "tarslauncher-release.jks"
@@ -69,7 +60,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleRelease testReleaseUnitTest --stacktrace
 
       - name: Locate, Rename APK and Generate SHA-256 Checksum
         working-directory: ./Tarslauncher

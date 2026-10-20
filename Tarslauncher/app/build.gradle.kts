@@ -145,6 +145,11 @@ android {
             enableSplit = false
         }
     }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 dependencies {

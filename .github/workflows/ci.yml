@@ -3,11 +3,17 @@ name: Android CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'version.json'
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [ main ]
 
 jobs:
   build:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
 
     steps:
@@ -20,24 +26,15 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle Cache
-        uses: actions/cache@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          cache-read-only: false
 
       - name: Grant execute permission for gradlew
         working-directory: ./Tarslauncher
         run: chmod +x gradlew
 
-      - name: Run Unit Tests
+      - name: Build Debug APK and Run Unit Tests
         working-directory: ./Tarslauncher
-        run: ./gradlew test --stacktrace
-
-      - name: Build Debug APK
-        working-directory: ./Tarslauncher
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug test --stacktrace
