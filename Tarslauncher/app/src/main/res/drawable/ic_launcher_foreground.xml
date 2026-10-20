@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Diamond Perimeter -->
+    <path
+        android:fillColor="#0D9AD9FF"
+        android:pathData="M 40,32 L 68,32 L 84,46 L 54,84 L 24,46 Z"
+        android:strokeColor="#9AD9FF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.5" />
+
+    <!-- Table Upper Facet -->
+    <path
+        android:fillColor="#1AFFFFFF"
+        android:pathData="M 40,32 L 68,32 L 60,42 L 48,42 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.0" />
+
+    <!-- Left Kite Facet -->
+    <path
+        android:pathData="M 40,32 L 48,42 L 30,46 Z"
+        android:strokeColor="#9AD9FF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.0" />
+
+    <!-- Right Kite Facet -->
+    <path
+        android:pathData="M 68,32 L 78,46 L 60,42 Z"
+        android:strokeColor="#9AD9FF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.0" />
+
+    <!-- Center Kite Facet -->
+    <path
+        android:fillColor="#269AD9FF"
+        android:pathData="M 48,42 L 60,42 L 54,49 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.0" />
+
+    <!-- Pavilion Rays to Culet -->
+    <path
+        android:pathData="M 30,46 L 54,84"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.0" />
+    <path
+        android:pathData="M 78,46 L 54,84"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.0" />
+    <path
+        android:pathData="M 48,42 L 54,84"
+        android:strokeColor="#9AD9FF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.6" />
+    <path
+        android:pathData="M 60,42 L 54,84"
+        android:strokeColor="#9AD9FF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.6" />
+
+    <!-- Sparkle Cross on Crown -->
+    <path
+        android:pathData="M 68,27 L 68,37 M 63,32 L 73,32"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.4" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 68,30.5 A 1.5,1.5 0 1 1 68,33.5 A 1.5,1.5 0 1 1 68,30.5 Z" />
+</vector>

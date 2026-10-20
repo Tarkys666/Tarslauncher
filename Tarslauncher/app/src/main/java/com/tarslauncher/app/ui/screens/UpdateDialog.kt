@@ -248,7 +248,7 @@ fun UpdateDialog(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Ready to install TARS Launcher update.",
+                            text = "Ready to install Facet Launcher update.",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 12.sp
                         )

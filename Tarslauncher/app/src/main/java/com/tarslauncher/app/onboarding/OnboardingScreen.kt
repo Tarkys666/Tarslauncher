@@ -167,7 +167,7 @@ fun OnboardingScreen(onOnboardingComplete: () -> Unit) {
 fun StepWelcome() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "INITIALIZING TARS...",
+            text = "INITIALIZING FACET...",
             color = Color.White,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
@@ -248,7 +248,7 @@ fun StepDefaultLauncher(onSetDefaultClick: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "For the best experience, set TARS as your default home app.",
+            text = "For the best experience, set Facet as your default home app.",
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 14.sp,
             textAlign = TextAlign.Center

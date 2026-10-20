@@ -1,8 +1,8 @@
 {
-    "apkSize": 1237945,
-    "sha256": "ba04ef4b6ba88150cb20e24e3a52ff45758b4dd10a63b9e714455562f312d3a6",
-    "versionName": "2.0.13",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.13/TarsLauncher-release.apk",
-    "versionCode": 62,
-    "releaseNotes": "TARS v2.0.13: 3D ASCII Elmas motoru WebView'dan %100 saf Kotlin Jetpack Compose Canvas grafik motoruna tasindi. Sifir WebView RAM tuketimi (~70 MB tasarruf), 0ms baslatma gecikmesi, 0 GC per frame ve 60-120 FPS akici piksel mukemmel rendering saglandi."
+    "apkSize": 1230992,
+    "sha256": "8c99313af7d2cc6909f2046a08e9700afeb4e2130fec479818f03fa4c3652d53",
+    "versionName": "2.0.14",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.14/TarsLauncher-release.apk",
+    "versionCode": 63,
+    "releaseNotes": "Facet Launcher v2.0.14: Uygulama kimligi Facet Launcher olarak yenilendi. Pure Brilliant Cut vektor elmas logosu (AMOLED adaptive icon) eklendi, ana ekran basligi ve ayar metinleri Facet olarak guncellendi."
 }

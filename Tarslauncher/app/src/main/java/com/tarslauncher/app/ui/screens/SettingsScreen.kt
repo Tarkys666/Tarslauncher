@@ -191,8 +191,8 @@ fun SettingsScreen(
                         ))
                     }
                     add(SettingsItem.Setting(
-                        title = "TARS Header",
-                        description = "Show TARS text on home screen",
+                        title = "FACET Header",
+                        description = "Show FACET text on home screen",
                         type = SettingType.TOGGLE,
                         currentValue = showTarsHeader,
                         onValueChange = { onShowTarsHeaderChange(it as Boolean) }
@@ -206,7 +206,7 @@ fun SettingsScreen(
                 ))
                 add(SettingsItem.Setting(
                     title = "ASCII Diamond",
-                    description = if (showAsciiDiamond) "Enabled (Clock & TARS logo hidden)" else "3D rotating ASCII Diamond background",
+                    description = if (showAsciiDiamond) "Enabled (Clock & Facet logo hidden)" else "3D rotating ASCII Diamond background",
                     type = SettingType.TOGGLE,
                     currentValue = showAsciiDiamond,
                     onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
@@ -291,7 +291,7 @@ fun SettingsScreen(
             children = listOf(
                 SettingsItem.Setting(
                     title = "Default Launcher",
-                    description = if (isDefaultLauncherSet) "TARS is default launcher" else "Set TARS as default home screen",
+                    description = if (isDefaultLauncherSet) "Facet is default launcher" else "Set Facet as default home screen",
                     type = SettingType.LAUNCHER_STATUS,
                     currentValue = isDefaultLauncherSet,
                     onClick = {

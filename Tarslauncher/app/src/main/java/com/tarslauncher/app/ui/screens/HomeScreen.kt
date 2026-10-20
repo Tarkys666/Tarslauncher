@@ -1368,7 +1368,7 @@ fun ClockHeader(
         }
         if (showTarsHeader) {
             Text(
-                text = "T A R S",
+                text = "F A C E T",
                 color = Color.White,
                 fontSize = tarsFontSize,
                 fontWeight = FontWeight.ExtraLight,
