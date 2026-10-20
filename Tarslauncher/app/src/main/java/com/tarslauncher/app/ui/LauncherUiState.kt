@@ -28,4 +28,8 @@ data class LauncherUiState(
     val selectedIconPack: String? get() = settings.selectedIconPack
     val appDrawerIconSize: Int get() = settings.appDrawerIconSize
     val showAsciiDiamond: Boolean get() = settings.showAsciiDiamond
+    val asciiDiamondScale: Int get() = settings.asciiDiamondScale
+    val asciiDiamondOffsetY: Int get() = settings.asciiDiamondOffsetY
+    val asciiDiamondFps: Int get() = settings.asciiDiamondFps
+    val asciiDiamondSpeed: Int get() = settings.asciiDiamondSpeed
 }

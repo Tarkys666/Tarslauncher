@@ -351,6 +351,10 @@ class AppRepository(
     suspend fun updateShowTarsHeader(show: Boolean) = dataStore.updateShowTarsHeader(show)
     suspend fun updateShowClock(show: Boolean) = dataStore.updateShowClock(show)
     suspend fun updateShowAsciiDiamond(enabled: Boolean) = dataStore.updateShowAsciiDiamond(enabled)
+    suspend fun updateAsciiDiamondScale(scale: Int) = dataStore.updateAsciiDiamondScale(scale)
+    suspend fun updateAsciiDiamondOffsetY(offsetY: Int) = dataStore.updateAsciiDiamondOffsetY(offsetY)
+    suspend fun updateAsciiDiamondFps(fps: Int) = dataStore.updateAsciiDiamondFps(fps)
+    suspend fun updateAsciiDiamondSpeed(speed: Int) = dataStore.updateAsciiDiamondSpeed(speed)
     suspend fun updateSelectedIconPack(pack: String?) = dataStore.updateSelectedIconPack(pack)
     suspend fun updateAppDrawerIconSize(size: Int) = dataStore.updateAppDrawerIconSize(size)
 }

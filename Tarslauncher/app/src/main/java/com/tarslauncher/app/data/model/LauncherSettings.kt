@@ -12,5 +12,9 @@ data class LauncherSettings(
     val showClock: Boolean = true,
     val selectedIconPack: String? = null,
     val appDrawerIconSize: Int = 32,
-    val showAsciiDiamond: Boolean = false
+    val showAsciiDiamond: Boolean = false,
+    val asciiDiamondScale: Int = 100,
+    val asciiDiamondOffsetY: Int = 0,
+    val asciiDiamondFps: Int = 60,
+    val asciiDiamondSpeed: Int = 100
 )

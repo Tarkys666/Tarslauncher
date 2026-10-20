@@ -39,6 +39,10 @@ class LauncherDataStore(private val context: Context) {
         val KEY_USAGE_STATS_JSON = stringPreferencesKey("usage_stats_json")
         val KEY_PWAS_JSON = stringPreferencesKey("pwas_json")
         val KEY_SHOW_ASCII_DIAMOND = booleanPreferencesKey("show_ascii_diamond")
+        val KEY_ASCII_DIAMOND_SCALE = intPreferencesKey("ascii_diamond_scale")
+        val KEY_ASCII_DIAMOND_OFFSET_Y = intPreferencesKey("ascii_diamond_offset_y")
+        val KEY_ASCII_DIAMOND_FPS = intPreferencesKey("ascii_diamond_fps")
+        val KEY_ASCII_DIAMOND_SPEED = intPreferencesKey("ascii_diamond_speed")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
     }
 
@@ -87,7 +91,11 @@ class LauncherDataStore(private val context: Context) {
                 showClock = preferences[KEY_SHOW_CLOCK] ?: true,
                 selectedIconPack = preferences[KEY_SELECTED_ICON_PACK],
                 appDrawerIconSize = preferences[KEY_APP_DRAWER_ICON_SIZE] ?: 32,
-                showAsciiDiamond = preferences[KEY_SHOW_ASCII_DIAMOND] ?: false
+                showAsciiDiamond = preferences[KEY_SHOW_ASCII_DIAMOND] ?: false,
+                asciiDiamondScale = preferences[KEY_ASCII_DIAMOND_SCALE] ?: 100,
+                asciiDiamondOffsetY = preferences[KEY_ASCII_DIAMOND_OFFSET_Y] ?: 0,
+                asciiDiamondFps = preferences[KEY_ASCII_DIAMOND_FPS] ?: 60,
+                asciiDiamondSpeed = preferences[KEY_ASCII_DIAMOND_SPEED] ?: 100
             )
         }
         .distinctUntilChanged()
@@ -108,6 +116,10 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun updateShowClock(show: Boolean) = setPreference(KEY_SHOW_CLOCK, show)
     suspend fun updateShowAsciiDiamond(enabled: Boolean) = setPreference(KEY_SHOW_ASCII_DIAMOND, enabled)
+    suspend fun updateAsciiDiamondScale(scale: Int) = setPreference(KEY_ASCII_DIAMOND_SCALE, scale)
+    suspend fun updateAsciiDiamondOffsetY(offsetY: Int) = setPreference(KEY_ASCII_DIAMOND_OFFSET_Y, offsetY)
+    suspend fun updateAsciiDiamondFps(fps: Int) = setPreference(KEY_ASCII_DIAMOND_FPS, fps)
+    suspend fun updateAsciiDiamondSpeed(speed: Int) = setPreference(KEY_ASCII_DIAMOND_SPEED, speed)
 
     suspend fun updateSelectedIconPack(iconPackPackage: String?) =
         setPreference(KEY_SELECTED_ICON_PACK, iconPackPackage.takeUnless { it.isNullOrBlank() })
@@ -136,6 +148,10 @@ class LauncherDataStore(private val context: Context) {
                 prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
                 prefs[KEY_SHOW_CLOCK] = settings.showClock
                 prefs[KEY_SHOW_ASCII_DIAMOND] = settings.showAsciiDiamond
+                prefs[KEY_ASCII_DIAMOND_SCALE] = settings.asciiDiamondScale
+                prefs[KEY_ASCII_DIAMOND_OFFSET_Y] = settings.asciiDiamondOffsetY
+                prefs[KEY_ASCII_DIAMOND_FPS] = settings.asciiDiamondFps
+                prefs[KEY_ASCII_DIAMOND_SPEED] = settings.asciiDiamondSpeed
                 if (settings.selectedIconPack.isNullOrBlank()) {
                     prefs.remove(KEY_SELECTED_ICON_PACK)
                 } else {

@@ -112,6 +112,10 @@ fun HomeScreen(
     appDrawerIconSize: Int,
     showClock: Boolean,
     showAsciiDiamond: Boolean = false,
+    asciiDiamondScale: Int = 100,
+    asciiDiamondOffsetY: Int = 0,
+    asciiDiamondFps: Int = 60,
+    asciiDiamondSpeed: Int = 100,
     pwaPresets: List<PwaInfo> = emptyList(),
     onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
     onDeletePwa: (pwaId: String) -> Unit = {}
@@ -221,7 +225,12 @@ fun HomeScreen(
             )
     ) {
         if (showAsciiDiamond) {
-            AsciiDiamondBackground()
+            AsciiDiamondBackground(
+                scale = asciiDiamondScale,
+                offsetY = asciiDiamondOffsetY,
+                fps = asciiDiamondFps,
+                speed = asciiDiamondSpeed
+            )
         }
 
         // Main content column - sadece butonlar ve command bar için
@@ -1372,18 +1381,29 @@ fun ClockHeader(
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AsciiDiamondBackground(modifier: Modifier = Modifier) {
+fun AsciiDiamondBackground(
+    scale: Int = 100,
+    offsetY: Int = 0,
+    fps: Int = 60,
+    speed: Int = 100,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    val htmlContent = remember {
+    val rawHtml = remember {
         try {
             context.assets.open("ascii_diamond.html").bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             Log.e("AsciiDiamond", "Failed to load ascii_diamond.html from assets", e)
             ""
         }
+    }
+
+    val htmlContent = remember(rawHtml, scale, offsetY, fps, speed) {
+        val initialConfig = "diamondScale = ${scale / 100f}; diamondOffsetY = ${offsetY / 100f}; diamondFps = $fps; diamondSpeed = ${speed / 100f};"
+        rawHtml.replace("/* __INITIAL_CONFIG__ */", initialConfig)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -1452,6 +1472,14 @@ fun AsciiDiamondBackground(modifier: Modifier = Modifier) {
         },
         update = { webView ->
             webView.onResume()
+            val scaleFloat = scale / 100f
+            val offsetYFloat = offsetY / 100f
+            val fpsInt = fps
+            val speedFloat = speed / 100f
+            webView.evaluateJavascript(
+                "if (window.updateConfig) window.updateConfig($scaleFloat, $offsetYFloat, $fpsInt, $speedFloat);",
+                null
+            )
         },
         modifier = modifier.fillMaxSize()
     )

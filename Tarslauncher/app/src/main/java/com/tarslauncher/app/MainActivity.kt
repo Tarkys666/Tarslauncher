@@ -147,6 +147,10 @@ fun LauncherMain(
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
     val onShowAsciiDiamondChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAsciiDiamond(v) } }
+    val onAsciiDiamondScaleChange = remember(viewModel) { { s: Int -> viewModel.updateAsciiDiamondScale(s) } }
+    val onAsciiDiamondOffsetYChange = remember(viewModel) { { o: Int -> viewModel.updateAsciiDiamondOffsetY(o) } }
+    val onAsciiDiamondFpsChange = remember(viewModel) { { f: Int -> viewModel.updateAsciiDiamondFps(f) } }
+    val onAsciiDiamondSpeedChange = remember(viewModel) { { sp: Int -> viewModel.updateAsciiDiamondSpeed(sp) } }
     val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
     val onCheckForUpdates = remember(viewModel) {
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
@@ -173,6 +177,10 @@ fun LauncherMain(
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     showClock = uiState.showClock,
                     showAsciiDiamond = uiState.showAsciiDiamond,
+                    asciiDiamondScale = uiState.asciiDiamondScale,
+                    asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
+                    asciiDiamondFps = uiState.asciiDiamondFps,
+                    asciiDiamondSpeed = uiState.asciiDiamondSpeed,
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
                     onDeletePwa = onDeletePwa
@@ -197,6 +205,14 @@ fun LauncherMain(
                     showAsciiDiamond = uiState.showAsciiDiamond,
                     onShowClockChange = onShowClockChange,
                     onShowAsciiDiamondChange = onShowAsciiDiamondChange,
+                    asciiDiamondScale = uiState.asciiDiamondScale,
+                    onAsciiDiamondScaleChange = onAsciiDiamondScaleChange,
+                    asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
+                    onAsciiDiamondOffsetYChange = onAsciiDiamondOffsetYChange,
+                    asciiDiamondFps = uiState.asciiDiamondFps,
+                    onAsciiDiamondFpsChange = onAsciiDiamondFpsChange,
+                    asciiDiamondSpeed = uiState.asciiDiamondSpeed,
+                    onAsciiDiamondSpeedChange = onAsciiDiamondSpeedChange,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     onAppDrawerIconSizeChange = onAppDrawerIconSizeChange,
                     appVersion = BuildConfig.VERSION_NAME,

@@ -57,7 +57,10 @@ sealed class SettingsItem {
         val onValueChange: ((Any) -> Unit)? = null,
         val onClick: (() -> Unit)? = null,
         val enabled: Boolean = true,
-        val buttonLabel: String? = null
+        val buttonLabel: String? = null,
+        val sliderRange: ClosedFloatingPointRange<Float>? = null,
+        val sliderSteps: Int = 0,
+        val sliderValueUnit: String? = null
     ) : SettingsItem()
 }
 
@@ -95,6 +98,14 @@ fun SettingsScreen(
     onShowClockChange: (Boolean) -> Unit,
     showAsciiDiamond: Boolean = false,
     onShowAsciiDiamondChange: (Boolean) -> Unit = {},
+    asciiDiamondScale: Int = 100,
+    onAsciiDiamondScaleChange: (Int) -> Unit = {},
+    asciiDiamondOffsetY: Int = 0,
+    onAsciiDiamondOffsetYChange: (Int) -> Unit = {},
+    asciiDiamondFps: Int = 60,
+    onAsciiDiamondFpsChange: (Int) -> Unit = {},
+    asciiDiamondSpeed: Int = 100,
+    onAsciiDiamondSpeedChange: (Int) -> Unit = {},
     appDrawerIconSize: Int,
     onAppDrawerIconSizeChange: (Int) -> Unit,
     appVersion: String = "1.2.0",
@@ -137,6 +148,7 @@ fun SettingsScreen(
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
+    var showDiamondFpsDialog by remember { mutableStateOf(false) }
 
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -145,6 +157,10 @@ fun SettingsScreen(
         showTarsHeader,
         showClock,
         showAsciiDiamond,
+        asciiDiamondScale,
+        asciiDiamondOffsetY,
+        asciiDiamondFps,
+        asciiDiamondSpeed,
         appDrawerIconSize,
         gridSize,
         buttonColorMode,
@@ -195,6 +211,45 @@ fun SettingsScreen(
                     currentValue = showAsciiDiamond,
                     onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
                 ))
+                if (showAsciiDiamond) {
+                    add(SettingsItem.Setting(
+                        title = "Diamond Size",
+                        description = "Adjust 3D diamond scale",
+                        type = SettingType.SLIDER,
+                        currentValue = asciiDiamondScale,
+                        onValueChange = { onAsciiDiamondScaleChange(it as Int) },
+                        sliderRange = 40f..180f,
+                        sliderSteps = 27,
+                        sliderValueUnit = "%"
+                    ))
+                    add(SettingsItem.Setting(
+                        title = "Diamond Position (Y)",
+                        description = if (asciiDiamondOffsetY < 0) "${-asciiDiamondOffsetY}% Up" else if (asciiDiamondOffsetY > 0) "${asciiDiamondOffsetY}% Down" else "Center",
+                        type = SettingType.SLIDER,
+                        currentValue = asciiDiamondOffsetY,
+                        onValueChange = { onAsciiDiamondOffsetYChange(it as Int) },
+                        sliderRange = -40f..40f,
+                        sliderSteps = 15,
+                        sliderValueUnit = "%"
+                    ))
+                    add(SettingsItem.Setting(
+                        title = "Diamond FPS",
+                        description = "Current: $asciiDiamondFps FPS",
+                        type = SettingType.BUTTON,
+                        onClick = { showDiamondFpsDialog = true },
+                        buttonLabel = "SELECT"
+                    ))
+                    add(SettingsItem.Setting(
+                        title = "Diamond Rotation Speed",
+                        description = if (asciiDiamondSpeed == 0) "Stopped (drag to rotate)" else "$asciiDiamondSpeed% speed",
+                        type = SettingType.SLIDER,
+                        currentValue = asciiDiamondSpeed,
+                        onValueChange = { onAsciiDiamondSpeedChange(it as Int) },
+                        sliderRange = 0f..200f,
+                        sliderSteps = 19,
+                        sliderValueUnit = "%"
+                    ))
+                }
                 add(SettingsItem.Setting(
                     title = "App Drawer Icon Size",
                     description = "Adjust app drawer icon size (20-36dp)",
@@ -431,7 +486,68 @@ fun SettingsScreen(
         }
         }
     
-    if (showIconPackDialog) {
+
+    if (showDiamondFpsDialog) {
+        Dialog(onDismissRequest = { showDiamondFpsDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF333333)),
+                modifier = Modifier.padding(16.dp).fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "TARGET FPS",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    listOf(
+                        30 to "30 FPS (Battery Saver)",
+                        45 to "45 FPS (Balanced)",
+                        60 to "60 FPS (Default)",
+                        90 to "90 FPS (Smooth)",
+                        120 to "120 FPS (Ultra)"
+                    ).forEach { (fpsVal, label) ->
+                        TarsOptionButton(
+                            text = label,
+                            isSelected = asciiDiamondFps == fpsVal,
+                            onClick = {
+                                onAsciiDiamondFpsChange(fpsVal)
+                                showDiamondFpsDialog = false
+                            },
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showDiamondFpsDialog = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Black,
+                            contentColor = Color.White
+                        ),
+                        border = BorderStroke(1.dp, Color.Transparent),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "CLOSE",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+        if (showIconPackDialog) {
         IconPackSelectionDialog(
             iconPacks = installedIconPacks,
             onDismiss = { showIconPackDialog = false },
@@ -677,28 +793,28 @@ fun SettingsItemView(
                 SettingType.SLIDER -> {
                     val currentValue = setting.currentValue as? Int ?: 32
                     var sliderPosition by remember(currentValue) { mutableFloatStateOf(currentValue.toFloat()) }
+                    val range = setting.sliderRange ?: 20f..36f
+                    val steps = if (setting.sliderSteps > 0) setting.sliderSteps else if (setting.sliderRange == null) 15 else 0
+                    val unit = setting.sliderValueUnit ?: "dp"
                     
                     Column {
-                        // Değer gösterimi
                         Text(
-                            text = "${sliderPosition.toInt()}dp",
+                            text = if (unit == "%") "${sliderPosition.toInt()}%" else "${sliderPosition.toInt()}$unit",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             modifier = Modifier.align(Alignment.End)
                         )
-                        
-                        // Uzun yatay slider with debounce on finish
                         Slider(
                             value = sliderPosition,
                             onValueChange = { sliderPosition = it },
                             onValueChangeFinished = {
                                 setting.onValueChange?.invoke(sliderPosition.toInt())
                             },
-                            valueRange = 20f..36f, // 20dp - 36dp aralığı
-                            steps = 15, // 1dp artışlarla (20,21,22...36)
+                            valueRange = range,
+                            steps = steps,
                             modifier = Modifier
-                                .width(150.dp) // Uzun yatay slider
+                                .width(150.dp)
                                 .height(24.dp),
                             colors = SliderDefaults.colors(
                                 thumbColor = Color.White,

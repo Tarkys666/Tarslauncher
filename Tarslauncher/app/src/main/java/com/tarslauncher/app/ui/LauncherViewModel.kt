@@ -258,6 +258,22 @@ class LauncherViewModel(
         }
     }
 
+    fun updateAsciiDiamondScale(scale: Int) {
+        viewModelScope.launch { appRepository.updateAsciiDiamondScale(scale) }
+    }
+
+    fun updateAsciiDiamondOffsetY(offsetY: Int) {
+        viewModelScope.launch { appRepository.updateAsciiDiamondOffsetY(offsetY) }
+    }
+
+    fun updateAsciiDiamondFps(fps: Int) {
+        viewModelScope.launch { appRepository.updateAsciiDiamondFps(fps) }
+    }
+
+    fun updateAsciiDiamondSpeed(speed: Int) {
+        viewModelScope.launch { appRepository.updateAsciiDiamondSpeed(speed) }
+    }
+
     fun updateSelectedIconPack(iconPackPackage: String?) {
         viewModelScope.launch { appRepository.updateSelectedIconPack(iconPackPackage) }
     }
