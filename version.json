@@ -1,8 +1,8 @@
 {
-    "apkSize": 1276810,
-    "sha256": "6c6fee77ec9bca32335b4c84b013bd6129472fe95e97b07bd5db11dd46be1961",
-    "versionName": "2.0.26",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.26/TarsLauncher-release.apk",
-    "versionCode": 75,
-    "releaseNotes": "Facet Launcher v2.0.26: Uygulama cekmecesinin konumu sabitlendikten sonra ana ekranda asagi/yukari kaymasi ve dikey scroll davranisi tamamen engellendi. Drawer yuksekligi pozisyon ayarlama ekraniyla piksel piksel birebir esitlendi."
+    "apkSize": 1416715,
+    "sha256": "c28ba3dbfac375cf52e21f4fbf5bd68259157806d4bc406e80fc1bca0a31afec",
+    "versionName": "2.0.27",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.27/TarsLauncher-release.apk",
+    "versionCode": 76,
+    "releaseNotes": "Facet Launcher v2.0.27: Supabase & Google Auth bulut yedekleme entegrasyonu tamamlandi. Tum ozellestirmeler, klasorler, PWA web uygulamalari ve kullanim istatistikleri kullanici bazli PostgreSQL RLS izolasyonu ile guvenle buluta yedeklenebilir ve geri yuklenebilir. Hafif ag istemcisi, HTTPS zorunlulugu, OOM ve DoS korumalari eklendi."
 }

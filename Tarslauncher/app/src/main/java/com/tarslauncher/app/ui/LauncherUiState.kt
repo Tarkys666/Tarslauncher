@@ -1,6 +1,7 @@
 package com.tarslauncher.app.ui
 
 import com.tarslauncher.app.data.model.*
+import com.tarslauncher.app.data.sync.TarsAuthUser
 import com.tarslauncher.app.data.updater.UpdateState
 import androidx.compose.runtime.Immutable
 
@@ -16,7 +17,11 @@ data class LauncherUiState(
     val pwaPresets: List<PwaInfo> = emptyList(),
     val isLoading: Boolean = false,
     val updateState: UpdateState = UpdateState.Idle,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val authUser: TarsAuthUser? = null,
+    val isSyncing: Boolean = false,
+    val syncStatusMessage: String? = null,
+    val lastBackupTime: Long? = null
 ) {
     // Convenience properties mapping to type-safe settings
     val showAppDrawer: Boolean get() = settings.showAppDrawer

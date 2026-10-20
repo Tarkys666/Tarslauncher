@@ -62,8 +62,8 @@ android {
         applicationId = "com.tarslauncher.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 75
-        versionName = "2.0.26"
+        versionCode = 76
+        versionName = "2.0.27"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -77,6 +77,16 @@ android {
 
         // Strip unused localized strings and assets from AndroidX/Material libraries
         resourceConfigurations += listOf("en")
+
+        val supabaseUrl = System.getenv("SUPABASE_URL")
+            ?: localProperties.getProperty("SUPABASE_URL")
+            ?: ""
+        val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
+            ?: localProperties.getProperty("SUPABASE_ANON_KEY")
+            ?: ""
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
@@ -164,6 +174,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.browser)
     implementation(libs.gson)    
+    implementation(libs.play.services.auth)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

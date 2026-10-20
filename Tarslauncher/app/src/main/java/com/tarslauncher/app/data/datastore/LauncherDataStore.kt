@@ -46,6 +46,7 @@ class LauncherDataStore(private val context: Context) {
         val KEY_ASCII_DIAMOND_SPEED = intPreferencesKey("ascii_diamond_speed")
         val KEY_SHOW_FOLDER_GRID = booleanPreferencesKey("show_folder_grid")
         val KEY_APP_DRAWER_OFFSET_Y = intPreferencesKey("app_drawer_offset_y")
+        val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
         val KEY_MIGRATED_FROM_SP = booleanPreferencesKey("migrated_from_sp")
     }
 
@@ -111,6 +112,10 @@ class LauncherDataStore(private val context: Context) {
         .map { preferences -> preferences[KEY_PWAS_JSON] }
         .distinctUntilChanged()
 
+    val lastBackupTimeFlow: Flow<Long?> = safeData
+        .map { preferences -> preferences[KEY_LAST_BACKUP_TIME] }
+        .distinctUntilChanged()
+
     suspend fun updateShowAppDrawer(show: Boolean) = setPreference(KEY_SHOW_APP_DRAWER, show)
 
     suspend fun updateDualAppDrawer(enabled: Boolean) {
@@ -155,6 +160,10 @@ class LauncherDataStore(private val context: Context) {
     suspend fun savePwasJson(json: String) = setPreference(KEY_PWAS_JSON, json)
 
     suspend fun getPwasJson(): String? = getPreference(KEY_PWAS_JSON)
+
+    suspend fun setLastBackupTime(time: Long) = setPreference(KEY_LAST_BACKUP_TIME, time)
+
+    suspend fun getLastBackupTime(): Long? = getPreference(KEY_LAST_BACKUP_TIME)
 
     suspend fun saveAllSettings(settings: LauncherSettings) {
         try {

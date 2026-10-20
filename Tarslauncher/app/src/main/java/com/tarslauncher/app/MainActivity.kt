@@ -77,6 +77,20 @@ fun LauncherMain(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+
+    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleGoogleSignInResult(result.data)
+    }
+
+    LaunchedEffect(uiState.syncStatusMessage) {
+        val msg = uiState.syncStatusMessage
+        if (!msg.isNullOrBlank()) {
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            viewModel.clearSyncStatus()
+        }
+    }
     
     // Güvenli broadcast receiver ile uygulama değişikliklerini dinle
     DisposableEffect(context) {
@@ -255,7 +269,20 @@ fun LauncherMain(
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
                     onDeletePwa = onDeletePwa,
-                    onCheckForUpdates = onCheckForUpdates
+                    onCheckForUpdates = onCheckForUpdates,
+                    authUser = uiState.authUser,
+                    isSyncing = uiState.isSyncing,
+                    lastBackupTime = uiState.lastBackupTime,
+                    onGoogleSignInClick = {
+                        try {
+                            googleSignInLauncher.launch(viewModel.getGoogleSignInIntent())
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Google girişi başlatılamadı: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onSignOutClick = { viewModel.signOutGoogle() },
+                    onBackupToCloudClick = { viewModel.backupToCloud() },
+                    onRestoreFromCloudClick = { viewModel.restoreFromCloud() }
                 )
             }
 

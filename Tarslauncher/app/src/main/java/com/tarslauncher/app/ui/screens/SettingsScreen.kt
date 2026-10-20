@@ -120,7 +120,14 @@ fun SettingsScreen(
     pwaPresets: List<PwaInfo> = emptyList(),
     onAddPwa: (name: String, url: String) -> Unit = { _, _ -> },
     onDeletePwa: (pwaId: String) -> Unit = {},
-    onCheckForUpdates: () -> Unit = {}
+    onCheckForUpdates: () -> Unit = {},
+    authUser: com.tarslauncher.app.data.sync.TarsAuthUser? = null,
+    isSyncing: Boolean = false,
+    lastBackupTime: Long? = null,
+    onGoogleSignInClick: () -> Unit = {},
+    onSignOutClick: () -> Unit = {},
+    onBackupToCloudClick: () -> Unit = {},
+    onRestoreFromCloudClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -157,6 +164,7 @@ fun SettingsScreen(
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showDiamondFpsDialog by remember { mutableStateOf(false) }
     var showAppDrawerRowsDialog by remember { mutableStateOf(false) }
+    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
     // Create organized settings tree structure
     val settingsTree = remember(
@@ -177,7 +185,10 @@ fun SettingsScreen(
         selectedIconPack,
         isDefaultLauncherSet,
         installedPwas.size,
-        appVersion
+        appVersion,
+        authUser,
+        isSyncing,
+        lastBackupTime
     ) {
         listOf(
             SettingsItem.Category(
@@ -330,6 +341,51 @@ fun SettingsScreen(
                         buttonLabel = "MANAGE"
                     )
                 )
+            ),
+            SettingsItem.Category(
+                title = "ACCOUNT & CLOUD BACKUP",
+                icon = "",
+                children = buildList {
+                    if (authUser != null && !authUser.isAnonymous) {
+                        add(SettingsItem.Setting(
+                            title = "Google Account",
+                            description = "${authUser.email ?: authUser.displayName ?: "Logged In"} (Connected)",
+                            type = SettingType.BUTTON,
+                            onClick = onSignOutClick,
+                            buttonLabel = "SIGN OUT"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "Backup to Cloud",
+                            description = if (lastBackupTime != null && lastBackupTime > 0) {
+                                val sdf = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+                                "Save all settings to Supabase (Last: ${sdf.format(Date(lastBackupTime))})"
+                            } else {
+                                "Save all settings, folders & web apps to Supabase"
+                            },
+                            type = SettingType.BUTTON,
+                            onClick = onBackupToCloudClick,
+                            buttonLabel = if (isSyncing) "SYNCING..." else "BACKUP",
+                            enabled = !isSyncing
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "Restore from Cloud",
+                            description = "Restore all launcher layout & settings from Supabase",
+                            type = SettingType.BUTTON,
+                            onClick = { showRestoreConfirmDialog = true },
+                            buttonLabel = if (isSyncing) "SYNCING..." else "RESTORE",
+                            enabled = !isSyncing
+                        ))
+                    } else {
+                        add(SettingsItem.Setting(
+                            title = "Google Account",
+                            description = "Sign in to back up all launcher settings to Supabase",
+                            type = SettingType.BUTTON,
+                            onClick = onGoogleSignInClick,
+                            buttonLabel = "SIGN IN",
+                            enabled = !isSyncing
+                        ))
+                    }
+                }
             ),
             SettingsItem.Category(
                 title = "SYSTEM & ABOUT",
@@ -692,6 +748,81 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("SAVE", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showRestoreConfirmDialog) {
+        Dialog(onDismissRequest = { showRestoreConfirmDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF333333)),
+                modifier = Modifier.padding(16.dp).fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "RESTORE FROM CLOUD",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "This will overwrite your current home screen layout, folders, and settings with your Supabase cloud backup. Are you sure?",
+                        color = Color(0xFFBBBBBB),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { showRestoreConfirmDialog = false },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Black,
+                                contentColor = Color.White
+                            ),
+                            border = BorderStroke(1.dp, Color(0xFF444444)),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "CANCEL",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Light,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                showRestoreConfirmDialog = false
+                                onRestoreFromCloudClick()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "RESTORE",
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                letterSpacing = 1.sp
+                            )
+                        }
                     }
                 }
             }

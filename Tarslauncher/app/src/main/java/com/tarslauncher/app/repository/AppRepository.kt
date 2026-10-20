@@ -8,12 +8,17 @@ import com.tarslauncher.app.data.datastore.LauncherDataStore
 import com.tarslauncher.app.data.json.parseJson
 import com.tarslauncher.app.data.json.toJson
 import com.tarslauncher.app.data.model.*
+import com.tarslauncher.app.data.sync.CloudBackupManager
+import com.tarslauncher.app.data.sync.GoogleAuthManager
+import com.tarslauncher.app.data.sync.TarsAuthUser
 import com.tarslauncher.app.utils.SecurityHelper
 import com.tarslauncher.app.utils.base64ToDrawable
 import com.tarslauncher.app.utils.getAppImageBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -25,6 +30,8 @@ class AppRepository(
     private val context: Context = context.applicationContext
     private val packageManager: PackageManager = this.context.packageManager
     val updateManager: com.tarslauncher.app.data.updater.UpdateManager = com.tarslauncher.app.data.updater.UpdateManager(this.context)
+    val authManager: GoogleAuthManager = GoogleAuthManager(this.context)
+    val cloudBackupManager: CloudBackupManager = CloudBackupManager(this.context, dataStore, authManager)
 
     @Volatile
     private var cachedInstalledApps: List<AppInfo>? = null
@@ -42,6 +49,28 @@ class AppRepository(
 
     val settingsFlow: Flow<LauncherSettings> = dataStore.settingsFlow
     val pwasJsonFlow: Flow<String?> = dataStore.pwasJsonFlow
+    val lastBackupTimeFlow: Flow<Long?> = dataStore.lastBackupTimeFlow
+    val authUserFlow: StateFlow<TarsAuthUser?> = authManager.authUserFlow
+
+    fun getGoogleSignInIntent(): Intent = authManager.getSignInIntent()
+
+    suspend fun handleGoogleSignInResult(data: Intent?): Result<TarsAuthUser> =
+        authManager.handleGoogleSignInResult(data)
+
+    suspend fun signOut() = authManager.signOut()
+
+    suspend fun backupToCloud(): Result<Long> = withContext(Dispatchers.IO) {
+        val currentSettings = dataStore.settingsFlow.first()
+        cloudBackupManager.backupLayout(currentSettings)
+    }
+
+    suspend fun restoreFromCloud(): Result<LauncherSettings> = withContext(Dispatchers.IO) {
+        val result = cloudBackupManager.restoreLayout()
+        result.onSuccess {
+            invalidateAppCache()
+        }
+        result
+    }
 
     fun invalidateAppCache() {
         cachedInstalledApps = null

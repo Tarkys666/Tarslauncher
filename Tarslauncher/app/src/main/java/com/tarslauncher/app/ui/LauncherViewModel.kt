@@ -1,5 +1,6 @@
 package com.tarslauncher.app.ui
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -43,6 +44,16 @@ class LauncherViewModel(
                 }
             }
             // Unified single reactive trigger for all PWA updates (in-app add/delete or external PinShortcutActivity)
+            launch {
+                appRepository.authUserFlow.collectLatest { user ->
+                    _uiState.update { it.copy(authUser = user) }
+                }
+            }
+            launch {
+                appRepository.lastBackupTimeFlow.collectLatest { time ->
+                    _uiState.update { it.copy(lastBackupTime = time) }
+                }
+            }
             var isInitialPwaEmit = true
             launch {
                 appRepository.pwasJsonFlow
@@ -345,6 +356,93 @@ class LauncherViewModel(
     fun dismissUpdateDialog() {
         _uiState.update { it.copy(updateState = com.tarslauncher.app.data.updater.UpdateState.Idle) }
     }
+    fun getGoogleSignInIntent(): Intent = appRepository.getGoogleSignInIntent()
+
+    fun handleGoogleSignInResult(data: Intent?) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+            val result = appRepository.handleGoogleSignInResult(data)
+            result.onSuccess { user ->
+                _uiState.update {
+                    it.copy(
+                        authUser = user,
+                        isSyncing = false,
+                        syncStatusMessage = "Google ile giriş yapıldı: ${user.email}"
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        syncStatusMessage = "Giriş başarısız: ${error.localizedMessage ?: "Bilinmeyen hata"}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun signOutGoogle() {
+        viewModelScope.launch {
+            appRepository.signOut()
+            _uiState.update {
+                it.copy(
+                    authUser = null,
+                    syncStatusMessage = "Çıkış yapıldı."
+                )
+            }
+        }
+    }
+
+    fun backupToCloud() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+            val result = appRepository.backupToCloud()
+            result.onSuccess { timestamp ->
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        lastBackupTime = timestamp,
+                        syncStatusMessage = "Buluta başarıyla yedeklendi!"
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        syncStatusMessage = "Yedekleme başarısız: ${error.localizedMessage ?: "Hata"}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun restoreFromCloud() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+            val result = appRepository.restoreFromCloud()
+            result.onSuccess { restoredSettings ->
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        settings = restoredSettings,
+                        syncStatusMessage = "Bulut yedeği başarıyla geri yüklendi!"
+                    )
+                }
+                refreshAppList()
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        syncStatusMessage = "Geri yükleme başarısız: ${error.localizedMessage ?: "Hata"}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearSyncStatus() {
+        _uiState.update { it.copy(syncStatusMessage = null) }
+    }
 }
 
 class LauncherViewModelFactory(
@@ -358,3 +456,4 @@ class LauncherViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
+
