@@ -1,8 +1,8 @@
 {
     "apkSize": 1276814,
-    "sha256": "f6ecd5979eac85c9e56aae4bce4e73c22a854156a8922180993e65983473b46b",
-    "versionName": "2.0.22",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.22/TarsLauncher-release.apk",
-    "versionCode": 71,
-    "releaseNotes": "Facet Launcher v2.0.22: App Drawer konumlandirmasinda 200px siniri kaldirildi. Ayarlardan tiklandiginda ana ekran blurlu sekilde gosterilerek App Drawer ekranin en tepesine kadar serbestce suruklenebilir ve sag alttaki OK tusuyla kaydedilebilir hale getirildi."
+    "sha256": "4a10c3a18471d29138f8b0102679ea59d25363bf07dbfbec1079ae3e80b23175",
+    "versionName": "2.0.23",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.23/TarsLauncher-release.apk",
+    "versionCode": 72,
+    "releaseNotes": "Facet Launcher v2.0.23: Cok satirli (1-20 arasi) uygulama cekmecesi ozelligi eklendi. Cift cekmecede oldugu gibi cift satirlar saga, tek satirlar sola zit yonlu kinetik kayma ile hareket eder. Ayarlardan 1 ila 20 satir arasinda serbestce secim yapilabilir."
 }

@@ -87,6 +87,8 @@ fun SettingsScreen(
     onShowAppDrawerChange: (Boolean) -> Unit,
     dualAppDrawer: Boolean = false,
     onDualAppDrawerChange: (Boolean) -> Unit = {},
+    appDrawerRows: Int = if (dualAppDrawer) 2 else 1,
+    onAppDrawerRowsChange: (Int) -> Unit = {},
     gridSize: GridSize,
     onGridSizeChange: (GridSize) -> Unit,
     installedIconPacks: List<IconPackInfo>,
@@ -154,11 +156,13 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showDiamondFpsDialog by remember { mutableStateOf(false) }
+    var showAppDrawerRowsDialog by remember { mutableStateOf(false) }
 
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
         showAppDrawer,
         dualAppDrawer,
+        appDrawerRows,
         showFolderGrid,
         appDrawerOffsetY,
         showTarsHeader,
@@ -189,11 +193,11 @@ fun SettingsScreen(
                     ))
                     if (showAppDrawer) {
                         add(SettingsItem.Setting(
-                            title = "Dual Row App Drawer",
-                            description = "Two interconnected rows scrolling in opposite directions",
-                            type = SettingType.TOGGLE,
-                            currentValue = dualAppDrawer,
-                            onValueChange = { onDualAppDrawerChange(it as Boolean) }
+                            title = "App Drawer Rows",
+                            description = "$appDrawerRows Row${if (appDrawerRows > 1) "s (Alternating directions)" else " (Classic single row)"}",
+                            type = SettingType.BUTTON,
+                            onClick = { showAppDrawerRowsDialog = true },
+                            buttonLabel = "ROWS"
                         ))
                         add(SettingsItem.Setting(
                             title = "App Drawer Position",
@@ -588,6 +592,109 @@ fun SettingsScreen(
                 showAddPwaDialog = true
             }
         )
+    }
+
+    if (showAppDrawerRowsDialog) {
+        var tempRows by remember(appDrawerRows) { mutableIntStateOf(appDrawerRows) }
+        Dialog(onDismissRequest = { showAppDrawerRowsDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF333333))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "APP DRAWER ROWS",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "$tempRows Row${if (tempRows > 1) "s" else ""}",
+                        color = Color(0xFF64B5F6),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (tempRows > 1) "Alternating kinetic flow (one right, one left)" else "Single standard row",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Slider 1 to 20
+                    Slider(
+                        value = tempRows.toFloat(),
+                        onValueChange = { tempRows = it.toInt().coerceIn(1, 20) },
+                        valueRange = 1f..20f,
+                        steps = 18,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = Color(0xFF333333)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "QUICK PRESETS",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        listOf(1, 2, 3, 5, 10, 20).forEach { r ->
+                            Box(
+                                modifier = Modifier
+                                    .clickable { tempRows = r }
+                                    .background(
+                                        if (tempRows == r) Color.White else Color(0xFF1E1E1E),
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 9.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (r == 1) "1" else "$r",
+                                    color = if (tempRows == r) Color.Black else Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (tempRows == r) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            onAppDrawerRowsChange(tempRows)
+                            showAppDrawerRowsDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("SAVE", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    }
+                }
+            }
+        }
     }
 }
 

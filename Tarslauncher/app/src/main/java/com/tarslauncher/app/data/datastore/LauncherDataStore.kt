@@ -29,6 +29,7 @@ class LauncherDataStore(private val context: Context) {
 
         val KEY_SHOW_APP_DRAWER = booleanPreferencesKey("show_app_drawer")
         val KEY_DUAL_APP_DRAWER = booleanPreferencesKey("dual_app_drawer")
+        val KEY_APP_DRAWER_ROWS = intPreferencesKey("app_drawer_rows")
         val KEY_GRID_SIZE = stringPreferencesKey("grid_size")
         val KEY_BUTTON_COLOR_MODE = stringPreferencesKey("button_color_mode")
         val KEY_SHOW_TARS_HEADER = booleanPreferencesKey("show_tars_header")
@@ -84,9 +85,11 @@ class LauncherDataStore(private val context: Context) {
 
     val settingsFlow: Flow<LauncherSettings> = safeData
         .map { preferences ->
+            val savedRows = preferences[KEY_APP_DRAWER_ROWS] ?: (if (preferences[KEY_DUAL_APP_DRAWER] == true) 2 else 1)
             LauncherSettings(
                 showAppDrawer = preferences[KEY_SHOW_APP_DRAWER] ?: true,
-                dualAppDrawer = preferences[KEY_DUAL_APP_DRAWER] ?: false,
+                dualAppDrawer = savedRows > 1,
+                appDrawerRows = savedRows.coerceIn(1, 20),
                 gridSize = GridSize.fromString(preferences[KEY_GRID_SIZE]),
                 buttonColorMode = preferences[KEY_BUTTON_COLOR_MODE] ?: "transparent",
                 showTarsHeader = preferences[KEY_SHOW_TARS_HEADER] ?: true,
@@ -110,7 +113,16 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun updateShowAppDrawer(show: Boolean) = setPreference(KEY_SHOW_APP_DRAWER, show)
 
-    suspend fun updateDualAppDrawer(enabled: Boolean) = setPreference(KEY_DUAL_APP_DRAWER, enabled)
+    suspend fun updateDualAppDrawer(enabled: Boolean) {
+        setPreference(KEY_DUAL_APP_DRAWER, enabled)
+        setPreference(KEY_APP_DRAWER_ROWS, if (enabled) 2 else 1)
+    }
+
+    suspend fun updateAppDrawerRows(rows: Int) {
+        val clamped = rows.coerceIn(1, 20)
+        setPreference(KEY_APP_DRAWER_ROWS, clamped)
+        setPreference(KEY_DUAL_APP_DRAWER, clamped > 1)
+    }
 
     suspend fun updateGridSize(gridSize: GridSize) = setPreference(KEY_GRID_SIZE, gridSize.serialize())
 
@@ -148,7 +160,8 @@ class LauncherDataStore(private val context: Context) {
         try {
             context.dataStore.edit { prefs ->
                 prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
-                prefs[KEY_DUAL_APP_DRAWER] = settings.dualAppDrawer
+                prefs[KEY_DUAL_APP_DRAWER] = settings.appDrawerRows > 1
+                prefs[KEY_APP_DRAWER_ROWS] = settings.appDrawerRows
                 prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
                 prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
                 prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader

@@ -55,6 +55,7 @@ fun AppDrawerPositionAdjuster(
     installedApps: List<AppInfo>,
     folders: List<FolderInfo>,
     dualAppDrawer: Boolean = false,
+    appDrawerRows: Int = if (dualAppDrawer) 2 else 1,
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color = Color.Transparent,
@@ -217,15 +218,22 @@ fun AppDrawerPositionAdjuster(
             Spacer(modifier = Modifier.height(4.dp))
 
             // App Drawer preview with real icons
+            val effectiveRows = if (appDrawerRows > 1) appDrawerRows else (if (dualAppDrawer) 2 else 1)
+            val drawerHeight = if (effectiveRows > 1) {
+                val singleH = (appDrawerIconSize + 16).dp
+                (singleH * effectiveRows + 4.dp * (effectiveRows - 1)).coerceAtMost(maxOffsetDp)
+            } else 95.dp
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (dualAppDrawer) 155.dp else 95.dp),
+                    .height(drawerHeight),
                 contentAlignment = Alignment.Center
             ) {
-                if (dualAppDrawer) {
-                    DualRowAppDrawer(
+                if (effectiveRows > 1) {
+                    MultiRowAppDrawer(
                         installedApps = installedApps,
+                        rowCount = effectiveRows,
                         onAppClick = {},
                         onAppLongClick = {},
                         onAddPwaClick = {},

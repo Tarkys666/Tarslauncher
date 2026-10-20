@@ -346,6 +346,7 @@ class AppRepository(
     // Type-safe setting updates
     suspend fun updateShowAppDrawer(show: Boolean) = dataStore.updateShowAppDrawer(show)
     suspend fun updateDualAppDrawer(enabled: Boolean) = dataStore.updateDualAppDrawer(enabled)
+    suspend fun updateAppDrawerRows(rows: Int) = dataStore.updateAppDrawerRows(rows)
     suspend fun updateGridSize(gridSize: GridSize) = dataStore.updateGridSize(gridSize)
     suspend fun updateButtonColorMode(mode: String) = dataStore.updateButtonColorMode(mode)
     suspend fun updateShowTarsHeader(show: Boolean) = dataStore.updateShowTarsHeader(show)

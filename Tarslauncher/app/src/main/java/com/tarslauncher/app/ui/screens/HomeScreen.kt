@@ -38,6 +38,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -105,6 +107,7 @@ fun HomeScreen(
     onAppClick: (AppInfo) -> Unit,
     showAppDrawer: Boolean,
     dualAppDrawer: Boolean = false,
+    appDrawerRows: Int = if (dualAppDrawer) 2 else 1,
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color = Color.Transparent,
@@ -188,14 +191,14 @@ fun HomeScreen(
         }
     }
     
-    // Responsive app drawer height (memoized)
-    val appDrawerHeight = remember(screenHeight, dualAppDrawer) {
-        if (dualAppDrawer) {
-            when {
-                screenHeight < 600.dp -> 135.dp
-                screenHeight < 800.dp -> 155.dp
-                else -> 175.dp
-            }
+    // Responsive app drawer height (memoized for any row count 1..20)
+    val effectiveRows = if (appDrawerRows > 1) appDrawerRows else (if (dualAppDrawer) 2 else 1)
+    val appDrawerHeight = remember(screenHeight, effectiveRows, appDrawerIconSize) {
+        if (effectiveRows > 1) {
+            val singleRowH = (appDrawerIconSize + 16).dp
+            val totalH = singleRowH * effectiveRows + 4.dp * (effectiveRows - 1)
+            val maxH = (screenHeight - 160.dp).coerceAtLeast(100.dp)
+            totalH.coerceAtMost(maxH)
         } else {
             when {
                 screenHeight < 600.dp -> 80.dp
@@ -315,9 +318,10 @@ fun HomeScreen(
                         }
                     }
 
-                    if (dualAppDrawer) {
-                        DualRowAppDrawer(
+                    if (effectiveRows > 1) {
+                        MultiRowAppDrawer(
                             installedApps = installedApps,
+                            rowCount = effectiveRows,
                             onAppClick = onAppClick,
                             onAppLongClick = onAppLongClickMemo,
                             onAddPwaClick = { showAddPwaDialog = true },
@@ -715,6 +719,195 @@ fun AppIconWithoutName(
 }
 
 @Composable
+fun MultiRowAppDrawer(
+    installedApps: List<AppInfo>,
+    rowCount: Int = 2,
+    onAppClick: (AppInfo) -> Unit,
+    onAppLongClick: (AppInfo) -> Unit,
+    onAddPwaClick: () -> Unit,
+    iconPackLoader: IconPackLoader?,
+    iconSize: Int,
+    screenWidth: Dp
+) {
+    val effectiveRowCount = rowCount.coerceIn(1, 20)
+
+    val rowApps = remember(installedApps, effectiveRowCount) {
+        if (installedApps.isEmpty()) {
+            List(effectiveRowCount) { emptyList<AppInfo>() }
+        } else if (installedApps.size >= effectiveRowCount * 2) {
+            val lists = List(effectiveRowCount) { mutableListOf<AppInfo>() }
+            installedApps.forEachIndexed { index, app ->
+                lists[index % effectiveRowCount].add(app)
+            }
+            lists
+        } else {
+            List(effectiveRowCount) { r ->
+                val offset = (r * 3) % installedApps.size
+                List(installedApps.size) { i ->
+                    installedApps[(offset + i) % installedApps.size]
+                }
+            }
+        }
+    }
+
+    val loopMultiplier = 1000
+
+    val rowCycleSizes = remember(rowApps) {
+        List(effectiveRowCount) { r ->
+            val isLastRow = (r == effectiveRowCount - 1)
+            if (isLastRow) rowApps[r].size + 1 else rowApps[r].size
+        }
+    }
+
+    val rowTotalCounts = remember(rowCycleSizes) {
+        List(effectiveRowCount) { r ->
+            rowCycleSizes[r] * loopMultiplier
+        }
+    }
+
+    val rowInitialIndices = remember(rowCycleSizes, rowTotalCounts) {
+        List(effectiveRowCount) { r ->
+            val cycle = rowCycleSizes[r]
+            val total = rowTotalCounts[r]
+            if (cycle > 0) (total / 2) - ((total / 2) % cycle) else 0
+        }
+    }
+
+    val rowStates = List(effectiveRowCount) { r ->
+        rememberLazyListState(initialFirstVisibleItemIndex = rowInitialIndices[r])
+    }
+
+    var activeScrollRow by remember { mutableIntStateOf(-1) }
+
+    var isCentered by remember { mutableStateOf(false) }
+    LaunchedEffect(installedApps.size, effectiveRowCount) {
+        if (!isCentered && installedApps.isNotEmpty()) {
+            for (r in 0 until effectiveRowCount) {
+                rowStates[r].scrollToItem(rowInitialIndices[r])
+            }
+            isCentered = true
+        }
+    }
+
+    val isAnyScrollInProgress = rowStates.any { it.isScrollInProgress }
+    LaunchedEffect(isAnyScrollInProgress) {
+        if (!isAnyScrollInProgress) {
+            activeScrollRow = -1
+        }
+    }
+
+    val connections = remember(rowStates, effectiveRowCount) {
+        List(effectiveRowCount) { r ->
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (source == NestedScrollSource.Drag && activeScrollRow == -1) {
+                        activeScrollRow = r
+                    }
+                    if (activeScrollRow == r && available.x != 0f) {
+                        val isDraggedEven = (r % 2 == 0)
+                        for (i in 0 until effectiveRowCount) {
+                            if (i == r) continue
+                            val isTargetEven = (i % 2 == 0)
+                            if (isTargetEven == isDraggedEven) {
+                                rowStates[i].dispatchRawDelta(-available.x)
+                            } else {
+                                rowStates[i].dispatchRawDelta(available.x)
+                            }
+                        }
+                    }
+                    return Offset.Zero
+                }
+            }
+        }
+    }
+
+    val itemSpacing = remember(screenWidth) { (screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        for (r in 0 until effectiveRowCount) {
+            val apps = rowApps[r]
+            val cycleSize = rowCycleSizes[r]
+            val totalCount = rowTotalCounts[r]
+            val isLastRow = (r == effectiveRowCount - 1)
+
+            key("drawer_row_$r") {
+                LazyRow(
+                    state = rowStates[r],
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .nestedScroll(connections[r]),
+                    horizontalArrangement = Arrangement.spacedBy(itemSpacing)
+                ) {
+                    if (totalCount > 0) {
+                        items(
+                            count = totalCount,
+                            key = { index ->
+                                val pos = index % cycleSize
+                                if (isLastRow && pos == apps.size) {
+                                    "row_${r}_add_pwa_$index"
+                                } else if (pos < apps.size) {
+                                    "row_${r}_${index}_${apps[pos].packageName}"
+                                } else {
+                                    "row_${r}_$index"
+                                }
+                            },
+                            contentType = { index ->
+                                val pos = index % cycleSize
+                                if (isLastRow && pos == apps.size) "add_pwa" else "app_icon"
+                            }
+                        ) { index ->
+                            val pos = index % cycleSize
+                            if (isLastRow && pos == apps.size) {
+                                Box(
+                                    modifier = Modifier
+                                        .size((iconSize + 18).dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onAddPwaClick() }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(iconSize.dp)
+                                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "+",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = (iconSize * 0.5f).sp,
+                                            fontWeight = FontWeight.Light
+                                        )
+                                    }
+                                }
+                            } else if (pos < apps.size) {
+                                val app = apps[pos]
+                                AppIconWithoutName(
+                                    app = app,
+                                    onAppClick = onAppClick,
+                                    onAppLongClick = onAppLongClick,
+                                    iconPackLoader = iconPackLoader,
+                                    iconSize = iconSize
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun DualRowAppDrawer(
     installedApps: List<AppInfo>,
     onAppClick: (AppInfo) -> Unit,
@@ -724,167 +917,16 @@ fun DualRowAppDrawer(
     iconSize: Int,
     screenWidth: Dp
 ) {
-    val topApps = remember(installedApps) {
-        installedApps.filterIndexed { index, _ -> index % 2 == 0 }
-    }
-    val bottomApps = remember(installedApps) {
-        installedApps.filterIndexed { index, _ -> index % 2 == 1 }
-    }
-
-    val loopMultiplier = 1000
-    val topSize = topApps.size
-    val topTotalCount = if (topSize > 0) topSize * loopMultiplier else 0
-    val topInitialIndex = if (topSize > 0) (topTotalCount / 2) - ((topTotalCount / 2) % topSize) else 0
-
-    val bottomCycleSize = bottomApps.size + 1
-    val bottomTotalCount = bottomCycleSize * loopMultiplier
-    val bottomInitialIndex = (bottomTotalCount / 2) - ((bottomTotalCount / 2) % bottomCycleSize)
-
-    val topListState = rememberLazyListState(initialFirstVisibleItemIndex = topInitialIndex)
-    val bottomListState = rememberLazyListState(initialFirstVisibleItemIndex = bottomInitialIndex)
-
-    var activeScrollRow by remember { mutableIntStateOf(0) }
-
-    var isCentered by remember { mutableStateOf(false) }
-    LaunchedEffect(topSize, bottomApps.size) {
-        if (!isCentered && topSize > 0) {
-            topListState.scrollToItem(topInitialIndex)
-            bottomListState.scrollToItem(bottomInitialIndex)
-            isCentered = true
-        }
-    }
-
-    LaunchedEffect(topListState.isScrollInProgress, bottomListState.isScrollInProgress) {
-        if (!topListState.isScrollInProgress && !bottomListState.isScrollInProgress) {
-            activeScrollRow = 0
-        }
-    }
-
-    val topNestedScrollConnection = remember(bottomListState) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.Drag) {
-                    activeScrollRow = 1
-                }
-                if (activeScrollRow == 1 && available.x != 0f) {
-                    bottomListState.dispatchRawDelta(available.x)
-                }
-                return Offset.Zero
-            }
-        }
-    }
-
-    val bottomNestedScrollConnection = remember(topListState) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.Drag) {
-                    activeScrollRow = 2
-                }
-                if (activeScrollRow == 2 && available.x != 0f) {
-                    topListState.dispatchRawDelta(available.x)
-                }
-                return Offset.Zero
-            }
-        }
-    }
-
-    val itemSpacing = remember(screenWidth) { (screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp) }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // TOP ROW (Opposite scrolling relative to bottom row)
-        LazyRow(
-            state = topListState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .nestedScroll(topNestedScrollConnection),
-            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
-        ) {
-            if (topTotalCount > 0) {
-                items(
-                    count = topTotalCount,
-                    key = { index -> "top_${index}_${topApps[index % topSize].packageName}" },
-                    contentType = { "app_icon" }
-                ) { index ->
-                    val app = topApps[index % topSize]
-                    AppIconWithoutName(
-                        app = app,
-                        onAppClick = onAppClick,
-                        onAppLongClick = onAppLongClick,
-                        iconPackLoader = iconPackLoader,
-                        iconSize = iconSize
-                    )
-                }
-            }
-        }
-
-        // BOTTOM ROW (Opposite scrolling relative to top row)
-        LazyRow(
-            state = bottomListState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .nestedScroll(bottomNestedScrollConnection),
-            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
-        ) {
-            if (bottomTotalCount > 0) {
-                items(
-                    count = bottomTotalCount,
-                    key = { index ->
-                        val posInCycle = index % bottomCycleSize
-                        if (posInCycle < bottomApps.size) {
-                            "bottom_${index}_${bottomApps[posInCycle].packageName}"
-                        } else {
-                            "bottom_add_pwa_$index"
-                        }
-                    },
-                    contentType = { index ->
-                        if ((index % bottomCycleSize) < bottomApps.size) "app_icon" else "add_pwa"
-                    }
-                ) { index ->
-                    val posInCycle = index % bottomCycleSize
-                    if (posInCycle < bottomApps.size) {
-                        val app = bottomApps[posInCycle]
-                        AppIconWithoutName(
-                            app = app,
-                            onAppClick = onAppClick,
-                            onAppLongClick = onAppLongClick,
-                            iconPackLoader = iconPackLoader,
-                            iconSize = iconSize
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size((iconSize + 18).dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { onAddPwaClick() }
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(iconSize.dp)
-                                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                                    .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "+",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = (iconSize * 0.5f).sp,
-                                    fontWeight = FontWeight.Light
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    MultiRowAppDrawer(
+        installedApps = installedApps,
+        rowCount = 2,
+        onAppClick = onAppClick,
+        onAppLongClick = onAppLongClick,
+        onAddPwaClick = onAddPwaClick,
+        iconPackLoader = iconPackLoader,
+        iconSize = iconSize,
+        screenWidth = screenWidth
+    )
 }
 
 @Composable

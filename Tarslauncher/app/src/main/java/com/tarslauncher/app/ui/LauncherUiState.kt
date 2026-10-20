@@ -21,6 +21,7 @@ data class LauncherUiState(
     // Convenience properties mapping to type-safe settings
     val showAppDrawer: Boolean get() = settings.showAppDrawer
     val dualAppDrawer: Boolean get() = settings.dualAppDrawer
+    val appDrawerRows: Int get() = settings.appDrawerRows
     val gridSize: GridSize get() = settings.gridSize
     val buttonColorMode: String get() = settings.buttonColorMode
     val showTarsHeader: Boolean get() = settings.showTarsHeader

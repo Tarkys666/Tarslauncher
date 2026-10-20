@@ -149,6 +149,7 @@ fun LauncherMain(
     val onAppDrawerIconSizeChange = remember(viewModel) { { size: Int -> viewModel.updateAppDrawerIconSize(size) } }
     val onShowFolderGridChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowFolderGrid(s) } }
     val onAppDrawerOffsetYChange = remember(viewModel) { { o: Int -> viewModel.updateAppDrawerOffsetY(o) } }
+    val onAppDrawerRowsChange = remember(viewModel) { { r: Int -> viewModel.updateAppDrawerRows(r) } }
     val onCheckForUpdates = remember(viewModel) {
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
     }
@@ -165,6 +166,7 @@ fun LauncherMain(
                     installedApps = uiState.installedApps,
                     folders = uiState.folders,
                     dualAppDrawer = uiState.dualAppDrawer,
+                    appDrawerRows = uiState.appDrawerRows,
                     gridSize = uiState.gridSize,
                     iconPackLoader = iconPackLoader,
                     buttonColor = getButtonColor,
@@ -195,6 +197,7 @@ fun LauncherMain(
                     onAppClick = onAppClick,
                     showAppDrawer = uiState.showAppDrawer,
                     dualAppDrawer = uiState.dualAppDrawer,
+                    appDrawerRows = uiState.appDrawerRows,
                     gridSize = uiState.gridSize,
                     iconPackLoader = iconPackLoader,
                     buttonColor = getButtonColor,
@@ -219,6 +222,8 @@ fun LauncherMain(
                     onShowAppDrawerChange = onShowAppDrawerChange,
                     dualAppDrawer = uiState.dualAppDrawer,
                     onDualAppDrawerChange = onDualAppDrawerChange,
+                    appDrawerRows = uiState.appDrawerRows,
+                    onAppDrawerRowsChange = onAppDrawerRowsChange,
                     gridSize = uiState.gridSize,
                     onGridSizeChange = onGridSizeChange,
                     installedIconPacks = uiState.iconPacks,
