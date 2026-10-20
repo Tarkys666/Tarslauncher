@@ -149,8 +149,18 @@ fun SettingsScreen(
         }
     }
     
-    // Tree state management
-    var expandedCategories by remember { mutableStateOf(setOf<String>()) }
+    // Tree state management - expand all 5 clean categories by default
+    var expandedCategories by remember {
+        mutableStateOf(
+            setOf(
+                "HOME SCREEN & GRID",
+                "APP DRAWER",
+                "3D ASCII DIAMOND",
+                "WEB APPS (PWA)",
+                "SYSTEM & ABOUT"
+            )
+        )
+    }
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
@@ -158,7 +168,7 @@ fun SettingsScreen(
     var showDiamondFpsDialog by remember { mutableStateOf(false) }
     var showAppDrawerRowsDialog by remember { mutableStateOf(false) }
 
-    // Create settings tree structure - memoized to prevent reallocations on every composition
+    // Create organized settings tree structure
     val settingsTree = remember(
         showAppDrawer,
         dualAppDrawer,
@@ -181,38 +191,31 @@ fun SettingsScreen(
     ) {
         listOf(
             SettingsItem.Category(
-                title = "INTERFACE",
+                title = "HOME SCREEN & GRID",
                 icon = "",
                 children = buildList {
-                    add(SettingsItem.Setting(
-                        title = "App Drawer",
-                        description = "Show app list at bottom",
-                        type = SettingType.TOGGLE,
-                        currentValue = showAppDrawer,
-                        onValueChange = { onShowAppDrawerChange(it as Boolean) }
-                    ))
-                    if (showAppDrawer) {
-                        add(SettingsItem.Setting(
-                            title = "App Drawer Rows",
-                            description = "$appDrawerRows Row${if (appDrawerRows > 1) "s (Alternating directions)" else " (Classic single row)"}",
-                            type = SettingType.BUTTON,
-                            onClick = { showAppDrawerRowsDialog = true },
-                            buttonLabel = "ROWS"
-                        ))
-                        add(SettingsItem.Setting(
-                            title = "App Drawer Position",
-                            description = "Bottom offset: ${appDrawerOffsetY}dp (Drag to adjust)",
-                            type = SettingType.BUTTON,
-                            onClick = onStartAdjustAppDrawerPosition,
-                            buttonLabel = "ADJUST"
-                        ))
-                    }
                     add(SettingsItem.Setting(
                         title = "Center App Grid",
                         description = "Show middle app and folder grid on home screen",
                         type = SettingType.TOGGLE,
                         currentValue = showFolderGrid,
                         onValueChange = { onShowFolderGridChange(it as Boolean) }
+                    ))
+                    if (showFolderGrid) {
+                        add(SettingsItem.Setting(
+                            title = "Grid Size",
+                            description = "Current: $gridSize",
+                            type = SettingType.BUTTON,
+                            onClick = { showGridSizeDialog = true },
+                            buttonLabel = "SELECT"
+                        ))
+                    }
+                    add(SettingsItem.Setting(
+                        title = "Icon Pack",
+                        description = selectedIconPack ?: "Default",
+                        type = SettingType.BUTTON,
+                        onClick = { showIconPackDialog = true },
+                        buttonLabel = "SELECT"
                     ))
                     add(SettingsItem.Setting(
                         title = "FACET Header",
@@ -225,139 +228,148 @@ fun SettingsScreen(
                         title = "Clock",
                         description = "Show clock on home screen",
                         type = SettingType.TOGGLE,
-                    currentValue = showClock,
-                    onValueChange = { onShowClockChange(it as Boolean) }
-                ))
-                add(SettingsItem.Setting(
-                    title = "ASCII Diamond",
-                    description = if (showAsciiDiamond) "Enabled (Clock & Facet logo hidden)" else "3D rotating ASCII Diamond background",
-                    type = SettingType.TOGGLE,
-                    currentValue = showAsciiDiamond,
-                    onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
-                ))
-                if (showAsciiDiamond) {
-                    add(SettingsItem.Setting(
-                        title = "Diamond Size",
-                        description = "Adjust 3D diamond scale",
-                        type = SettingType.SLIDER,
-                        currentValue = asciiDiamondScale,
-                        onValueChange = { onAsciiDiamondScaleChange(it as Int) },
-                        sliderRange = 40f..180f,
-                        sliderSteps = 27,
-                        sliderValueUnit = "%"
-                    ))
-                    add(SettingsItem.Setting(
-                        title = "Diamond Position (Y)",
-                        description = if (asciiDiamondOffsetY < 0) "${-asciiDiamondOffsetY}% Up" else if (asciiDiamondOffsetY > 0) "${asciiDiamondOffsetY}% Down" else "Center",
-                        type = SettingType.SLIDER,
-                        currentValue = asciiDiamondOffsetY,
-                        onValueChange = { onAsciiDiamondOffsetYChange(it as Int) },
-                        sliderRange = -40f..40f,
-                        sliderSteps = 15,
-                        sliderValueUnit = "%"
-                    ))
-                    add(SettingsItem.Setting(
-                        title = "Diamond FPS",
-                        description = "Current: $asciiDiamondFps FPS",
-                        type = SettingType.BUTTON,
-                        onClick = { showDiamondFpsDialog = true },
-                        buttonLabel = "SELECT"
-                    ))
-                    add(SettingsItem.Setting(
-                        title = "Diamond Rotation Speed",
-                        description = if (asciiDiamondSpeed == 0) "Stopped (drag to rotate)" else "$asciiDiamondSpeed% speed",
-                        type = SettingType.SLIDER,
-                        currentValue = asciiDiamondSpeed,
-                        onValueChange = { onAsciiDiamondSpeedChange(it as Int) },
-                        sliderRange = 0f..200f,
-                        sliderSteps = 19,
-                        sliderValueUnit = "%"
+                        currentValue = showClock,
+                        onValueChange = { onShowClockChange(it as Boolean) }
                     ))
                 }
-                add(SettingsItem.Setting(
-                    title = "App Drawer Icon Size",
-                    description = "Adjust app drawer icon size (20-36dp)",
-                    type = SettingType.SLIDER,
-                    currentValue = appDrawerIconSize,
-                    onValueChange = { onAppDrawerIconSizeChange(it as Int) }
-                ))
-                add(SettingsItem.Setting(
-                    title = "Grid Size",
-                    description = "Current: $gridSize",
-                    type = SettingType.BUTTON,
-                    onClick = { showGridSizeDialog = true },
-                    buttonLabel = "SELECT"
-                ))
-            }
-        ),
-        SettingsItem.Category(
-            title = "CUSTOMIZATION",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Icon Pack",
-                    description = selectedIconPack ?: "Default",
-                    type = SettingType.BUTTON,
-                    onClick = { showIconPackDialog = true },
-                    buttonLabel = "SELECT"
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "SYSTEM",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Default Launcher",
-                    description = if (isDefaultLauncherSet) "Facet is default launcher" else "Set Facet as default home screen",
-                    type = SettingType.LAUNCHER_STATUS,
-                    currentValue = isDefaultLauncherSet,
-                    onClick = {
-                        openDefaultHomeSettings(context)
+            ),
+            SettingsItem.Category(
+                title = "APP DRAWER",
+                icon = "",
+                children = buildList {
+                    add(SettingsItem.Setting(
+                        title = "App Drawer",
+                        description = "Show app list at bottom",
+                        type = SettingType.TOGGLE,
+                        currentValue = showAppDrawer,
+                        onValueChange = { onShowAppDrawerChange(it as Boolean) }
+                    ))
+                    if (showAppDrawer) {
+                        add(SettingsItem.Setting(
+                            title = "App Drawer Rows",
+                            description = "$appDrawerRows Row${if (appDrawerRows > 1) "s (Alternating kinetic flow)" else " (Classic single row)"}",
+                            type = SettingType.BUTTON,
+                            onClick = { showAppDrawerRowsDialog = true },
+                            buttonLabel = "ROWS"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "App Drawer Position",
+                            description = "Bottom offset: ${appDrawerOffsetY}dp (Drag to adjust)",
+                            type = SettingType.BUTTON,
+                            onClick = onStartAdjustAppDrawerPosition,
+                            buttonLabel = "ADJUST"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "App Drawer Icon Size",
+                            description = "Adjust drawer icon size (20-36dp)",
+                            type = SettingType.SLIDER,
+                            currentValue = appDrawerIconSize,
+                            onValueChange = { onAppDrawerIconSizeChange(it as Int) }
+                        ))
                     }
+                }
+            ),
+            SettingsItem.Category(
+                title = "3D ASCII DIAMOND",
+                icon = "",
+                children = buildList {
+                    add(SettingsItem.Setting(
+                        title = "ASCII Diamond",
+                        description = if (showAsciiDiamond) "Enabled (Clock & Facet logo hidden)" else "3D rotating ASCII Diamond background",
+                        type = SettingType.TOGGLE,
+                        currentValue = showAsciiDiamond,
+                        onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
+                    ))
+                    if (showAsciiDiamond) {
+                        add(SettingsItem.Setting(
+                            title = "Diamond Size",
+                            description = "Adjust 3D diamond scale",
+                            type = SettingType.SLIDER,
+                            currentValue = asciiDiamondScale,
+                            onValueChange = { onAsciiDiamondScaleChange(it as Int) },
+                            sliderRange = 40f..180f,
+                            sliderSteps = 27,
+                            sliderValueUnit = "%"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "Diamond Position (Y)",
+                            description = if (asciiDiamondOffsetY < 0) "${-asciiDiamondOffsetY}% Up" else if (asciiDiamondOffsetY > 0) "${asciiDiamondOffsetY}% Down" else "Center",
+                            type = SettingType.SLIDER,
+                            currentValue = asciiDiamondOffsetY,
+                            onValueChange = { onAsciiDiamondOffsetYChange(it as Int) },
+                            sliderRange = -40f..40f,
+                            sliderSteps = 15,
+                            sliderValueUnit = "%"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "Diamond Rotation Speed",
+                            description = if (asciiDiamondSpeed == 0) "Stopped (drag to rotate)" else "$asciiDiamondSpeed% speed",
+                            type = SettingType.SLIDER,
+                            currentValue = asciiDiamondSpeed,
+                            onValueChange = { onAsciiDiamondSpeedChange(it as Int) },
+                            sliderRange = 0f..200f,
+                            sliderSteps = 19,
+                            sliderValueUnit = "%"
+                        ))
+                        add(SettingsItem.Setting(
+                            title = "Diamond Target FPS",
+                            description = "Current: $asciiDiamondFps FPS",
+                            type = SettingType.BUTTON,
+                            onClick = { showDiamondFpsDialog = true },
+                            buttonLabel = "SELECT"
+                        ))
+                    }
+                }
+            ),
+            SettingsItem.Category(
+                title = "WEB APPS (PWA)",
+                icon = "",
+                children = listOf(
+                    SettingsItem.Setting(
+                        title = "Add Web App",
+                        description = "Install websites as apps with presets or URL",
+                        type = SettingType.BUTTON,
+                        onClick = { showAddPwaDialog = true },
+                        buttonLabel = "ADD"
+                    ),
+                    SettingsItem.Setting(
+                        title = "Manage Web Apps",
+                        description = "${installedPwas.size} web app(s) installed",
+                        type = SettingType.BUTTON,
+                        onClick = { showManagePwasDialog = true },
+                        buttonLabel = "MANAGE"
+                    )
                 )
-            )
-        ),
-        SettingsItem.Category(
-            title = "WEB APPS (PWA)",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Add Web App",
-                    description = "Install websites as apps with presets or URL",
-                    type = SettingType.BUTTON,
-                    onClick = { showAddPwaDialog = true },
-                    buttonLabel = "ADD"
-                ),
-                SettingsItem.Setting(
-                    title = "Manage Web Apps",
-                    description = "${installedPwas.size} web app(s) installed",
-                    type = SettingType.BUTTON,
-                    onClick = { showManagePwasDialog = true },
-                    buttonLabel = "MANAGE"
-                )
-            )
-        ),
-        SettingsItem.Category(
-            title = "ABOUT",
-            icon = "",
-            children = listOf(
-                SettingsItem.Setting(
-                    title = "Version",
-                    description = "Version $appVersion",
-                    type = SettingType.INFO
-                ),
-                SettingsItem.Setting(
-                    title = "Check for Updates",
-                    description = "Check GitHub for new releases",
-                    type = SettingType.BUTTON,
-                    onClick = onCheckForUpdates,
-                    buttonLabel = "CHECK"
+            ),
+            SettingsItem.Category(
+                title = "SYSTEM & ABOUT",
+                icon = "",
+                children = listOf(
+                    SettingsItem.Setting(
+                        title = "Default Launcher",
+                        description = if (isDefaultLauncherSet) "Facet is default launcher" else "Set Facet as default home screen",
+                        type = SettingType.LAUNCHER_STATUS,
+                        currentValue = isDefaultLauncherSet,
+                        onClick = {
+                            openDefaultHomeSettings(context)
+                        }
+                    ),
+                    SettingsItem.Setting(
+                        title = "Check for Updates",
+                        description = "Check GitHub for new releases",
+                        type = SettingType.BUTTON,
+                        onClick = onCheckForUpdates,
+                        buttonLabel = "CHECK"
+                    ),
+                    SettingsItem.Setting(
+                        title = "Version",
+                        description = "Version $appVersion",
+                        type = SettingType.INFO
+                    )
                 )
             )
         )
-    )
-}
+    }
     
     val scrollState = rememberScrollState()
 
@@ -406,7 +418,7 @@ fun SettingsScreen(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Tree-based settings
+        // Categorized settings cards
         settingsTree.forEach { category ->
             SettingsCategoryItem(
                 category = category,
@@ -419,7 +431,7 @@ fun SettingsScreen(
                     }
                 }
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
         
     }
@@ -432,7 +444,7 @@ fun SettingsScreen(
                     containerColor = Color.Black
                 ),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.Black)
+                border = BorderStroke(1.dp, Color(0xFF333333))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
@@ -500,8 +512,7 @@ fun SettingsScreen(
                 }
             }
         }
-        }
-    
+    }
 
     if (showDiamondFpsDialog) {
         Dialog(onDismissRequest = { showDiamondFpsDialog = false }) {
@@ -563,7 +574,7 @@ fun SettingsScreen(
         }
     }
 
-        if (showIconPackDialog) {
+    if (showIconPackDialog) {
         IconPackSelectionDialog(
             iconPacks = installedIconPacks,
             onDismiss = { showIconPackDialog = false },
@@ -707,10 +718,10 @@ fun SettingsCategoryItem(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black
+            containerColor = Color(0xFF0D0D0D)
         ),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color.Black)
+        border = BorderStroke(1.dp, Color(0xFF222222))
     ) {
         Column {
             // Category header
@@ -718,7 +729,7 @@ fun SettingsCategoryItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onExpandToggle() }
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -726,15 +737,15 @@ fun SettingsCategoryItem(
                     Text(
                         text = category.title,
                         color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 1.sp
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.5.sp
                     )
                 }
                 Text(
                     text = if (isExpanded) "▼" else "▶",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 11.sp
                 )
             }
             
@@ -743,14 +754,14 @@ fun SettingsCategoryItem(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     category.children.forEach { setting ->
                         if (setting is SettingsItem.Setting) {
                             SettingsItemView(
                                 setting = setting
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                 }
@@ -769,26 +780,26 @@ fun SettingsItemView(
             containerColor = Color.Black
         ),
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, Color.Black)
+        border = BorderStroke(1.dp, Color(0xFF1C1C1C))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
                     text = setting.title,
                     color = Color.White,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Normal
                 )
                 Text(
                     text = setting.description,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 11.sp
                 )
             }
             
@@ -825,12 +836,12 @@ fun SettingsItemView(
                         onClick = { setting.onClick?.invoke() },
                         enabled = setting.enabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
+                            containerColor = Color(0xFF181818),
                             contentColor = Color.White,
                             disabledContainerColor = Color.Black,
                             disabledContentColor = Color(0xFF555555)
                         ),
-                        border = BorderStroke(1.dp, Color.Transparent),
+                        border = BorderStroke(1.dp, Color(0xFF333333)),
                         shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
@@ -852,10 +863,10 @@ fun SettingsItemView(
                     Button(
                         onClick = { setting.onClick?.invoke() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
+                            containerColor = Color(0xFF181818),
                             contentColor = Color.White
                         ),
-                        border = BorderStroke(1.dp, Color.Transparent),
+                        border = BorderStroke(1.dp, Color(0xFF333333)),
                         shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
@@ -953,7 +964,7 @@ fun IconPackSelectionDialog(
                 containerColor = Color.Black
             ),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color.Transparent)
+            border = BorderStroke(1.dp, Color(0xFF333333))
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
@@ -1038,6 +1049,3 @@ fun IconPackSelectionDialog(
         }
     }
 }
-
-
-

@@ -1,8 +1,8 @@
 {
-    "apkSize": 1276814,
-    "sha256": "5ac119509f32474652f623df885ce98fb15dfaa9af0aa2d74c997df791f82b18",
-    "versionName": "2.0.23",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.23/TarsLauncher-release.apk",
-    "versionCode": 72,
-    "releaseNotes": "Facet Launcher v2.0.23: Cok satirli (1-20 arasi) uygulama cekmecesi ozelligi eklendi. Cift cekmecede oldugu gibi cift satirlar saga, tek satirlar sola zit yonlu kinetik kayma ile hareket eder. Ayarlardan 1 ila 20 satir arasinda serbestce secim yapilabilir."
+    "apkSize": 1276818,
+    "sha256": "18b5107e536d0d5b8f7f485e2258e036bf45f3fd6d07dd7db60c747e82d8b084",
+    "versionName": "2.0.24",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.24/TarsLauncher-release.apk",
+    "versionCode": 73,
+    "releaseNotes": "Facet Launcher v2.0.24: Ayarlar sayfasi 5 ana kategoriye (Ana Ekran & Izgara, Uygulama Cekmecesi, 3D ASCII Elmas, Web Uygulamalari, Sistem & Hakkinda) ayrilarak duzenlendi. Iliskili ayarlar gruplanarak karmasa giderildi, kart ve buton tasarimlari modern minimalist cizgiye kavusturuldu."
 }
