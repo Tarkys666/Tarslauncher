@@ -1,8 +1,8 @@
 {
-    "apkSize": 1276814,
-    "sha256": "d4c1f9e191ccd112569020b043a171567b8271e8de3125a8cb106a1fae3308aa",
-    "versionName": "2.0.21",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.21/TarsLauncher-release.apk",
-    "versionCode": 70,
-    "releaseNotes": "Facet Launcher v2.0.21: 3D ASCII elmas animasyonunun tum ekrandaki dokunma olaylarini yutmasi ve dikey kaydirmayi engellemesi sorunu giderildi. Elmas arka plan cizimine sabitlendi; Settings butonu yukari kaydirilarak veya taban alanina dokunularak aninda gorunur hale getirildi."
+    "apkSize": 1276818,
+    "sha256": "5872e11b87336ee2d4d9e67efe6530c91a229675357e7b312f5c3b4b6a836c26",
+    "versionName": "2.0.22",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.22/TarsLauncher-release.apk",
+    "versionCode": 71,
+    "releaseNotes": "Facet Launcher v2.0.22: App Drawer konumlandirmasinda 200px siniri kaldirildi. Ayarlardan tiklandiginda ana ekran blurlu sekilde gosterilerek App Drawer ekranin en tepesine kadar serbestce suruklenebilir ve sag alttaki OK tusuyla kaydedilebilir hale getirildi."
 }

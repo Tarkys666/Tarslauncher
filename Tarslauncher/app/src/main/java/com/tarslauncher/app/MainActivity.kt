@@ -23,6 +23,7 @@ import com.tarslauncher.app.ui.LauncherViewModelFactory
 import com.tarslauncher.app.data.model.*
 import com.tarslauncher.app.onboarding.OnboardingManager
 import com.tarslauncher.app.onboarding.OnboardingScreen
+import com.tarslauncher.app.ui.screens.AppDrawerPositionAdjuster
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.ui.screens.SettingsScreen
 import com.tarslauncher.app.ui.screens.UpdateDialog
@@ -152,12 +153,40 @@ fun LauncherMain(
         { viewModel.checkForUpdates(BuildConfig.VERSION_NAME) }
     }
 
+    var isAdjustingAppDrawerPosition by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent)
     ) {
-            if (uiState.currentScreen == "home") {
+            if (isAdjustingAppDrawerPosition) {
+                AppDrawerPositionAdjuster(
+                    installedApps = uiState.installedApps,
+                    folders = uiState.folders,
+                    dualAppDrawer = uiState.dualAppDrawer,
+                    gridSize = uiState.gridSize,
+                    iconPackLoader = iconPackLoader,
+                    buttonColor = getButtonColor,
+                    showTarsHeader = uiState.showTarsHeader,
+                    appDrawerIconSize = uiState.appDrawerIconSize,
+                    showClock = uiState.showClock,
+                    showAsciiDiamond = uiState.showAsciiDiamond,
+                    asciiDiamondScale = uiState.asciiDiamondScale,
+                    asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
+                    asciiDiamondFps = uiState.asciiDiamondFps,
+                    asciiDiamondSpeed = uiState.asciiDiamondSpeed,
+                    showFolderGrid = uiState.showFolderGrid,
+                    initialOffsetY = uiState.appDrawerOffsetY,
+                    onSave = { newOffset ->
+                        onAppDrawerOffsetYChange(newOffset)
+                        isAdjustingAppDrawerPosition = false
+                    },
+                    onCancel = {
+                        isAdjustingAppDrawerPosition = false
+                    }
+                )
+            } else if (uiState.currentScreen == "home") {
                 HomeScreen(
                     installedApps = uiState.installedApps,
                     folders = uiState.folders,
@@ -215,6 +244,7 @@ fun LauncherMain(
                     onShowFolderGridChange = onShowFolderGridChange,
                     appDrawerOffsetY = uiState.appDrawerOffsetY,
                     onAppDrawerOffsetYChange = onAppDrawerOffsetYChange,
+                    onStartAdjustAppDrawerPosition = { isAdjustingAppDrawerPosition = true },
                     appVersion = BuildConfig.VERSION_NAME,
                     installedPwas = uiState.installedPwas,
                     pwaPresets = uiState.pwaPresets,

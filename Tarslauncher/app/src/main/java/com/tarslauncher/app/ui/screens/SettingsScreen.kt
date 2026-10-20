@@ -112,6 +112,7 @@ fun SettingsScreen(
     onShowFolderGridChange: (Boolean) -> Unit = {},
     appDrawerOffsetY: Int = 24,
     onAppDrawerOffsetYChange: (Int) -> Unit = {},
+    onStartAdjustAppDrawerPosition: () -> Unit = {},
     appVersion: String = "1.2.0",
     installedPwas: List<PwaInfo> = emptyList(),
     pwaPresets: List<PwaInfo> = emptyList(),
@@ -153,7 +154,6 @@ fun SettingsScreen(
     var showAddPwaDialog by remember { mutableStateOf(false) }
     var showManagePwasDialog by remember { mutableStateOf(false) }
     var showDiamondFpsDialog by remember { mutableStateOf(false) }
-    var showAppDrawerPositionDialog by remember { mutableStateOf(false) }
 
     // Create settings tree structure - memoized to prevent reallocations on every composition
     val settingsTree = remember(
@@ -197,9 +197,9 @@ fun SettingsScreen(
                         ))
                         add(SettingsItem.Setting(
                             title = "App Drawer Position",
-                            description = "Bottom offset: ${appDrawerOffsetY}dp (Preview & Adjust)",
+                            description = "Bottom offset: ${appDrawerOffsetY}dp (Drag to adjust)",
                             type = SettingType.BUTTON,
-                            onClick = { showAppDrawerPositionDialog = true },
+                            onClick = onStartAdjustAppDrawerPosition,
                             buttonLabel = "ADJUST"
                         ))
                     }
@@ -588,152 +588,6 @@ fun SettingsScreen(
                 showAddPwaDialog = true
             }
         )
-    }
-
-    if (showAppDrawerPositionDialog) {
-        var tempOffset by remember(appDrawerOffsetY) { mutableIntStateOf(appDrawerOffsetY) }
-        Dialog(onDismissRequest = { showAppDrawerPositionDialog = false }) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.Black),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF333333))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "APP DRAWER POSITION",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Bottom Distance: ${tempOffset}dp",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(14.dp))
-                    
-                    // LIVE MINIATURE PREVIEW BOX
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .background(Color(0xFF0D0D0D), RoundedCornerShape(8.dp))
-                            .border(BorderStroke(1.dp, Color(0xFF222222)), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        // Simulated home screen bottom
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = (tempOffset * 0.45f).coerceIn(0f, 85f).dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "SETTINGS",
-                                color = Color.White.copy(alpha = 0.75f),
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraLight,
-                                letterSpacing = 1.sp
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                repeat(5) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .background(Color(0xFF2A2A2A), CircleShape)
-                                            .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.4f)), CircleShape)
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // Simulated phone navigation pill
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 4.dp)
-                                .width(36.dp)
-                                .height(2.dp)
-                                .background(Color(0xFF555555), RoundedCornerShape(1.dp))
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(14.dp))
-                    
-                    // Slider
-                    Slider(
-                        value = tempOffset.toFloat(),
-                        onValueChange = {
-                            val intVal = it.toInt()
-                            tempOffset = intVal
-                            onAppDrawerOffsetYChange(intVal)
-                        },
-                        valueRange = 0f..200f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color.White,
-                            activeTrackColor = Color.White,
-                            inactiveTrackColor = Color(0xFF333333)
-                        )
-                    )
-                    
-                    // Preset buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        listOf(
-                            "10dp" to 10,
-                            "DEFAULT" to 24,
-                            "60dp" to 60,
-                            "120dp" to 120,
-                            "200dp" to 200
-                        ).forEach { (label, valDp) ->
-                            Box(
-                                modifier = Modifier
-                                    .clickable {
-                                        tempOffset = valDp
-                                        onAppDrawerOffsetYChange(valDp)
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (tempOffset == valDp) Color.White else Color(0xFF777777),
-                                    fontSize = 10.sp,
-                                    fontWeight = if (tempOffset == valDp) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Button(
-                        onClick = { showAppDrawerPositionDialog = false },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("DONE", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    }
-                }
-            }
-        }
     }
 }
 
