@@ -22,8 +22,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.util.Arrays
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -266,11 +268,20 @@ class AsciiDiamondEngine {
     private var offX: Int = 0
     private var offY: Int = 0
 
+    // Double-buffered display bitmaps and pixel buffers for safe off-main-thread rendering
+    private var pixelsA = IntArray(0)
+    private var pixelsB = IntArray(0)
+    private var bitmapA: Bitmap? = null
+    private var bitmapB: Bitmap? = null
+    private var imageBitmapA: ImageBitmap? = null
+    private var imageBitmapB: ImageBitmap? = null
+
+    @Volatile
+    var frontImageBitmap: ImageBitmap? = null
+        private set
+
+    private var backBufferIndex: Int = 0
     private var pixels = IntArray(0)
-    var bitmap: Bitmap? = null
-        private set
-    var imageBitmap: ImageBitmap? = null
-        private set
 
     private var zNear = FloatArray(0)
     private var zFar = FloatArray(0)
@@ -289,16 +300,16 @@ class AsciiDiamondEngine {
     private val sparkY = IntArray(1024)
     private var sparkCount = 0
 
-    // Animation & Touch State
-    var ang: Float = 0f
-    var yawOff: Float = 0f
-    var pitOff: Float = 0f
-    var isDragging: Boolean = false
+    // Animation & Touch State (Volatile for thread-safe cross-thread visibility)
+    @Volatile var ang: Float = 0f
+    @Volatile var yawOff: Float = 0f
+    @Volatile var pitOff: Float = 0f
+    @Volatile var isDragging: Boolean = false
 
     fun resize(newWidth: Int, newHeight: Int) {
         val w = maxOf(32, newWidth)
         val h = maxOf(32, newHeight)
-        if (w == width && h == height && bitmap != null) return
+        if (w == width && h == height && bitmapA != null && bitmapB != null) return
 
         width = w
         height = h
@@ -310,10 +321,18 @@ class AsciiDiamondEngine {
         offY = (height - rows * CELLH) shr 1
 
         val totalPixels = width * height
-        pixels = IntArray(totalPixels)
-        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap = bmp
-        imageBitmap = bmp.asImageBitmap()
+        pixelsA = IntArray(totalPixels)
+        pixelsB = IntArray(totalPixels)
+        pixels = pixelsA
+
+        val bmpA = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bmpB = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmapA = bmpA
+        bitmapB = bmpB
+        imageBitmapA = bmpA.asImageBitmap()
+        imageBitmapB = bmpB.asImageBitmap()
+        frontImageBitmap = imageBitmapA
+        backBufferIndex = 0
 
         val n = cols * rows
         zNear = FloatArray(n)
@@ -347,7 +366,12 @@ class AsciiDiamondEngine {
     }
 
     fun render(t: Float, diamondScale: Float, diamondOffsetY: Float) {
-        if (cols <= 4 || rows <= 4 || width <= 16 || height <= 16 || bitmap == null) return
+        if (cols <= 4 || rows <= 4 || width <= 16 || height <= 16 || bitmapA == null || bitmapB == null) return
+
+        val currentPixels = if (backBufferIndex == 0) pixelsA else pixelsB
+        val currentBitmap = if (backBufferIndex == 0) bitmapA else bitmapB
+        if (currentPixels.size != width * height || currentBitmap == null) return
+        pixels = currentPixels
 
         Arrays.fill(pixels, -0x1000000)
         Arrays.fill(zNear, -1e9f)
@@ -558,8 +582,11 @@ class AsciiDiamondEngine {
             put(x, y, 12, colWhite)
         }
 
-        // Commit pixel buffer to bitmap
-        bitmap?.setPixels(pixels, 0, width, 0, 0, width, height)
+        // Commit pixel buffer to current back-buffer bitmap
+        currentBitmap.setPixels(currentPixels, 0, width, 0, 0, width, height)
+        // Swap buffers: publish completed frame to UI thread atomically
+        frontImageBitmap = if (backBufferIndex == 0) imageBitmapA else imageBitmapB
+        backBufferIndex = 1 - backBufferIndex
     }
 }
 
@@ -593,36 +620,42 @@ fun AsciiDiamondCanvas(
         }
 
         LaunchedEffect(fps, speed, scale, offsetY, lifecycleOwner) {
-            var lastNanoTime = 0L
-            var lastTimeSec = SystemClock.uptimeMillis() / 1000f
+            withContext(Dispatchers.Default) {
+                var lastNanoTime = System.nanoTime()
+                var lastTimeSec = SystemClock.uptimeMillis() / 1000f
 
-            while (isActive) {
-                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                    delay(250)
-                    continue
-                }
+                while (isActive) {
+                    if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        delay(250)
+                        continue
+                    }
 
-                withFrameNanos { nowNanos ->
                     val targetFps = fps.coerceIn(15, 120)
-                    val minIntervalNanos = 1_000_000_000L / targetFps
+                    val frameIntervalNanos = 1_000_000_000L / targetFps
+                    val nowNanos = System.nanoTime()
                     val elapsedNanos = nowNanos - lastNanoTime
 
-                    if (elapsedNanos >= minIntervalNanos - 1_000_000L) {
-                        lastNanoTime = nowNanos - (elapsedNanos % minIntervalNanos)
-
-                        val nowSec = SystemClock.uptimeMillis() / 1000f
-                        val dt = (nowSec - lastTimeSec).coerceIn(0f, 0.05f)
-                        lastTimeSec = nowSec
-
-                        val speedMultiplier = speed / 100f
-                        engine.ang += dt * (if (engine.isDragging) 0.15f else 0.55f * speedMultiplier)
-
-                        val scaleFloat = scale / 100f
-                        val offsetYFloat = offsetY / 100f
-
-                        engine.render(nowSec, scaleFloat, offsetYFloat)
-                        frameTrigger++
+                    if (elapsedNanos < frameIntervalNanos) {
+                        val sleepMs = (frameIntervalNanos - elapsedNanos) / 1_000_000L
+                        if (sleepMs > 1) {
+                            delay(sleepMs)
+                        }
                     }
+                    lastNanoTime = System.nanoTime()
+
+                    val nowSec = SystemClock.uptimeMillis() / 1000f
+                    val dt = (nowSec - lastTimeSec).coerceIn(0f, 0.05f)
+                    lastTimeSec = nowSec
+
+                    val speedMultiplier = speed / 100f
+                    engine.ang += dt * (if (engine.isDragging) 0.15f else 0.55f * speedMultiplier)
+
+                    val scaleFloat = scale / 100f
+                    val offsetYFloat = offsetY / 100f
+
+                    // ⚡ Render calculation and rasterization executed 100% off the Main Thread
+                    engine.render(nowSec, scaleFloat, offsetYFloat)
+                    frameTrigger++
                 }
             }
         }
@@ -651,7 +684,7 @@ fun AsciiDiamondCanvas(
         ) {
             @Suppress("UNUSED_VARIABLE")
             val f = frameTrigger
-            val img = engine.imageBitmap
+            val img = engine.frontImageBitmap
             if (img != null && engine.width > 0 && engine.height > 0) {
                 drawImage(
                     image = img,

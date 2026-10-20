@@ -1,8 +1,8 @@
 {
     "apkSize": 1276814,
-    "sha256": "7cc1c84fdaa68847a7b33dc924444503a1b067df477cd13ed7c40e58ac93562f",
-    "versionName": "2.0.18",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.18/TarsLauncher-release.apk",
-    "versionCode": 67,
-    "releaseNotes": "Facet Launcher v2.0.18: App Drawer dikey konumunu (alttan yukari 0-200dp) canli onizlemeli dialog ile yonetebilme ve ana ekrandaki ortadaki uygulama izgarasini (Center App Grid) ayarlardan gizleyebilme ozellikleri eklendi."
+    "sha256": "0c3d79caef3ecefbe365e789a32f3ad62c0af04e273f6b9b547623a29d23ac13",
+    "versionName": "2.0.19",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.19/TarsLauncher-release.apk",
+    "versionCode": 68,
+    "releaseNotes": "Facet Launcher v2.0.19: 3D ASCII elmas animasyon cizimi cift tamponlama (double-buffering) ile arka plana (Dispatchers.Default) tasinarak ana UI is parcacigi 120 FPS akiciliga kavusturuldu. PWA ekleme/silme akisi tek reaktif tetikleyiciye (pwasJsonFlow) indirgenerek mukerrer taramalar kaldirildi."
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -41,17 +42,19 @@ class LauncherViewModel(
                     }
                 }
             }
-            // Observe PWA/shortcut additions from external activities (e.g. PinShortcutActivity)
+            // Unified single reactive trigger for all PWA updates (in-app add/delete or external PinShortcutActivity)
             var isInitialPwaEmit = true
             launch {
-                appRepository.pwasJsonFlow.collectLatest {
-                    if (isInitialPwaEmit) {
-                        isInitialPwaEmit = false
-                    } else {
-                        appRepository.invalidateAppCache()
-                        refreshAppList()
+                appRepository.pwasJsonFlow
+                    .distinctUntilChanged()
+                    .collectLatest {
+                        if (isInitialPwaEmit) {
+                            isInitialPwaEmit = false
+                        } else {
+                            appRepository.invalidateAppCache()
+                            refreshAppList()
+                        }
                     }
-                }
             }
             refreshAppList()
         }
@@ -148,8 +151,8 @@ class LauncherViewModel(
                 url = sanitized,
                 iconBase64 = fetchedIcon
             )
+            // Single trigger: DataStore emits to pwasJsonFlow which initiates the single refresh
             appRepository.savePwa(pwa)
-            refreshAppList()
         }
     }
 
@@ -157,22 +160,14 @@ class LauncherViewModel(
         viewModelScope.launch {
             val cleanId = pwaId.removePrefix(PwaInfo.PACKAGE_PREFIX)
             val pwaPackageName = "${PwaInfo.PACKAGE_PREFIX}$cleanId"
-            appRepository.deletePwa(cleanId)
             val updatedFolders = _uiState.value.folders.map { folder ->
                 folder.copy(apps = folder.apps.filter {
                     it.packageName != pwaPackageName && it.packageName != pwaId && it.pwaId != cleanId && it.pwaId != pwaId
                 })
             }
-            _uiState.update { state ->
-                state.copy(
-                    installedApps = state.installedApps.filter {
-                        it.packageName != pwaPackageName && it.packageName != pwaId && it.pwaId != cleanId && it.pwaId != pwaId
-                    },
-                    installedPwas = state.installedPwas.filter { it.id != cleanId && it.id != pwaId },
-                    folders = updatedFolders
-                )
-            }
             appRepository.saveFolders(updatedFolders)
+            // Single trigger: DataStore emits to pwasJsonFlow which initiates the single refresh
+            appRepository.deletePwa(cleanId)
         }
     }
 
