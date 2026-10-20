@@ -1,8 +1,8 @@
 {
-    "apkSize": 1276814,
-    "sha256": "d0a1b8d9910e3bc3176a1be97387e6221b45969cd8f3f63874f77918bbf0bf8e",
-    "versionName": "2.0.19",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.19/TarsLauncher-release.apk",
-    "versionCode": 68,
-    "releaseNotes": "Facet Launcher v2.0.19: 3D ASCII elmas animasyon cizimi cift tamponlama (double-buffering) ile arka plana (Dispatchers.Default) tasinarak ana UI is parcacigi 120 FPS akiciliga kavusturuldu. PWA ekleme/silme akisi tek reaktif tetikleyiciye (pwasJsonFlow) indirgenerek mukerrer taramalar kaldirildi."
+    "apkSize": 1276818,
+    "sha256": "e19b23e40295760d2925d8651c500f5f42c2b96751e6f0eb39b6ed17a1443964",
+    "versionName": "2.0.20",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.20/TarsLauncher-release.apk",
+    "versionCode": 69,
+    "releaseNotes": "Facet Launcher v2.0.20: Uygulama cekmecesi dikey konumu yukari kaydirildiginda ikonlarin sikisip kaybolmasi sorunu cozuldu. Cekmece yuksekligi korunarak FolderGrid ile olan z-index ve katman siralamasi duzeltildi; cekmece ve ayarlar butonu her konumda sorunsuz tiklanabilir ve gorunur hale getirildi."
 }

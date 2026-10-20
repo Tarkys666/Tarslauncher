@@ -235,19 +235,15 @@ fun HomeScreen(
             )
         }
 
-        // Main content column - sadece butonlar ve command bar için
+        // Main controls column - positioned at bottom and guaranteed on top of FolderGrid (zIndex = 10f)
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .zIndex(10f)
                 .padding(horizontal = mainPadding), // Responsive padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Command bar overlay için responsive boş alan
-            Spacer(modifier = Modifier.height(commandBarSpacerHeight))
-            
-            // App drawer ile butonlar arasında esnek boşluk - daha küçük weight
-            Spacer(modifier = Modifier.weight(0.15f))
-            
             // Responsive Ayarlar Butonu (Aşağı kaydırma ile gizlenir, yukarı kaydırma ile görünür)
             AnimatedVisibility(
                 visible = isSettingsButtonVisible,
@@ -256,16 +252,11 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
                 Row(
-                    modifier = Modifier
-                        .then(
-                            if (!showAppDrawer) Modifier.navigationBarsPadding().padding(bottom = (appDrawerOffsetY.coerceAtLeast(16)).dp)
-                            else Modifier
-                        ),
+                    modifier = Modifier.padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy((screenWidth * 0.02f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
                 ) {
                     Box(
                         modifier = Modifier
-                            .padding(bottom = (screenHeight * 0.01f).coerceAtLeast(6.dp).coerceAtMost(12.dp))
                             .height(buttonHeight)
                             .background(buttonColor, RoundedCornerShape(4.dp))
                             .clickable(
@@ -299,10 +290,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .fillMaxWidth()
-                        .height(appDrawerHeight) // Responsive height
-                        .navigationBarsPadding() // Alt navigation bar için padding
-                        .padding(top = 4.dp) // Settings butonuna yaklaşmak için minimal boşluk
-                        .padding(bottom = (if (dualAppDrawer) (appDrawerOffsetY - 12).coerceAtLeast(0) else appDrawerOffsetY).dp), // Alt navigation bar ile arasında ayarlanabilir boşluk
+                        .height(appDrawerHeight), // Full responsive height - NEVER compressed by padding!
                     contentAlignment = Alignment.Center
                 ) {
                     val onAppLongClickMemo: (AppInfo) -> Unit = remember {
@@ -375,6 +363,13 @@ fun HomeScreen(
                 }
             }
             }
+
+            // Bottom spacer providing user-configured vertical offset + system navigation bar insets
+            Spacer(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .height((if (!showAppDrawer) appDrawerOffsetY.coerceAtLeast(16) else appDrawerOffsetY).dp)
+            )
         }
         
         // ✅ RESPONSIVE SAAT OVERLAY - Her cihaza uyumlu
