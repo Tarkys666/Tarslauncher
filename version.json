@@ -1,8 +1,8 @@
 {
-    "apkSize": 1230988,
-    "sha256": "3b5679312ee5d9753a8acc268aed60d7e271f5f2d905892a3ef617dfa51ddeac",
-    "versionName": "2.0.14",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.14/TarsLauncher-release.apk",
-    "versionCode": 63,
-    "releaseNotes": "Facet Launcher v2.0.14: Uygulama kimligi Facet Launcher olarak yenilendi. Pure Brilliant Cut vektor elmas logosu (AMOLED adaptive icon) eklendi, ana ekran basligi ve ayar metinleri Facet olarak guncellendi."
+    "apkSize": 1305598,
+    "sha256": "3b8a877575b722bc43c970c2cb440b0ebccb459ec6b02f7587617ce4a589d93d",
+    "versionName": "2.0.15",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.15/TarsLauncher-release.apk",
+    "versionCode": 64,
+    "releaseNotes": "Facet Launcher v2.0.15: Gercek 3D ASCII elmas grafik motorundan dogrudan uretilen yuksek cozunurluklu Poz 1: Hero Starburst pariltili ASCII elmas uygulama ikonu (tum Android adaptif & legacy mipmap cozunurlukleri icin) eklendi."
 }
