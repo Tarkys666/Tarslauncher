@@ -1,8 +1,8 @@
 {
     "apkSize": 1276814,
-    "sha256": "13793f710d835304b8c415e85a03cf147294d24c49f96564c4a80d69e2743aef",
-    "versionName": "2.0.25",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.25/TarsLauncher-release.apk",
-    "versionCode": 74,
-    "releaseNotes": "Facet Launcher v2.0.25: 1. Uygulama cekmecesi maksimum satir sayisi 5 olarak sinirlandirildi. 2. Cekmece konumu ayarlama ekraninda tum gereksiz badge/yazilar kaldirildi; yalnizca cekmece, ekranin tam ortasini gosteren yatay kilavuz cizgi, OK ve CANCEL butonlari birakildi. 3. Ayarlar ekraninin saf siyah, seffaf bordurlu minimalist orijinal UI stili korundu."
+    "sha256": "01be3fa15b7348eb299378a6f8da1ac662ecb024652352f215983ebe374fa485",
+    "versionName": "2.0.26",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.26/TarsLauncher-release.apk",
+    "versionCode": 75,
+    "releaseNotes": "Facet Launcher v2.0.26: Uygulama cekmecesinin konumu sabitlendikten sonra ana ekranda asagi/yukari kaymasi ve dikey scroll davranisi tamamen engellendi. Drawer yuksekligi pozisyon ayarlama ekraniyla piksel piksel birebir esitlendi."
 }

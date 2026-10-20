@@ -201,9 +201,9 @@ fun HomeScreen(
             totalH.coerceAtMost(maxH)
         } else {
             when {
-                screenHeight < 600.dp -> 80.dp
-                screenHeight < 800.dp -> 100.dp
-                else -> 120.dp
+                screenHeight < 600.dp -> (appDrawerIconSize + 28).dp
+                screenHeight < 800.dp -> (appDrawerIconSize + 28).dp
+                else -> (appDrawerIconSize + 28).dp
             }
         }
     }
@@ -244,19 +244,6 @@ fun HomeScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .zIndex(10f)
-                .draggable(
-                    state = verticalDragState,
-                    orientation = Orientation.Vertical,
-                    onDragStarted = { dragAccumulator[0] = 0f },
-                    onDragStopped = { velocity ->
-                        if (velocity > 200f) {
-                            isSettingsButtonVisible = false
-                        } else if (velocity < -200f) {
-                            isSettingsButtonVisible = true
-                        }
-                        dragAccumulator[0] = 0f
-                    }
-                )
                 .padding(horizontal = mainPadding), // Responsive padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -729,7 +716,7 @@ fun MultiRowAppDrawer(
     iconSize: Int,
     screenWidth: Dp
 ) {
-    val effectiveRowCount = rowCount.coerceIn(1, 20)
+    val effectiveRowCount = rowCount.coerceIn(1, 5)
 
     val rowApps = remember(installedApps, effectiveRowCount) {
         if (installedApps.isEmpty()) {
@@ -823,11 +810,7 @@ fun MultiRowAppDrawer(
 
     val itemSpacing = remember(screenWidth) { (screenWidth * 0.03f).coerceAtLeast(8.dp).coerceAtMost(16.dp) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         for (r in 0 until effectiveRowCount) {
@@ -1439,6 +1422,9 @@ fun ClockHeader(
         }
     }
 }
+
+
+
 
 
 

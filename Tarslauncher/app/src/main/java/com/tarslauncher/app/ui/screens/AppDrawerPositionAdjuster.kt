@@ -153,7 +153,7 @@ fun AppDrawerPositionAdjuster(
             val drawerHeight = if (effectiveRows > 1) {
                 val singleH = (appDrawerIconSize + 16).dp
                 (singleH * effectiveRows + 4.dp * (effectiveRows - 1)).coerceAtMost(maxOffsetDp)
-            } else 95.dp
+            } else (appDrawerIconSize + 28).dp
 
             Box(
                 modifier = Modifier
