@@ -1,17 +1,17 @@
 package com.tarslauncher.app.ui.screens
 
-import android.annotation.SuppressLint
+// Native ASCII Diamond
 import android.app.Application
 import android.util.Log
-import android.view.ViewGroup
-import android.webkit.ConsoleMessage
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.ui.viewinterop.AndroidView
+
+
+
+
+
+
+
+
+import com.tarslauncher.app.ui.components.AsciiDiamondCanvas
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -225,7 +225,7 @@ fun HomeScreen(
             )
     ) {
         if (showAsciiDiamond) {
-            AsciiDiamondBackground(
+            AsciiDiamondCanvas(
                 scale = asciiDiamondScale,
                 offsetY = asciiDiamondOffsetY,
                 fps = asciiDiamondFps,
@@ -1379,108 +1379,4 @@ fun ClockHeader(
 }
 
 
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun AsciiDiamondBackground(
-    scale: Int = 100,
-    offsetY: Int = 0,
-    fps: Int = 60,
-    speed: Int = 100,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    val rawHtml = remember {
-        try {
-            context.assets.open("ascii_diamond.html").bufferedReader().use { it.readText() }
-        } catch (e: Exception) {
-            Log.e("AsciiDiamond", "Failed to load ascii_diamond.html from assets", e)
-            ""
-        }
-    }
-
-    val htmlContent = remember(rawHtml, scale, offsetY, fps, speed) {
-        val initialConfig = "diamondScale = ${scale / 100f}; diamondOffsetY = ${offsetY / 100f}; diamondFps = $fps; diamondSpeed = ${speed / 100f};"
-        rawHtml.replace("/* __INITIAL_CONFIG__ */", initialConfig)
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    webViewRef?.onPause()
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    webViewRef?.onResume()
-                }
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            webViewRef?.destroy()
-            webViewRef = null
-        }
-    }
-
-    AndroidView(
-        factory = { ctx ->
-            WebView(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setBackgroundColor(android.graphics.Color.BLACK)
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                overScrollMode = android.view.View.OVER_SCROLL_NEVER
-                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    allowFileAccess = true
-                    allowContentAccess = true
-                    loadWithOverviewMode = true
-                    useWideViewPort = true
-                    cacheMode = WebSettings.LOAD_NO_CACHE
-                }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                        Log.d("AsciiDiamondJS", "$consoleMessage")
-                        return true
-                    }
-                }
-
-                webViewClient = object : WebViewClient() {
-                    override fun onReceivedError(
-                        view: WebView?,
-                        request: WebResourceRequest?,
-                        error: WebResourceError?
-                    ) {
-                        Log.e("AsciiDiamond", "WebView error: ${error?.description}")
-                    }
-                }
-
-                loadDataWithBaseURL("https://localhost/", htmlContent, "text/html", "UTF-8", null)
-                webViewRef = this
-            }
-        },
-        update = { webView ->
-            webView.onResume()
-            val scaleFloat = scale / 100f
-            val offsetYFloat = offsetY / 100f
-            val fpsInt = fps
-            val speedFloat = speed / 100f
-            webView.evaluateJavascript(
-                "if (window.updateConfig) window.updateConfig($scaleFloat, $offsetYFloat, $fpsInt, $speedFloat);",
-                null
-            )
-        },
-        modifier = modifier.fillMaxSize()
-    )
-}

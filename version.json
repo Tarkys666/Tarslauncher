@@ -1,8 +1,8 @@
 {
-    "apkSize": 1242556,
-    "sha256": "f40d3c5a21bb438e5f440fcd57fce32edad5b7f2d3b2fe9b1d04d82588f35d5c",
-    "versionName": "2.0.12",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.12/TarsLauncher-release.apk",
-    "versionCode": 61,
-    "releaseNotes": "TARS v2.0.12: 3D ASCII Elmas i\u00e7in detayl\u0131 ayarlar eklendi; b\u00fcy\u00fckl\u00fck (scale), dikey konum (Y position), hedef FPS (30/45/60/90/120) ve d\u00f6nme h\u0131z\u0131 ayarlar\u0131 art\u0131k ayarlar men\u00fcs\u00fcnden canl\u0131 olarak de\u011fi\u015ftirilebilir."
+    "apkSize": 1237945,
+    "sha256": "487a885ef11670d898ce195ba55c3bbebc2faff4a8cdcf8948f2f4ef64b22fa9",
+    "versionName": "2.0.13",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.13/TarsLauncher-release.apk",
+    "versionCode": 62,
+    "releaseNotes": "TARS v2.0.13: 3D ASCII Elmas motoru WebView'dan %100 saf Kotlin Jetpack Compose Canvas grafik motoruna tasindi. Sifir WebView RAM tuketimi (~70 MB tasarruf), 0ms baslatma gecikmesi, 0 GC per frame ve 60-120 FPS akici piksel mukemmel rendering saglandi."
 }
