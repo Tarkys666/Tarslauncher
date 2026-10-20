@@ -3,22 +3,17 @@ package com.tarslauncher.app.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,7 +43,9 @@ import com.tarslauncher.app.data.model.GridSize
 /**
  * Full-screen interactive App Drawer position adjustment overlay.
  * Renders the live HomeScreen with a blur effect in the background and allows the user
- * to freely drag the App Drawer across the full phone screen (no 200px limit).
+ * to freely drag the App Drawer across the full phone screen.
+ * Shows ONLY the App Drawer, a center guide line across the phone's exact middle,
+ * and OK and CANCEL buttons.
  */
 @Composable
 fun AppDrawerPositionAdjuster(
@@ -81,7 +78,6 @@ fun AppDrawerPositionAdjuster(
         val screenHeight = maxHeight
         val screenWidth = maxWidth
 
-        // No 200px limit! Maximum offset allows drawer to travel up to near the top of the phone
         val maxOffsetDp = (screenHeight - 160.dp).coerceAtLeast(100.dp)
         var currentOffsetDp by remember {
             mutableFloatStateOf(initialOffsetY.coerceIn(0, maxOffsetDp.value.toInt()).toFloat())
@@ -99,7 +95,7 @@ fun AppDrawerPositionAdjuster(
                 onFoldersUpdate = {},
                 onSettingsClick = {},
                 onAppClick = {},
-                showAppDrawer = false, // Background doesn't render static drawer
+                showAppDrawer = false,
                 dualAppDrawer = dualAppDrawer,
                 gridSize = gridSize,
                 iconPackLoader = iconPackLoader,
@@ -135,35 +131,17 @@ fun AppDrawerPositionAdjuster(
                 }
         )
 
-        // 3. Top Info & Instructions Badge
+        // 3. Center Guide Line - exact middle of the phone
         Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 16.dp)
-                .background(Color(0xEE161616), RoundedCornerShape(20.dp))
-                .border(BorderStroke(1.dp, Color(0xFF333333)), RoundedCornerShape(20.dp))
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-                .zIndex(25f)
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "APP DRAWER POSITION",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${currentOffsetDp.toInt()} dp • Drag anywhere up or down",
-                    color = Color.White.copy(alpha = 0.65f),
-                    fontSize = 11.sp
-                )
-            }
-        }
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.45f))
+                .zIndex(20f)
+        )
 
-        // 4. Live Draggable Controls & App Drawer
+        // 4. Live Draggable App Drawer
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -171,54 +149,7 @@ fun AppDrawerPositionAdjuster(
                 .zIndex(15f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Drag handle with glowing badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .background(Color(0xEE222222), RoundedCornerShape(14.dp))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 14.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = "↕ DRAG ME",
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "${currentOffsetDp.toInt()} dp",
-                    color = Color(0xFF90CAF9),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Settings button
-            Box(
-                modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                    .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "SETTINGS",
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.ExtraLight,
-                    letterSpacing = 0.5.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // App Drawer preview with real icons
-            val effectiveRows = if (appDrawerRows > 1) appDrawerRows else (if (dualAppDrawer) 2 else 1)
+            val effectiveRows = if (appDrawerRows > 1) appDrawerRows.coerceIn(1, 5) else (if (dualAppDrawer) 2 else 1)
             val drawerHeight = if (effectiveRows > 1) {
                 val singleH = (appDrawerIconSize + 16).dp
                 (singleH * effectiveRows + 4.dp * (effectiveRows - 1)).coerceAtMost(maxOffsetDp)
@@ -273,7 +204,7 @@ fun AppDrawerPositionAdjuster(
             )
         }
 
-        // 5. Bottom Right: OK / SAVE Button (Requested by user)
+        // 5. Bottom Right: OK Button
         Button(
             onClick = { onSave(currentOffsetDp.toInt()) },
             colors = ButtonDefaults.buttonColors(
@@ -289,7 +220,7 @@ fun AppDrawerPositionAdjuster(
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
         ) {
             Text(
-                text = "OK  ✔",
+                text = "OK",
                 color = Color.Black,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -301,10 +232,10 @@ fun AppDrawerPositionAdjuster(
         Button(
             onClick = onCancel,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xDD181818),
+                containerColor = Color.Black,
                 contentColor = Color.White
             ),
-            border = BorderStroke(1.dp, Color(0xFF444444)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -314,9 +245,10 @@ fun AppDrawerPositionAdjuster(
         ) {
             Text(
                 text = "CANCEL",
-                color = Color.White.copy(alpha = 0.85f),
+                color = Color.White,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.5.sp
             )
         }
     }

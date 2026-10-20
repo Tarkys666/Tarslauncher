@@ -149,18 +149,8 @@ fun SettingsScreen(
         }
     }
     
-    // Tree state management - expand all 5 clean categories by default
-    var expandedCategories by remember {
-        mutableStateOf(
-            setOf(
-                "HOME SCREEN & GRID",
-                "APP DRAWER",
-                "3D ASCII DIAMOND",
-                "WEB APPS (PWA)",
-                "SYSTEM & ABOUT"
-            )
-        )
-    }
+    // Tree state management
+    var expandedCategories by remember { mutableStateOf(setOf<String>()) }
     var showGridSizeDialog by remember { mutableStateOf(false) }
     var showIconPackDialog by remember { mutableStateOf(false) }
     var showAddPwaDialog by remember { mutableStateOf(false) }
@@ -247,7 +237,7 @@ fun SettingsScreen(
                     if (showAppDrawer) {
                         add(SettingsItem.Setting(
                             title = "App Drawer Rows",
-                            description = "$appDrawerRows Row${if (appDrawerRows > 1) "s (Alternating kinetic flow)" else " (Classic single row)"}",
+                            description = "$appDrawerRows Row${if (appDrawerRows > 1) "s (Alternating directions)" else " (Classic single row)"}",
                             type = SettingType.BUTTON,
                             onClick = { showAppDrawerRowsDialog = true },
                             buttonLabel = "ROWS"
@@ -261,7 +251,7 @@ fun SettingsScreen(
                         ))
                         add(SettingsItem.Setting(
                             title = "App Drawer Icon Size",
-                            description = "Adjust drawer icon size (20-36dp)",
+                            description = "Adjust app drawer icon size (20-36dp)",
                             type = SettingType.SLIDER,
                             currentValue = appDrawerIconSize,
                             onValueChange = { onAppDrawerIconSizeChange(it as Int) }
@@ -418,7 +408,7 @@ fun SettingsScreen(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Categorized settings cards
+        // Tree-based settings
         settingsTree.forEach { category ->
             SettingsCategoryItem(
                 category = category,
@@ -431,7 +421,7 @@ fun SettingsScreen(
                     }
                 }
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
         
     }
@@ -444,7 +434,7 @@ fun SettingsScreen(
                     containerColor = Color.Black
                 ),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF333333))
+                border = BorderStroke(1.dp, Color.Black)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
@@ -606,7 +596,7 @@ fun SettingsScreen(
     }
 
     if (showAppDrawerRowsDialog) {
-        var tempRows by remember(appDrawerRows) { mutableIntStateOf(appDrawerRows) }
+        var tempRows by remember(appDrawerRows) { mutableIntStateOf(appDrawerRows.coerceIn(1, 5)) }
         Dialog(onDismissRequest = { showAppDrawerRowsDialog = false }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.Black),
@@ -641,12 +631,12 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Slider 1 to 20
+                    // Slider 1 to 5 (Max 5 rows as requested)
                     Slider(
                         value = tempRows.toFloat(),
-                        onValueChange = { tempRows = it.toInt().coerceIn(1, 20) },
-                        valueRange = 1f..20f,
-                        steps = 18,
+                        onValueChange = { tempRows = it.toInt().coerceIn(1, 5) },
+                        valueRange = 1f..5f,
+                        steps = 3,
                         colors = SliderDefaults.colors(
                             thumbColor = Color.White,
                             activeTrackColor = Color.White,
@@ -667,7 +657,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        listOf(1, 2, 3, 5, 10, 20).forEach { r ->
+                        listOf(1, 2, 3, 4, 5).forEach { r ->
                             Box(
                                 modifier = Modifier
                                     .clickable { tempRows = r }
@@ -675,12 +665,12 @@ fun SettingsScreen(
                                         if (tempRows == r) Color.White else Color(0xFF1E1E1E),
                                         RoundedCornerShape(6.dp)
                                     )
-                                    .padding(horizontal = 9.dp, vertical = 6.dp)
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = if (r == 1) "1" else "$r",
+                                    text = "$r",
                                     color = if (tempRows == r) Color.Black else Color.White,
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = if (tempRows == r) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
@@ -718,10 +708,10 @@ fun SettingsCategoryItem(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF0D0D0D)
+            containerColor = Color.Black
         ),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color(0xFF222222))
+        border = BorderStroke(1.dp, Color.Black)
     ) {
         Column {
             // Category header
@@ -729,7 +719,7 @@ fun SettingsCategoryItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onExpandToggle() }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -737,15 +727,15 @@ fun SettingsCategoryItem(
                     Text(
                         text = category.title,
                         color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.5.sp
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 1.sp
                     )
                 }
                 Text(
                     text = if (isExpanded) "▼" else "▶",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 11.sp
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 12.sp
                 )
             }
             
@@ -754,14 +744,14 @@ fun SettingsCategoryItem(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     category.children.forEach { setting ->
                         if (setting is SettingsItem.Setting) {
                             SettingsItemView(
                                 setting = setting
                             )
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                 }
@@ -780,26 +770,26 @@ fun SettingsItemView(
             containerColor = Color.Black
         ),
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, Color(0xFF1C1C1C))
+        border = BorderStroke(1.dp, Color.Black)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = setting.title,
                     color = Color.White,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Normal
                 )
                 Text(
                     text = setting.description,
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 11.sp
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 12.sp
                 )
             }
             
@@ -836,12 +826,12 @@ fun SettingsItemView(
                         onClick = { setting.onClick?.invoke() },
                         enabled = setting.enabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF181818),
+                            containerColor = Color.Black,
                             contentColor = Color.White,
                             disabledContainerColor = Color.Black,
                             disabledContentColor = Color(0xFF555555)
                         ),
-                        border = BorderStroke(1.dp, Color(0xFF333333)),
+                        border = BorderStroke(1.dp, Color.Transparent),
                         shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
@@ -863,10 +853,10 @@ fun SettingsItemView(
                     Button(
                         onClick = { setting.onClick?.invoke() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF181818),
+                            containerColor = Color.Black,
                             contentColor = Color.White
                         ),
-                        border = BorderStroke(1.dp, Color(0xFF333333)),
+                        border = BorderStroke(1.dp, Color.Transparent),
                         shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
@@ -964,7 +954,7 @@ fun IconPackSelectionDialog(
                 containerColor = Color.Black
             ),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color(0xFF333333))
+            border = BorderStroke(1.dp, Color.Transparent)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(

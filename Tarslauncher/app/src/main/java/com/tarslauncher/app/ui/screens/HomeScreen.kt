@@ -192,7 +192,7 @@ fun HomeScreen(
     }
     
     // Responsive app drawer height (memoized for any row count 1..20)
-    val effectiveRows = if (appDrawerRows > 1) appDrawerRows else (if (dualAppDrawer) 2 else 1)
+    val effectiveRows = if (appDrawerRows > 1) appDrawerRows.coerceIn(1, 5) else (if (dualAppDrawer) 2 else 1)
     val appDrawerHeight = remember(screenHeight, effectiveRows, appDrawerIconSize) {
         if (effectiveRows > 1) {
             val singleRowH = (appDrawerIconSize + 16).dp
