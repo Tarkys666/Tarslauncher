@@ -3,7 +3,6 @@ package com.tarslauncher.app.ui.components
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -17,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.IntSize
@@ -661,26 +659,7 @@ fun AsciiDiamondCanvas(
         }
 
         Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = {
-                            engine.isDragging = true
-                        },
-                        onDragEnd = {
-                            engine.isDragging = false
-                        },
-                        onDragCancel = {
-                            engine.isDragging = false
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            engine.yawOff += dragAmount.x * 0.012f
-                            engine.pitOff = (engine.pitOff + dragAmount.y * 0.006f).coerceIn(-0.5f, 0.6f)
-                        }
-                    )
-                }
+            modifier = Modifier.fillMaxSize()
         ) {
             @Suppress("UNUSED_VARIABLE")
             val f = frameTrigger

@@ -241,6 +241,19 @@ fun HomeScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .zIndex(10f)
+                .draggable(
+                    state = verticalDragState,
+                    orientation = Orientation.Vertical,
+                    onDragStarted = { dragAccumulator[0] = 0f },
+                    onDragStopped = { velocity ->
+                        if (velocity > 200f) {
+                            isSettingsButtonVisible = false
+                        } else if (velocity < -200f) {
+                            isSettingsButtonVisible = true
+                        }
+                        dragAccumulator[0] = 0f
+                    }
+                )
                 .padding(horizontal = mainPadding), // Responsive padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -369,6 +382,14 @@ fun HomeScreen(
                 modifier = Modifier
                     .navigationBarsPadding()
                     .height((if (!showAppDrawer) appDrawerOffsetY.coerceAtLeast(16) else appDrawerOffsetY).dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        if (!isSettingsButtonVisible) {
+                            isSettingsButtonVisible = true
+                        }
+                    }
             )
         }
         
