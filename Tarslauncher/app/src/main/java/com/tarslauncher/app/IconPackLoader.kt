@@ -3,6 +3,12 @@ package com.tarslauncher.app
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import androidx.collection.LruCache
 import androidx.compose.runtime.Stable
@@ -28,6 +34,18 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
     private val iconMap = ConcurrentHashMap<String, String>()
     private val packageFallbackMap = ConcurrentHashMap<String, String>()
     private val resIdCache = ConcurrentHashMap<String, Int>()
+
+    @Volatile
+    private var iconBackNames: List<String> = emptyList()
+
+    @Volatile
+    private var iconMaskName: String? = null
+
+    @Volatile
+    private var iconUponNames: List<String> = emptyList()
+
+    @Volatile
+    private var fallbackIconScale = 0.8f
 
     private val maxCacheSizeKb = (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt().coerceAtLeast(2048)
     private val imageBitmapCache = object : LruCache<String, ImageBitmap>(maxCacheSizeKb) {
@@ -97,16 +115,29 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
         val tempComponentMap = HashMap<String, String>(4096)
         val tempPackageMap = HashMap<String, String>(2048)
         while (xpp.eventType != XmlPullParser.END_DOCUMENT) {
-            if (xpp.eventType == XmlPullParser.START_TAG && xpp.name == "item") {
-                val component = xpp.getAttributeValue(null, "component")
-                val drawable = xpp.getAttributeValue(null, "drawable")
-                if (!component.isNullOrEmpty() && !drawable.isNullOrEmpty()) {
-                    tempComponentMap[component] = drawable
-                    if (component.startsWith("ComponentInfo{")) {
-                        val pkg = component.removePrefix("ComponentInfo{").substringBefore("/")
-                        if (pkg.isNotEmpty() && !tempPackageMap.containsKey(pkg)) {
-                            tempPackageMap[pkg] = drawable
+            if (xpp.eventType == XmlPullParser.START_TAG) {
+                when (xpp.name) {
+                    "item" -> {
+                        val component = xpp.getAttributeValue(null, "component")
+                        val drawable = xpp.getAttributeValue(null, "drawable")
+                        if (!component.isNullOrEmpty() && !drawable.isNullOrEmpty()) {
+                            tempComponentMap[component] = drawable
+                            if (component.startsWith("ComponentInfo{")) {
+                                val pkg = component.removePrefix("ComponentInfo{").substringBefore("/")
+                                if (pkg.isNotEmpty() && !tempPackageMap.containsKey(pkg)) {
+                                    tempPackageMap[pkg] = drawable
+                                }
+                            }
                         }
+                    }
+                    "iconback" -> iconBackNames = (iconBackNames + readImageNames(xpp)).distinct()
+                    "iconmask" -> readImageNames(xpp).firstOrNull()?.let { iconMaskName = it }
+                    "iconupon" -> iconUponNames = (iconUponNames + readImageNames(xpp)).distinct()
+                    "scale" -> {
+                        xpp.getAttributeValue(null, "factor")
+                            ?.toFloatOrNull()
+                            ?.coerceIn(0.1f, 1f)
+                            ?.let { fallbackIconScale = it }
                     }
                 }
             }
@@ -114,6 +145,93 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
         }
         iconMap.putAll(tempComponentMap)
         packageFallbackMap.putAll(tempPackageMap)
+    }
+
+    private fun readImageNames(parser: XmlPullParser): List<String> =
+        (0 until parser.attributeCount)
+            .mapNotNull { index ->
+                val attributeName = parser.getAttributeName(index)
+                if (!attributeName.startsWith("img", ignoreCase = true)) return@mapNotNull null
+                val value = parser.getAttributeValue(index)
+                    ?.substringAfterLast('/')
+                    ?.removePrefix("@")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                (attributeName.drop(3).toIntOrNull() ?: Int.MAX_VALUE) to value
+            }
+            .sortedBy { it.first }
+            .map { it.second }
+
+    private fun loadPackDrawable(drawableName: String, resources: Resources): Drawable? {
+        val normalizedName = drawableName.substringAfterLast('/').removePrefix("@")
+        val resId = resIdCache.getOrPut(normalizedName) {
+            resources.getIdentifier(normalizedName, "drawable", packPackageName)
+                .takeIf { it != 0 }
+                ?: resources.getIdentifier(normalizedName, "mipmap", packPackageName)
+        }
+        return if (resId != 0) ResourcesCompat.getDrawable(resources, resId, null) else null
+    }
+
+    private fun hasFallbackIconTheme(): Boolean =
+        iconBackNames.isNotEmpty() || iconMaskName != null || iconUponNames.isNotEmpty()
+
+    private fun createFallbackIconBitmap(
+        appPackageName: String,
+        componentString: String,
+        fallbackIcon: Drawable,
+        resources: Resources
+    ): Bitmap {
+        val size = 192
+        val bounds = Rect(0, 0, size, size)
+        val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        val result = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+
+        val backgroundName = if (iconBackNames.isEmpty()) {
+            null
+        } else {
+            iconBackNames[(appPackageName.hashCode() and Int.MAX_VALUE) % iconBackNames.size]
+        }
+        backgroundName?.let { name ->
+            loadPackDrawable(name, resources)?.let { drawable ->
+                drawable.bounds = bounds
+                drawable.draw(canvas)
+            }
+        }
+
+        val foreground = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val foregroundCanvas = Canvas(foreground)
+        val iconBitmap = drawableToBitmap(
+            fallbackIcon,
+            "icon-pack-fallback-source:$packPackageName:$componentString"
+        )
+        val iconSize = (size * fallbackIconScale).toInt().coerceIn(1, size)
+        val inset = (size - iconSize) / 2
+        val iconBounds = Rect(inset, inset, size - inset, size - inset)
+        foregroundCanvas.drawBitmap(iconBitmap, null, iconBounds, bitmapPaint)
+
+        iconMaskName?.let { name ->
+            loadPackDrawable(name, resources)?.let { mask ->
+                val maskBitmap = drawableToBitmap(mask, "icon-pack-mask:$packPackageName:$name")
+                val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+                }
+                foregroundCanvas.drawBitmap(maskBitmap, null, bounds, maskPaint)
+                maskPaint.xfermode = null
+            }
+        }
+
+        canvas.drawBitmap(foreground, 0f, 0f, bitmapPaint)
+        foreground.recycle()
+
+        iconUponNames.firstOrNull()?.let { name ->
+            loadPackDrawable(name, resources)?.let { overlay ->
+                val overlayBitmap = drawableToBitmap(overlay, "icon-pack-overlay:$packPackageName:$name")
+                canvas.drawBitmap(overlayBitmap, null, bounds, bitmapPaint)
+            }
+        }
+
+        return result
     }
 
     fun getIconForApp(appPackageName: String, appActivityName: String): Drawable? {
@@ -127,16 +245,7 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
             ?: return null
 
         return try {
-            // Cache resource identifier to eliminate linear reflection lookups
-            val resId = resIdCache.getOrPut(drawableName) {
-                resources.getIdentifier(drawableName, "drawable", packPackageName)
-            }
-
-            if (resId != 0) {
-                ResourcesCompat.getDrawable(resources, resId, null)
-            } else {
-                null
-            }
+            loadPackDrawable(drawableName, resources)
         } catch (_: Exception) {
             null
         }
@@ -149,14 +258,40 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
     ): ImageBitmap? {
         val componentString = "ComponentInfo{$appPackageName/$appActivityName}"
 
-        // 1. Check in-memory ImageBitmap LRU cache first
+        // Don't cache the temporary system icon while the pack is still loading.
+        if (!isLoaded) {
+            val pendingIcon = fallbackIcon ?: return null
+            return try {
+                drawableToBitmap(
+                    pendingIcon,
+                    "icon-pack-pending:$packPackageName:$componentString"
+                ).asImageBitmap()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         imageBitmapCache.get(componentString)?.let { return it }
 
-        // 2. Resolve themed drawable or fallback
-        val drawable = getIconForApp(appPackageName, appActivityName) ?: fallbackIcon ?: return null
-
         return try {
-            val bitmap = drawableToBitmap(drawable, componentString).asImageBitmap()
+            val themedIcon = getIconForApp(appPackageName, appActivityName)
+            val bitmap = when {
+                themedIcon != null -> drawableToBitmap(
+                    themedIcon,
+                    "icon-pack-themed:$packPackageName:$componentString"
+                )
+                fallbackIcon == null -> return null
+                hasFallbackIconTheme() -> createFallbackIconBitmap(
+                    appPackageName,
+                    componentString,
+                    fallbackIcon,
+                    packResources ?: return null
+                )
+                else -> drawableToBitmap(
+                    fallbackIcon,
+                    "icon-pack-default:$packPackageName:$componentString"
+                )
+            }.asImageBitmap()
             imageBitmapCache.put(componentString, bitmap)
             bitmap
         } catch (_: Exception) {
