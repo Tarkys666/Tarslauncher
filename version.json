@@ -1,8 +1,8 @@
 {
-    "apkSize": 1305594,
-    "sha256": "e01729b0af14cd2a01742384b8ce1365345b884da64123abb2141b12d084514c",
-    "versionName": "2.0.15",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.15/TarsLauncher-release.apk",
-    "versionCode": 64,
-    "releaseNotes": "Facet Launcher v2.0.15: Gercek 3D ASCII elmas grafik motorundan dogrudan uretilen yuksek cozunurluklu Poz 1: Hero Starburst pariltili ASCII elmas uygulama ikonu (tum Android adaptif & legacy mipmap cozunurlukleri icin) eklendi."
+    "apkSize": 1276814,
+    "sha256": "5f0828ef1357ed66be03b96070f40632fe14a741802ebbc06b6dd43f53974d3d",
+    "versionName": "2.0.16",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.16/TarsLauncher-release.apk",
+    "versionCode": 65,
+    "releaseNotes": "Facet Launcher v2.0.16: Kullanici tercihi dogrultusunda %88 olcek ile dengelenmis, Android adaptif squircle ve daire maskelerinde kusursuz oturan Poz 1 (Hero Starburst) 3D ASCII elmas uygulama ikonu guncellendi."
 }
