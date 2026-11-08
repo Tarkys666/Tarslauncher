@@ -85,16 +85,20 @@ object SecureBroadcastHelper {
     private const val TAG = "SecureBroadcast"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingRefreshRunnable: Runnable? = null
+    private val pendingPackages = mutableSetOf<String>()
     private const val DEBOUNCE_INTERVAL = 300L
 
     /**
      * Cancels any pending debounced refresh runnable and clears references to prevent leaks.
      */
-    fun cancelPending() {
+    fun cancelPending(): Set<String> {
+        val packages = pendingPackages.toSet()
+        pendingPackages.clear()
         pendingRefreshRunnable?.let {
             mainHandler.removeCallbacks(it)
             pendingRefreshRunnable = null
         }
+        return packages
     }
 
     /**
@@ -104,21 +108,25 @@ object SecureBroadcastHelper {
         cancelPending()
     }
 
-    fun createSecurePackageReceiver(onRefresh: (packageName: String?) -> Unit): BroadcastReceiver {
+    fun createSecurePackageReceiver(onRefresh: (packageNames: Set<String>) -> Unit): BroadcastReceiver {
         return object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (context == null || intent == null) return
                 val action = intent.action
                 if (!isValidPackageAction(action)) return
 
-                val packageName = intent.data?.schemeSpecificPart
+                val packageName = intent.data?.schemeSpecificPart ?: return
+                if (!SecurityHelper.validatePackageName(packageName)) return
+                pendingPackages.add(packageName)
 
                 // Debounce instead of dropping: ensures batch updates (e.g. Play Store updates) trigger refresh reliably
                 pendingRefreshRunnable?.let { mainHandler.removeCallbacks(it) }
                 val runnable = Runnable {
                     try {
                         Log.d(TAG, "Executing package event ($action) for package: $packageName")
-                        onRefresh(packageName)
+                        val packages = pendingPackages.toSet()
+                        pendingPackages.clear()
+                        onRefresh(packages)
                     } finally {
                         pendingRefreshRunnable = null
                     }

@@ -13,8 +13,8 @@ import com.tarslauncher.app.data.sync.GoogleAuthManager
 import com.tarslauncher.app.data.sync.TarsAuthUser
 import com.tarslauncher.app.utils.SecurityHelper
 import com.tarslauncher.app.utils.base64ToDrawable
-import com.tarslauncher.app.utils.getAppImageBitmap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,10 +34,16 @@ class AppRepository(
     val cloudBackupManager: CloudBackupManager = CloudBackupManager(this.context, dataStore, authManager)
 
     @Volatile
-    private var cachedInstalledApps: List<AppInfo>? = null
+    private var cachedNativeApps: List<AppInfo>? = null
+    private val appCacheMutex = Mutex()
+    private val appCacheLock = Any()
+    private val pendingPackages = mutableSetOf<String>()
+    private var appCacheGeneration = 0L
 
     @Volatile
     private var cachedPwas: List<PwaInfo>? = null
+    private var renderedPwaSource: List<PwaInfo>? = null
+    private var cachedPwaApps: List<AppInfo> = emptyList()
 
     private val pwaMutex = Mutex()
     private val foldersMutex = Mutex()
@@ -67,15 +73,14 @@ class AppRepository(
     suspend fun restoreFromCloud(): Result<LauncherSettings> = withContext(Dispatchers.IO) {
         val result = cloudBackupManager.restoreLayout()
         result.onSuccess {
-            invalidateAppCache()
+            invalidatePwaCache()
         }
         result
     }
 
-    fun invalidateAppCache() {
-        cachedInstalledApps = null
+    fun invalidatePwaCache() {
         cachedPwas = null
-        com.tarslauncher.app.utils.clearIconBitmapCache()
+        com.tarslauncher.app.utils.invalidateAppIconCache(PwaInfo.PACKAGE_PREFIX, prefix = true)
     }
 
     suspend fun initialize() {
@@ -97,7 +102,7 @@ class AppRepository(
                     if (removed) {
                         dataStore.savePwasJson(currentList.toJson())
                         cachedPwas = currentList
-                        invalidateAppCache()
+                        invalidatePwaCache()
                     }
                 }
             }
@@ -116,109 +121,133 @@ class AppRepository(
         }
     }
 
+    fun invalidatePackages(packages: Set<String>) {
+        synchronized(appCacheLock) {
+            pendingPackages.addAll(packages)
+            appCacheGeneration++
+        }
+    }
+
     suspend fun getInstalledApps(forceRefresh: Boolean = false): RepositoryResult<List<AppInfo>> = withContext(Dispatchers.IO) {
-        try {
-            if (!forceRefresh && cachedInstalledApps != null) {
-                return@withContext RepositoryResult.Success(cachedInstalledApps!!)
-            }
-
-            val intent = Intent(Intent.ACTION_MAIN, null).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            }
-
-            val resolveInfoList = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                packageManager.queryIntentActivities(
-                    intent,
-                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                try {
-                    packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
-                } catch (e: Exception) {
-                    try {
-                        packageManager.queryIntentActivities(intent, 0)
-                    } catch (e2: Exception) {
-                        packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                    }
+        appCacheMutex.withLock {
+            try {
+                val (cached, changed, generation) = synchronized(appCacheLock) {
+                    Triple(cachedNativeApps, pendingPackages.toSet(), appCacheGeneration)
                 }
-            }
+                changed.forEach { com.tarslauncher.app.utils.invalidateAppIconCache(it) }
+                val nativeApps = if (forceRefresh || cached == null) {
+                    loadNativeApps()
+                } else if (changed.isNotEmpty()) {
+                    cached.filterNot { it.packageName in changed } + changed.flatMap { loadNativeApps(it) }
+                } else cached
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                synchronized(appCacheLock) {
+                    cachedNativeApps = nativeApps
+                    // Do not consume a package event that arrived during a query.
+                    if (generation == appCacheGeneration) pendingPackages.clear()
+                }
+                val apps = ArrayList(nativeApps)
+                val pwas = (getInstalledPwas() as? RepositoryResult.Success)?.data.orEmpty()
+                if (pwas !== renderedPwaSource) {
+                    val pwaApps = ArrayList<AppInfo>(pwas.size)
+                    for (pwa in pwas) {
+                        val pwaIcon = if (!pwa.iconBase64.isNullOrBlank()) {
+                            base64ToDrawable(context, pwa.iconBase64)
+                        } else null
 
-            val apps = ArrayList<AppInfo>(resolveInfoList.size)
-            val seenPackages = HashSet<String>(resolveInfoList.size)
-
-            for (resolveInfo in resolveInfoList) {
-                try {
-                    val activityInfo = resolveInfo.activityInfo ?: continue
-                    val packageName = activityInfo.packageName
-
-                    if (packageName == context.packageName || !seenPackages.add(packageName)) continue
-                    if (!SecurityHelper.validatePackageName(packageName)) continue
-
-                    val appName = try {
-                        activityInfo.loadLabel(packageManager).toString()
-                    } catch (_: Exception) {
-                        packageName.substringAfterLast(".")
-                    }
-                    if (appName.isBlank()) continue
-
-                    val icon = try {
-                        activityInfo.loadIcon(packageManager)
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    val isWebApk = packageName.startsWith("org.chromium.webapk") || packageName.contains(".webapk")
-                    apps.add(
-                        AppInfo(
-                            name = appName.take(50).trim(),
-                            packageName = packageName,
-                            icon = icon,
-                            activityName = activityInfo.name,
-                            isPwa = isWebApk
+                        pwaApps.add(
+                            AppInfo(
+                                name = pwa.name.take(50).trim(),
+                                packageName = "${PwaInfo.PACKAGE_PREFIX}${pwa.id}",
+                                icon = pwaIcon,
+                                activityName = "",
+                                isPwa = true,
+                                webUrl = pwa.url,
+                                pwaId = pwa.id,
+                                shortcutPackage = pwa.shortcutPackage,
+                                shortcutId = pwa.shortcutId,
+                                iconBase64 = pwa.iconBase64,
+                                iconUrl = pwa.iconUrl
+                            )
                         )
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error loading app info: ${e.message}")
+                    }
+                    cachedPwaApps = pwaApps
+                    renderedPwaSource = pwas
+                }
+                apps.addAll(cachedPwaApps)
+                RepositoryResult.Success(apps)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e(TAG, "Failed to load installed apps", e)
+                RepositoryResult.Error(e, "Uygulamalar yüklenirken bir hata oluştu.")
+            }
+        }
+    }
+
+    private suspend fun loadNativeApps(onlyPackage: String? = null): List<AppInfo> {
+        val intent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            if (onlyPackage != null) setPackage(onlyPackage)
+        }
+
+        val resolveInfoList = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(
+                intent,
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            try {
+                packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+            } catch (e: Exception) {
+                try {
+                    packageManager.queryIntentActivities(intent, 0)
+                } catch (e2: Exception) {
+                    packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
                 }
             }
+        }
 
-            // Load saved PWAs (reuse parsed list without duplicate deserialization)
-            val pwas = (getInstalledPwas() as? RepositoryResult.Success)?.data.orEmpty()
-            for (pwa in pwas) {
-                val pwaIcon = if (!pwa.iconBase64.isNullOrBlank()) {
-                    base64ToDrawable(context, pwa.iconBase64)
-                } else null
+        val apps = ArrayList<AppInfo>(resolveInfoList.size)
+        val seenPackages = HashSet<String>(resolveInfoList.size)
 
+        for (resolveInfo in resolveInfoList) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            try {
+                val activityInfo = resolveInfo.activityInfo ?: continue
+                val packageName = activityInfo.packageName
+
+                if (packageName == context.packageName || !seenPackages.add(packageName)) continue
+                if (!SecurityHelper.validatePackageName(packageName)) continue
+
+                val appName = try {
+                    activityInfo.loadLabel(packageManager).toString()
+                } catch (_: Exception) {
+                    packageName.substringAfterLast(".")
+                }
+                if (appName.isBlank()) continue
+
+                val icon = try {
+                    activityInfo.loadIcon(packageManager)
+                } catch (_: Exception) {
+                    null
+                }
+
+                val isWebApk = packageName.startsWith("org.chromium.webapk") || packageName.contains(".webapk")
                 apps.add(
                     AppInfo(
-                        name = pwa.name.take(50).trim(),
-                        packageName = "${PwaInfo.PACKAGE_PREFIX}${pwa.id}",
-                        icon = pwaIcon,
-                        activityName = "",
-                        isPwa = true,
-                        webUrl = pwa.url,
-                        pwaId = pwa.id,
-                        shortcutPackage = pwa.shortcutPackage,
-                        shortcutId = pwa.shortcutId,
-                        iconBase64 = pwa.iconBase64,
-                        iconUrl = pwa.iconUrl
+                        name = appName.take(50).trim(),
+                        packageName = packageName,
+                        icon = icon,
+                        activityName = activityInfo.name,
+                        isPwa = isWebApk
                     )
                 )
+            } catch (e: Exception) {
+                Log.w(TAG, "Error loading app info: ${e.message}")
             }
-
-            // Pre-warm icons in background to prevent first-render UI jank
-            for (app in apps) {
-                getAppImageBitmap(app.packageName, app.icon)
-            }
-
-            cachedInstalledApps = apps
-            RepositoryResult.Success(apps)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.e(TAG, "Failed to load installed apps", e)
-            RepositoryResult.Error(e, "Uygulamalar yüklenirken bir hata oluştu.")
         }
+        return apps
     }
 
     suspend fun getInstalledIconPacks(): RepositoryResult<List<IconPackInfo>> = withContext(Dispatchers.IO) {
@@ -328,7 +357,7 @@ class AppRepository(
                 currentList.add(pwa)
                 dataStore.savePwasJson(currentList.toJson())
                 cachedPwas = currentList
-                invalidateAppCache()
+                invalidatePwaCache()
                 RepositoryResult.Success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving PWA", e)
@@ -344,7 +373,7 @@ class AppRepository(
                 currentList.removeAll { it.id == pwaId }
                 dataStore.savePwasJson(currentList.toJson())
                 cachedPwas = currentList
-                invalidateAppCache()
+                invalidatePwaCache()
                 RepositoryResult.Success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "Error deleting PWA", e)

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.repeatOnLifecycle
 import com.tarslauncher.app.repository.AppRepository
 import com.tarslauncher.app.ui.LauncherUiState
 import com.tarslauncher.app.ui.LauncherViewModel
@@ -77,16 +78,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        widgetController.startListening()
-    }
-
-    override fun onStop() {
-        widgetController.stopListening()
-        super.onStop()
-    }
-
     @Deprecated("AppWidgetHost uses the platform activity result API")
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -122,11 +113,24 @@ fun LauncherMain(
     }
     
     // Güvenli broadcast receiver ile uygulama değişikliklerini dinle
-    DisposableEffect(context) {
-        val receiver = SecureBroadcastHelper.createSecurePackageReceiver {
-            widgetController.refresh()
-            repository.invalidateAppCache()
-            viewModel.refreshAppList()
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(context, lifecycleOwner, viewModel) {
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_START -> {
+                    widgetController.refresh()
+                    viewModel.onLauncherVisibilityChanged(true)
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> viewModel.onLauncherVisibilityChanged(false)
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        viewModel.onLauncherVisibilityChanged(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+        val receiver = SecureBroadcastHelper.createSecurePackageReceiver { packages ->
+            viewModel.onPackagesChanged(packages)
+            if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) widgetController.refresh()
         }
         
         val filter = android.content.IntentFilter().apply {
@@ -144,7 +148,10 @@ fun LauncherMain(
         }
         
         onDispose {
-            SecureBroadcastHelper.cancelPending()
+            lifecycle.removeObserver(observer)
+            viewModel.onLauncherVisibilityChanged(false)
+            val deferredPackages = SecureBroadcastHelper.cancelPending()
+            if (deferredPackages.isNotEmpty()) viewModel.onPackagesChanged(deferredPackages)
             try {
                 context.unregisterReceiver(receiver)
             } catch (e: Exception) {
@@ -153,13 +160,15 @@ fun LauncherMain(
         }
     }
     
-    val iconPackLoader = remember(uiState.selectedIconPack) {
+    val iconPackLoader = remember(uiState.selectedIconPack, uiState.iconPackRevision) {
         uiState.selectedIconPack?.let { IconPackLoader(context, it) }
     }
 
-    LaunchedEffect(iconPackLoader) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            iconPackLoader?.load()
+    LaunchedEffect(iconPackLoader, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                iconPackLoader?.load()
+            }
         }
     }
     

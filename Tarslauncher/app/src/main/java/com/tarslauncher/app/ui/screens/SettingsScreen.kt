@@ -329,7 +329,7 @@ fun SettingsScreen(
                         ))
                         add(SettingsItem.Setting(
                             title = "Diamond Rotation Speed",
-                            description = if (asciiDiamondSpeed == 0) "Stopped (drag to rotate)" else "$asciiDiamondSpeed% speed",
+                            description = if (asciiDiamondSpeed == 0) "Stopped (static image)" else "$asciiDiamondSpeed% speed",
                             type = SettingType.SLIDER,
                             currentValue = asciiDiamondSpeed,
                             onValueChange = { onAsciiDiamondSpeedChange(it as Int) },

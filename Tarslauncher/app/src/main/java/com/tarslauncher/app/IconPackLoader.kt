@@ -19,9 +19,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.res.ResourcesCompat
 import com.tarslauncher.app.utils.drawableToBitmap
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.InputStream
@@ -68,13 +67,13 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
     @Volatile
     private var packResources: Resources? = null
 
-    fun load() {
+    suspend fun load() {
         if (isLoaded) return
         try {
             val resources = appContext.packageManager.getResourcesForApplication(packPackageName)
             packResources = resources
             loadAppFilter(resources)
-            CoroutineScope(Dispatchers.Main).launch {
+            withContext(Dispatchers.Main.immediate) {
                 isLoaded = true
             }
         } catch (_: PackageManager.NameNotFoundException) {
@@ -255,8 +254,9 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
         appPackageName: String,
         appActivityName: String,
         fallbackIcon: Drawable? = null
-    ): ImageBitmap? {
+    ): ImageBitmap? = synchronized(imageBitmapCache) {
         val componentString = "ComponentInfo{$appPackageName/$appActivityName}"
+        val cacheKey = "$componentString:${System.identityHashCode(fallbackIcon)}"
 
         // Don't cache the temporary system icon while the pack is still loading.
         if (!isLoaded) {
@@ -271,28 +271,28 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
             }
         }
 
-        imageBitmapCache.get(componentString)?.let { return it }
+        imageBitmapCache.get(cacheKey)?.let { return it }
 
         return try {
             val themedIcon = getIconForApp(appPackageName, appActivityName)
             val bitmap = when {
                 themedIcon != null -> drawableToBitmap(
                     themedIcon,
-                    "icon-pack-themed:$packPackageName:$componentString"
+                    "icon-pack-themed:$packPackageName:$cacheKey"
                 )
                 fallbackIcon == null -> return null
                 hasFallbackIconTheme() -> createFallbackIconBitmap(
                     appPackageName,
-                    componentString,
+                    cacheKey,
                     fallbackIcon,
                     packResources ?: return null
                 )
                 else -> drawableToBitmap(
                     fallbackIcon,
-                    "icon-pack-default:$packPackageName:$componentString"
+                    "icon-pack-default:$packPackageName:$cacheKey"
                 )
             }.asImageBitmap()
-            imageBitmapCache.put(componentString, bitmap)
+            imageBitmapCache.put(cacheKey, bitmap)
             bitmap
         } catch (_: Exception) {
             null
@@ -310,6 +310,20 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
             }
         }
 
+        fun invalidatePackage(packageName: String, prefix: Boolean = false) {
+            synchronized(activeLoaders) {
+                activeLoaders.forEach { loader ->
+                    if (loader.packPackageName == packageName) {
+                        loader.clearCache()
+                    } else {
+                        val componentPrefix = "ComponentInfo{$packageName" + if (prefix) "" else "/"
+                        loader.imageBitmapCache.snapshot().keys.filter { it.startsWith(componentPrefix) }
+                            .forEach { loader.imageBitmapCache.remove(it) }
+                    }
+                }
+            }
+        }
+
         fun clearAllCaches() {
             synchronized(activeLoaders) {
                 activeLoaders.forEach { it.clearCache() }
@@ -320,4 +334,4 @@ class IconPackLoader(context: Context, private val packPackageName: String) {
             clearAllCaches()
         }
     }
-}
+}

@@ -28,6 +28,22 @@ class LauncherViewModel(
     val uiState: StateFlow<LauncherUiState> = _uiState.asStateFlow()
 
     private var refreshJob: kotlinx.coroutines.Job? = null
+    private var initialized = false
+    private var launcherVisible = false
+    private var refreshPending = true
+    private val pendingPackages = mutableSetOf<String>()
+
+    fun onLauncherVisibilityChanged(visible: Boolean) {
+        if (launcherVisible == visible) return
+        launcherVisible = visible
+        if (visible && refreshPending) refreshAppList()
+        if (!visible) refreshJob?.cancel()
+    }
+
+    fun onPackagesChanged(packages: Set<String>) {
+        pendingPackages.addAll(packages)
+        refreshAppList()
+    }
 
     init {
         viewModelScope.launch {
@@ -62,11 +78,12 @@ class LauncherViewModel(
                         if (isInitialPwaEmit) {
                             isInitialPwaEmit = false
                         } else {
-                            appRepository.invalidateAppCache()
+                            appRepository.invalidatePwaCache()
                             refreshAppList()
                         }
                     }
             }
+            initialized = true
             refreshAppList()
         }
     }
@@ -78,10 +95,14 @@ class LauncherViewModel(
     }
 
     fun refreshAppList() {
+        refreshPending = true
+        if (!initialized || !launcherVisible) return
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
+            val changedPackages = pendingPackages.toSet()
+            appRepository.invalidatePackages(changedPackages)
             try {
                 coroutineScope {
                     val appsDeferred = async { appRepository.getInstalledApps() }
@@ -122,8 +143,11 @@ class LauncherViewModel(
                     val installedPwas = pwasDeferred.await().getOrDefault(emptyList())
                     val pwaPresets = appRepository.getPopularPwaPresets()
 
+                    refreshPending = false
+                    pendingPackages.removeAll(changedPackages)
                     _uiState.update {
                         it.copy(
+                            iconPackRevision = it.iconPackRevision + if (it.selectedIconPack in changedPackages) 1 else 0,
                             installedApps = installedApps,
                             iconPacks = iconPacks,
                             folders = folders,

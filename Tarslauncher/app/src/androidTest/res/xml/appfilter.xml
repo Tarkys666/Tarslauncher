@@ -1,0 +1,4 @@
+<resources>
+    <iconback img1="test_icon_background" />
+    <iconmask img1="test_icon_mask" />
+</resources>

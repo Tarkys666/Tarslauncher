@@ -71,6 +71,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -602,14 +605,27 @@ fun FolderGrid(
 @Composable
 fun rememberAppIcon(app: AppInfo, iconPackLoader: IconPackLoader?): ImageBitmap? {
     val isPackLoaded = iconPackLoader?.isLoaded == true
-    return remember(app.packageName, app.activityName, iconPackLoader, isPackLoaded) {
-        try {
-            iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
-                ?: getAppImageBitmap(app.packageName, app.icon)
-        } catch (_: Exception) {
-            null
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val icon by produceState<ImageBitmap?>(null, app.packageName, app.activityName, app.icon, iconPackLoader, isPackLoaded, lifecycleOwner) {
+        var loaded = false
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (!loaded) {
+                value = withContext(Dispatchers.Default) {
+                    try {
+                        if (isPackLoaded) {
+                            iconPackLoader?.getImageBitmapForApp(app.packageName, app.activityName, app.icon)
+                                ?: getAppImageBitmap(app.packageName, app.icon)
+                        } else getAppImageBitmap(app.packageName, app.icon)
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        null
+                    }
+                }
+                loaded = true
+            }
         }
     }
+    return icon
 }
 
 @Composable

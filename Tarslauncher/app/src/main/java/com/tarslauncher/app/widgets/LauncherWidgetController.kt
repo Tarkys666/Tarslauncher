@@ -25,6 +25,8 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
     }
     private val mutableIds = MutableStateFlow<List<Int>>(emptyList())
     val widgetIds = mutableIds.asStateFlow()
+    internal var isListening = false
+        private set
 
     private var pendingId: Int
         get() = preferences.getInt("pending_id", AppWidgetManager.INVALID_APPWIDGET_ID)
@@ -37,11 +39,18 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
     }
 
     fun startListening() {
+        if (isListening) return
         host.startListening()
+        isListening = true
         refresh()
     }
 
-    fun stopListening() = host.stopListening()
+    fun stopListening() {
+        if (isListening) {
+            host.stopListening()
+            isListening = false
+        }
+    }
 
     fun refresh() {
         val boundIds = host.appWidgetIds.filter { it != pendingId && info(it) != null }.sorted()

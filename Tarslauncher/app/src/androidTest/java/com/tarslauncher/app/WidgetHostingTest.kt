@@ -13,6 +13,7 @@ import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.Lifecycle
 import com.tarslauncher.app.ui.screens.HomeScreen
 import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.widgets.LauncherWidgetController
@@ -64,6 +65,11 @@ class WidgetHostingTest {
                 controller.add(provider)
             }
             compose.waitUntil(20_000) { controller.widgetIds.value.size == 1 }
+            compose.waitUntil(10_000) { controller.isListening }
+            scenario.moveToState(Lifecycle.State.CREATED)
+            assertFalse(controller.isListening)
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            compose.waitUntil(10_000) { controller.isListening }
             for (label in listOf("+ ADD WIDGET", "EDIT", "REMOVE", "DONE", "Add your first widget")) {
                 compose.onNodeWithText(label).assertDoesNotExist()
             }
@@ -112,9 +118,11 @@ class WidgetHostingTest {
                 output.outputStream().use { instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
             }
             compose.runOnIdle { mode.value = false }
+            compose.waitUntil(10_000) { !controller.isListening }
             compose.onNodeWithText("F A C E T").assertIsDisplayed()
             compose.onNodeWithText("+ ADD WIDGET").assertDoesNotExist()
             compose.runOnIdle { mode.value = true }
+            compose.waitUntil(10_000) { controller.isListening }
             compose.onNodeWithText("SETTINGS").performClick()
             compose.onNodeWithText("Remove widget").performClick()
             compose.onNodeWithText("Widget ready").assertDoesNotExist()

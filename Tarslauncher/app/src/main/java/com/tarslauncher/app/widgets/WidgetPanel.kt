@@ -19,8 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 /** The home surface contains only the selected widget, without launcher controls. */
 @Composable
@@ -28,6 +31,23 @@ fun WidgetPanel(controller: LauncherWidgetController) {
     val ids by controller.widgetIds.collectAsState()
     val id = ids.firstOrNull() ?: return
     val info = controller.info(id) ?: return
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(controller, lifecycleOwner) {
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> controller.startListening()
+                Lifecycle.Event.ON_STOP -> controller.stopListening()
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) controller.startListening()
+        onDispose {
+            lifecycle.removeObserver(observer)
+            controller.stopListening()
+        }
+    }
     key(id) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
             NativeWidget(controller, id, info, controller.height(id, info))

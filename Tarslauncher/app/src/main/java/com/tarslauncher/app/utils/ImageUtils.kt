@@ -41,16 +41,32 @@ fun clearIconBitmapCache() {
     IconPackLoader.clearAllCaches()
 }
 
+/** Drop only the changed app (or saved PWA prefix), retaining all unrelated icons. */
+fun invalidateAppIconCache(packageName: String, prefix: Boolean = false) {
+    fun matches(key: String): Boolean =
+        (if (prefix) key.startsWith(packageName) else key == packageName || key.startsWith("$packageName@")) ||
+            key.contains("ComponentInfo{$packageName" + if (prefix) "" else "/") ||
+            key.startsWith("icon-pack-mask:$packageName:") ||
+            key.startsWith("icon-pack-overlay:$packageName:") ||
+            key.startsWith("icon-pack-themed:$packageName:") ||
+            key.startsWith("icon-pack-default:$packageName:")
+    iconBitmapCache.snapshot().keys.filter(::matches).forEach { iconBitmapCache.remove(it) }
+    appImageBitmapCache.snapshot().keys.filter(::matches).forEach { appImageBitmapCache.remove(it) }
+    IconPackLoader.invalidatePackage(packageName, prefix)
+}
+
 fun getAppImageBitmap(packageName: String, drawable: Drawable?): ImageBitmap? {
     if (drawable == null) return null
-    appImageBitmapCache.get(packageName)?.let { return it }
-    val bitmap = drawableToBitmap(drawable, packageName)
+    // A cancelled decode of the previous Drawable must not replace an updated app's icon.
+    val key = "$packageName@${System.identityHashCode(drawable)}"
+    appImageBitmapCache.get(key)?.let { return it }
+    val bitmap = drawableToBitmap(drawable, key)
     val imageBitmap = bitmap.asImageBitmap()
-    appImageBitmapCache.put(packageName, imageBitmap)
+    appImageBitmapCache.put(key, imageBitmap)
     return imageBitmap
 }
 
-fun drawableToBitmap(drawable: Drawable, cacheKey: String? = null): Bitmap {
+fun drawableToBitmap(drawable: Drawable, cacheKey: String? = null): Bitmap = synchronized(drawable) {
     val key = cacheKey ?: (drawable.constantState?.let { "cs_${System.identityHashCode(it)}" } ?: "id_${System.identityHashCode(drawable)}")
     iconBitmapCache.get(key)?.let { cached ->
         if (!cached.isRecycled) return cached

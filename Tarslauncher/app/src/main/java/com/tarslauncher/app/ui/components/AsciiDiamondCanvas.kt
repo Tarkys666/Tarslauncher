@@ -1,7 +1,6 @@
 package com.tarslauncher.app.ui.components
 
 import android.graphics.Bitmap
-import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,10 +19,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Arrays
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -35,9 +36,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * 100% Native Brilliant-Cut 3D ASCII Diamond rasterizer and renderer.
- * Completely replaces Chromium/WebView: saves ~70MB RAM, 0ms startup delay,
- * zero GC per frame, 60-120 FPS native smooth rendering with full touch drag interaction.
+ * Native ASCII diamond rasterizer using reusable pixel and bitmap buffers.
  */
 
 private object DiamondGeometry {
@@ -590,7 +589,7 @@ class AsciiDiamondEngine {
 
 /**
  * Jetpack Compose 3D ASCII Diamond Canvas wallpaper.
- * Renders the brilliant-cut diamond directly to a GPU hardware texture.
+ * Computes frames off the UI thread and displays the completed bitmap in Compose.
  */
 @Composable
 fun AsciiDiamondCanvas(
@@ -598,9 +597,12 @@ fun AsciiDiamondCanvas(
     offsetY: Int = 0,
     fps: Int = 60,
     speed: Int = 100,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFrameRendered: (() -> Unit)? = null
 ) {
     val engine = remember { AsciiDiamondEngine() }
+    val renderMutex = remember { Mutex() }
+    val animationTime = remember { floatArrayOf(0f) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var frameTrigger by remember { mutableStateOf(0L) }
 
@@ -613,47 +615,36 @@ fun AsciiDiamondCanvas(
         val targetWd = remember(widthDp, de) { maxOf(32, (widthDp.value * de).toInt()) }
         val targetHd = remember(heightDp, de) { maxOf(32, (heightDp.value * de).toInt()) }
 
-        LaunchedEffect(targetWd, targetHd) {
-            engine.resize(targetWd, targetHd)
-        }
+        LaunchedEffect(targetWd, targetHd, fps, speed, scale, offsetY, lifecycleOwner) {
+            suspend fun renderFrame(dt: Float) {
+                withContext(Dispatchers.Default) {
+                    // Serialize a final in-flight frame with size/setting changes.
+                    renderMutex.withLock {
+                        engine.resize(targetWd, targetHd)
+                        animationTime[0] += dt
+                        engine.ang += dt * 0.55f * (speed / 100f)
+                        engine.render(animationTime[0], scale / 100f, offsetY / 100f)
+                    }
+                }
+                frameTrigger++
+                onFrameRendered?.invoke()
+            }
 
-        LaunchedEffect(fps, speed, scale, offsetY, lifecycleOwner) {
-            withContext(Dispatchers.Default) {
-                var lastNanoTime = System.nanoTime()
-                var lastTimeSec = SystemClock.uptimeMillis() / 1000f
-
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                renderFrame(0f)
+                // No timer or frame subscription for a static diamond.
+                if (speed == 0) return@repeatOnLifecycle
+                val frameInterval = 1_000_000_000L / fps.coerceIn(15, 120)
+                var previousFrame = withFrameNanos { it }
+                var nextFrame = previousFrame + frameInterval
                 while (isActive) {
-                    if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                        delay(250)
-                        continue
-                    }
-
-                    val targetFps = fps.coerceIn(15, 120)
-                    val frameIntervalNanos = 1_000_000_000L / targetFps
-                    val nowNanos = System.nanoTime()
-                    val elapsedNanos = nowNanos - lastNanoTime
-
-                    if (elapsedNanos < frameIntervalNanos) {
-                        val sleepMs = (frameIntervalNanos - elapsedNanos) / 1_000_000L
-                        if (sleepMs > 1) {
-                            delay(sleepMs)
-                        }
-                    }
-                    lastNanoTime = System.nanoTime()
-
-                    val nowSec = SystemClock.uptimeMillis() / 1000f
-                    val dt = (nowSec - lastTimeSec).coerceIn(0f, 0.05f)
-                    lastTimeSec = nowSec
-
-                    val speedMultiplier = speed / 100f
-                    engine.ang += dt * (if (engine.isDragging) 0.15f else 0.55f * speedMultiplier)
-
-                    val scaleFloat = scale / 100f
-                    val offsetYFloat = offsetY / 100f
-
-                    // ⚡ Render calculation and rasterization executed 100% off the Main Thread
-                    engine.render(nowSec, scaleFloat, offsetYFloat)
-                    frameTrigger++
+                    val frame = withFrameNanos { it }
+                    // Follow display vsync and skip frames when a lower FPS was selected.
+                    if (frame < nextFrame - 1_000_000L) continue
+                    val dt = ((frame - previousFrame) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                    previousFrame = frame
+                    nextFrame += maxOf(1L, (frame - nextFrame) / frameInterval + 1L) * frameInterval
+                    renderFrame(dt)
                 }
             }
         }

@@ -1,7 +1,8 @@
-## v2.0.29 — Tek widget ve sade ana ekran
+## v2.0.30 — Pil ve performans düzeltmeleri
 
-- Ana ekranın üstünde yalnızca seçilen widget gösterilir; ekleme, düzenleme ve kaldırma yazıları kaldırıldı.
-- Widget seçimi, değiştirme, yükseklik ayarı ve kaldırma işlemleri ayarlara taşındı.
-- Aynı anda yalnızca bir widget kullanılabilir. Yeni widget başarıyla yapılandırılmadan mevcut widget silinmez.
-- Önceki sürümde birden fazla widget eklenmişse ilk widget korunur.
-- Widget modu açıkken başlık, saat ve elmas animasyonu gizli kalır.
+- Elmasın hızı sıfırken yalnızca statik bir kare çizilir; gereksiz çizim döngüsü durduruldu.
+- Launcher arka plana geçince elmasın çizim işi tamamen iptal edilir; hareketli görüntü ekranın kare zamanlamasını izler.
+- Widget güncellemeleri yalnızca widget görünürken dinlenir; kapalı modda ve ayarlar ekranında dinleme durur.
+- Uygulama değişiklikleri paket bazında yenilenir; ilgisiz ikon önbellekleri korunur ve arka plandaki yenilemeler dönüşe ertelenir.
+- İkon paketlerinin bitmap ve maskeleme işlemleri UI thread'i dışına taşındı; yalnızca gösterilen ikonlar hazırlanır.
+- Tek widget sınırı ve sade ana ekran görünümü korundu.

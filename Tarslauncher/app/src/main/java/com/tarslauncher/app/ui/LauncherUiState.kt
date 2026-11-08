@@ -9,6 +9,7 @@ import androidx.compose.runtime.Immutable
 data class LauncherUiState(
     val installedApps: List<AppInfo> = emptyList(),
     val iconPacks: List<IconPackInfo> = emptyList(),
+    val iconPackRevision: Int = 0,
     val folders: List<FolderInfo> = emptyList(),
     val settings: LauncherSettings = LauncherSettings(),
     val currentScreen: String = "home",
