@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Looper
 import androidx.activity.compose.setContent
@@ -27,6 +28,7 @@ import com.tarslauncher.app.ui.components.AsciiDiamondCanvas
 import com.tarslauncher.app.ui.screens.rememberAppIcon
 import com.tarslauncher.app.utils.SecureBroadcastHelper
 import com.tarslauncher.app.utils.getAppImageBitmap
+import com.tarslauncher.app.utils.drawableToBitmap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -96,6 +98,12 @@ class BatteryOptimizationsTest {
             compose.waitUntil(10_000) { drawable.draws.get() > 0 }
             compose.onNodeWithText("icon ready").assertExists()
             assertFalse("Fallback masking must not draw on the UI thread", drawable.drewOnMain.get())
+            withContext(Dispatchers.Default) {
+                val oldTheme = drawableToBitmap(ColorDrawable(android.graphics.Color.RED), "theme-update-test")
+                val newTheme = drawableToBitmap(ColorDrawable(android.graphics.Color.BLUE), "theme-update-test")
+                assertNotSame("An old theme decode must not poison the updated theme's cache", oldTheme, newTheme)
+                assertEquals(android.graphics.Color.BLUE, newTheme.getPixel(0, 0))
+            }
 
             val repository = AppRepository(context)
             val before = repository.getInstalledApps().getOrDefault(emptyList())

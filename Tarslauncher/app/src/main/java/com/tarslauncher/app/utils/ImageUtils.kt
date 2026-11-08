@@ -67,7 +67,9 @@ fun getAppImageBitmap(packageName: String, drawable: Drawable?): ImageBitmap? {
 }
 
 fun drawableToBitmap(drawable: Drawable, cacheKey: String? = null): Bitmap = synchronized(drawable) {
-    val key = cacheKey ?: (drawable.constantState?.let { "cs_${System.identityHashCode(it)}" } ?: "id_${System.identityHashCode(drawable)}")
+    // Include the actual source, so an in-flight old theme cannot populate a new theme's key.
+    val source = drawable.constantState ?: drawable
+    val key = "${cacheKey ?: "drawable"}@${System.identityHashCode(source)}"
     iconBitmapCache.get(key)?.let { cached ->
         if (!cached.isRecycled) return cached
     }
