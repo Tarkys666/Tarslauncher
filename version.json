@@ -1,8 +1,8 @@
 {
-    "apkSize": 1416715,
-    "sha256": "5c0c6ca1016c122ffa2252e8eb199cc159922367a1cb433e35a532fc0a2d0c8e",
-    "versionName": "2.0.27",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.27/TarsLauncher-release.apk",
-    "versionCode": 76,
-    "releaseNotes": "Facet Launcher v2.0.27: Supabase & Google Auth bulut yedekleme entegrasyonu tamamlandi. Tum ozellestirmeler, klasorler, PWA web uygulamalari ve kullanim istatistikleri kullanici bazli PostgreSQL RLS izolasyonu ile guvenle buluta yedeklenebilir ve geri yuklenebilir. Hafif ag istemcisi, HTTPS zorunlulugu, OOM ve DoS korumalari eklendi."
+    "apkSize": 1456663,
+    "sha256": "793f3d6368285733ac04a6c9d71dc5cdbc1a59b3854de4e5cc99338b1043f7ba",
+    "versionName": "2.0.28",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.28/TarsLauncher-release.apk",
+    "versionCode": 77,
+    "releaseNotes": "## v2.0.28 \u2014 Widget deste\u011fi ve g\u00fcvenlik d\u00fczeltmeleri\n\n- Ana ekran\u0131n \u00fcst b\u00f6l\u00fcm\u00fcne Android widget'lar\u0131 ekleme, kald\u0131rma ve y\u00fckseklik ayar\u0131.\n- Widget modu a\u00e7\u0131kken ba\u015fl\u0131k, saat ve elmas animasyonu otomatik kapan\u0131r; kapat\u0131ld\u0131\u011f\u0131nda \u00f6nceki g\u00f6r\u00fcn\u00fcm geri gelir.\n- Widget se\u00e7imi ve boyutlar\u0131 cihazda korunur; widget modu bulut yede\u011fine dahil edilir.\n- Google giri\u015fi ve Supabase oturumlar\u0131yla kullan\u0131c\u0131ya \u00f6zel bulut yedekleme.\n- Bozuk veya a\u015f\u0131r\u0131 b\u00fcy\u00fck yedeklerin do\u011frulanmas\u0131 ve ayarlar\u0131n tek i\u015flemde geri y\u00fcklenmesi.\n- APK indirme adresleri, imza do\u011frulamas\u0131 ve release i\u015f ak\u0131\u015f\u0131 i\u00e7in g\u00fcvenlik d\u00fczeltmeleri."
 }
