@@ -84,9 +84,13 @@ android {
         val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
             ?: localProperties.getProperty("SUPABASE_ANON_KEY")
             ?: ""
+        val googleWebClientId = System.getenv("GOOGLE_WEB_CLIENT_ID")
+            ?: localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")
+            ?: ""
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     buildTypes {

@@ -11,6 +11,7 @@ import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.LauncherSettings
 import com.tarslauncher.app.utils.PwaLauncherHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 /**
@@ -37,10 +38,8 @@ class CloudBackupManager(
 
     suspend fun backupLayout(currentSettings: LauncherSettings): Result<Long> = withContext(Dispatchers.IO) {
         try {
-            val user = authManager.currentUser
-            if (user == null || user.isAnonymous || user.uid.isBlank()) {
-                return@withContext Result.failure(IllegalStateException("Buluta yedekleme için Google ile giriş yapmalısınız."))
-            }
+            val session = authManager.requireSession()
+            val user = session.user
 
             val now = System.currentTimeMillis()
             val foldersJson = dataStore.getFoldersJson() ?: "[]"
@@ -95,12 +94,14 @@ class CloudBackupManager(
                 method = "POST",
                 bodyJson = rowString,
                 preferHeader = "resolution=merge-duplicates,return=minimal",
-                userIdHeader = user.uid
+                accessToken = session.accessToken
             ).getOrThrow()
 
             dataStore.setLastBackupTime(now)
             Log.i(TAG, "Backup uploaded to Supabase for uid: ${user.uid}")
             Result.success(now)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Supabase backup failed", e)
             Result.failure(e)
@@ -109,16 +110,14 @@ class CloudBackupManager(
 
     suspend fun restoreLayout(): Result<LauncherSettings> = withContext(Dispatchers.IO) {
         try {
-            val user = authManager.currentUser
-            if (user == null || user.isAnonymous || user.uid.isBlank()) {
-                return@withContext Result.failure(IllegalStateException("Buluttan geri yüklemek için Google ile giriş yapmalısınız."))
-            }
+            val session = authManager.requireSession()
+            val user = session.user
 
             val encodedUid = SupabaseConfig.urlEncode("eq.${user.uid}")
             val responseText = SupabaseConfig.restRequest(
                 pathAndQuery = "user_backups?user_id=$encodedUid&select=*&limit=1",
                 method = "GET",
-                userIdHeader = user.uid
+                accessToken = session.accessToken
             ).getOrThrow()
 
             val arr = JsonParser.parseString(responseText).asJsonArray
@@ -179,6 +178,8 @@ class CloudBackupManager(
 
             Log.i(TAG, "Layout restored from Supabase for uid: ${user.uid}")
             Result.success(restoredSettings)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Supabase restore failed", e)
             Result.failure(e)

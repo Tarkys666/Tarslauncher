@@ -4,6 +4,12 @@
 
 sdk.dir=C\:\\Users\\your_username\\AppData\\Local\\Android\\Sdk
 
+# Supabase: publishable key (sb_publishable_...) or legacy anon key; never service_role.
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_publishable_key
+# Google Cloud OAuth client of type Web application, also configured in Supabase's Google provider.
+GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+
 # Signing configuration (Optional for local debug builds)
 RELEASE_STORE_FILE=tarslauncher-release.jks
 RELEASE_STORE_PASSWORD=your_store_password

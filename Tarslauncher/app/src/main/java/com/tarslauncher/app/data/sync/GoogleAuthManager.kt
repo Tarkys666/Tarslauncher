@@ -2,18 +2,20 @@ package com.tarslauncher.app.data.sync
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
-import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import java.util.Locale
+import com.google.gson.JsonObject
+import com.tarslauncher.app.BuildConfig
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class TarsAuthUser(
@@ -23,171 +25,135 @@ data class TarsAuthUser(
     val isAnonymous: Boolean = true
 )
 
-/**
- * Manages Google Sign-In and user identity for TARS Launcher.
- * Keeps user session persistent and provides reactive StateFlow updates for UI.
- */
-class GoogleAuthManager(
-    context: Context
-) {
+/** Exchanges Google ID tokens for Supabase sessions and refreshes them before cloud operations. */
+class GoogleAuthManager(context: Context) {
     private val appContext = context.applicationContext
-    private val prefs: SharedPreferences =
-        appContext.getSharedPreferences(PREFS_AUTH_NAME, Context.MODE_PRIVATE)
+    private val prefs = appContext.getSharedPreferences("tars_supabase_auth_prefs", Context.MODE_PRIVATE)
 
     init {
-        ensureInitialized()
-    }
-
-    private fun ensureInitialized() {
-        synchronized(stateLock) {
+        synchronized(_authUserFlow) {
             if (_authUserFlow.value == null) {
-                _authUserFlow.value = resolveStoredOrGoogleUser()
+                _authUserFlow.value = storedSession()?.user ?: anonymousUser()
             }
         }
     }
 
-    private fun resolveStoredOrGoogleUser(): TarsAuthUser {
-        val lastGoogle = runCatching { GoogleSignIn.getLastSignedInAccount(appContext) }.getOrNull()
-        if (lastGoogle != null && (!lastGoogle.email.isNullOrBlank() || !lastGoogle.id.isNullOrBlank())) {
-            val email = lastGoogle.email?.trim()
-            val uid = buildGoogleUid(email, lastGoogle.id)
-            prefs.edit()
-                .putString(KEY_GOOGLE_UID, uid)
-                .putString(KEY_GOOGLE_EMAIL, email)
-                .putString(KEY_GOOGLE_NAME, lastGoogle.displayName)
-                .apply()
-            return TarsAuthUser(
-                uid = uid,
-                email = email,
-                displayName = lastGoogle.displayName,
-                isAnonymous = false
-            )
-        }
+    val authUserFlow: StateFlow<TarsAuthUser?> = _authUserFlow.asStateFlow()
+    val currentUser: TarsAuthUser? get() = _authUserFlow.value
+    val isGoogleSignedIn: Boolean get() = currentUser?.isAnonymous == false
 
-        val savedGoogleUid = prefs.getString(KEY_GOOGLE_UID, null)
-        if (!savedGoogleUid.isNullOrBlank()) {
-            return TarsAuthUser(
-                uid = savedGoogleUid,
-                email = prefs.getString(KEY_GOOGLE_EMAIL, null),
-                displayName = prefs.getString(KEY_GOOGLE_NAME, null),
-                isAnonymous = false
-            )
+    private fun anonymousUser(): TarsAuthUser {
+        val uid = prefs.getString("anon_uid", null) ?: "anon_${UUID.randomUUID()}".also {
+            prefs.edit().putString("anon_uid", it).apply()
         }
-
-        val anonUid = getOrCreateAnonUid()
-        return TarsAuthUser(
-            uid = anonUid,
-            email = null,
-            displayName = null,
-            isAnonymous = true
-        )
+        return TarsAuthUser(uid)
     }
 
-    private fun getOrCreateAnonUid(): String {
-        val existing = prefs.getString(KEY_ANON_UID, null)
-        if (!existing.isNullOrBlank()) return existing
-        val created = "anon_${UUID.randomUUID()}"
-        prefs.edit().putString(KEY_ANON_UID, created).apply()
-        return created
+    private fun storedSession(): SupabaseSession? {
+        if (prefs.getString("session_url", null) != SupabaseConfig.SUPABASE_URL) return null
+        val json = prefs.getString("session_json", null) ?: return null
+        return runCatching { SupabaseSession.fromJson(json) }.getOrNull()
     }
 
-    private fun buildGoogleUid(email: String?, googleId: String?): String {
-        val cleanEmail = email?.trim()?.lowercase(Locale.ROOT)
-        return if (!cleanEmail.isNullOrBlank()) {
-            "google_$cleanEmail"
-        } else {
-            "google_${googleId?.trim().orEmpty().ifBlank { UUID.randomUUID().toString() }}"
-        }
+    private fun saveSession(session: SupabaseSession) {
+        check(prefs.edit()
+            .putString("session_url", SupabaseConfig.SUPABASE_URL)
+            .putString("session_json", session.toJson())
+            .remove("google_uid").remove("google_email").remove("google_display_name")
+            .commit()) { "Supabase oturumu cihaza kaydedilemedi." }
+        _authUserFlow.value = session.user
     }
 
-    val authUserFlow: StateFlow<TarsAuthUser?>
-        get() = _authUserFlow.asStateFlow()
-
-    val currentUser: TarsAuthUser?
-        get() {
-            ensureInitialized()
-            return _authUserFlow.value
-        }
-
-    val isGoogleSignedIn: Boolean
-        get() = currentUser?.isAnonymous == false
+    private fun clearSession() {
+        prefs.edit().remove("session_json").remove("session_url")
+            .remove("google_uid").remove("google_email").remove("google_display_name").commit()
+        _authUserFlow.value = anonymousUser()
+    }
 
     fun getGoogleSignInClient(): GoogleSignInClient {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestProfile()
-            .build()
-        return GoogleSignIn.getClient(appContext, gso)
+        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail().requestProfile()
+        if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()) {
+            options.requestIdToken(BuildConfig.GOOGLE_WEB_CLIENT_ID.trim())
+        }
+        return GoogleSignIn.getClient(appContext, options.build())
     }
 
     fun getSignInIntent(): Intent {
+        check(SupabaseConfig.isConfigured()) { "Supabase bağlantı ayarları eksik." }
+        check(BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()) { "Google girişi yapılandırılmamış (GOOGLE_WEB_CLIENT_ID eksik)." }
         return getGoogleSignInClient().signInIntent
     }
 
     suspend fun handleGoogleSignInResult(data: Intent?): Result<TarsAuthUser> = withContext(Dispatchers.IO) {
-        try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            val account = task.getResult(ApiException::class.java)
-            val email = account.email?.trim()
-            val googleUid = buildGoogleUid(email, account.id)
-
-            prefs.edit()
-                .putString(KEY_GOOGLE_UID, googleUid)
-                .putString(KEY_GOOGLE_EMAIL, email)
-                .putString(KEY_GOOGLE_NAME, account.displayName)
-                .apply()
-
-            val newUser = TarsAuthUser(
-                uid = googleUid,
-                email = email,
-                displayName = account.displayName,
-                isAnonymous = false
-            )
-            _authUserFlow.value = newUser
-
-            Result.success(newUser)
-        } catch (e: ApiException) {
-            Log.e(TAG, "Google sign-in ApiException: statusCode=${e.statusCode}", e)
-            val msg = when (e.statusCode) {
-                12501 -> "Google girişi iptal edildi."
-                7 -> "Ağ bağlantı hatası. İnternet bağlantınızı kontrol edin."
-                else -> "Google giriş hatası (Kod ${e.statusCode}): ${e.localizedMessage}"
+        sessionMutex.withLock {
+            try {
+                val account = GoogleSignIn.getSignedInAccountFromIntent(data).getResult(ApiException::class.java)
+                val idToken = account.idToken?.takeIf { it.isNotBlank() }
+                    ?: error("Google kimlik token'ı alınamadı. Web OAuth istemci kimliğini kontrol edin.")
+                val body = JsonObject().apply {
+                    addProperty("provider", "google")
+                    addProperty("id_token", idToken)
+                }
+                val response = SupabaseConfig.authRequest("token?grant_type=id_token", body.toString()).getOrThrow()
+                val session = SupabaseSession.fromJson(response)
+                saveSession(session)
+                Result.success(session.user)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ApiException) {
+                val message = when (e.statusCode) {
+                    12501 -> "Google girişi iptal edildi."
+                    7 -> "Ağ bağlantı hatası. İnternet bağlantınızı kontrol edin."
+                    10 -> "Google OAuth ayarları uyuşmuyor. Paket adı, imza SHA-1 ve Web istemci kimliğini kontrol edin."
+                    else -> "Google giriş hatası (Kod ${e.statusCode})."
+                }
+                Result.failure(IllegalStateException(message))
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            Result.failure(IllegalStateException(msg))
-        } catch (e: Exception) {
-            Log.e(TAG, "Google sign-in failed", e)
-            Result.failure(e)
+        }
+    }
+
+    suspend fun requireSession(): SupabaseSession = withContext(Dispatchers.IO) {
+        // Serialize refresh-token rotation across managers and concurrent backup/restore calls.
+        sessionMutex.withLock {
+            val session = storedSession() ?: run {
+                _authUserFlow.value = anonymousUser()
+                error("Bulut işlemleri için Google ile yeniden giriş yapmalısınız.")
+            }
+            if (!session.needsRefresh()) return@withLock session
+            try {
+                val body = JsonObject().apply { addProperty("refresh_token", session.refreshToken) }
+                val response = SupabaseConfig.authRequest("token?grant_type=refresh_token", body.toString()).getOrThrow()
+                val refreshed = SupabaseSession.fromJson(response)
+                check(refreshed.user.uid == session.user.uid) { "Supabase oturum kullanıcısı değişti." }
+                saveSession(refreshed)
+                refreshed
+            } catch (e: SupabaseHttpException) {
+                if (e.statusCode in listOf(400, 401, 403)) {
+                    clearSession()
+                    throw IllegalStateException("Oturum süresi dolmuş. Google ile yeniden giriş yapın.", e)
+                }
+                throw e
+            }
         }
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {
-        runCatching {
+        sessionMutex.withLock {
+            val session = storedSession()
+            clearSession()
             getGoogleSignInClient().signOut()
+            if (session != null) {
+                SupabaseConfig.authRequest("logout?scope=local", accessToken = session.accessToken)
+            }
         }
-        prefs.edit()
-            .remove(KEY_GOOGLE_UID)
-            .remove(KEY_GOOGLE_EMAIL)
-            .remove(KEY_GOOGLE_NAME)
-            .apply()
-
-        val anonUser = TarsAuthUser(
-            uid = getOrCreateAnonUid(),
-            email = null,
-            displayName = null,
-            isAnonymous = true
-        )
-        _authUserFlow.value = anonUser
+        Unit
     }
 
     companion object {
-        private const val TAG = "GoogleAuthManager"
-        private const val PREFS_AUTH_NAME = "tars_supabase_auth_prefs"
-        private const val KEY_ANON_UID = "anon_uid"
-        private const val KEY_GOOGLE_UID = "google_uid"
-        private const val KEY_GOOGLE_EMAIL = "google_email"
-        private const val KEY_GOOGLE_NAME = "google_display_name"
-
-        private val stateLock = Any()
+        private val sessionMutex = Mutex()
         private val _authUserFlow = MutableStateFlow<TarsAuthUser?>(null)
     }
 }

@@ -5,6 +5,7 @@ build/
 */build/
 /local.properties
 local.properties
+supabase/.temp/
 
 # IDE & OS
 .idea/
