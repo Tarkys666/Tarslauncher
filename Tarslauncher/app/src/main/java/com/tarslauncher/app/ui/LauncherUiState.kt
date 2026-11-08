@@ -23,17 +23,19 @@ data class LauncherUiState(
     val syncStatusMessage: String? = null,
     val lastBackupTime: Long? = null
 ) {
+    val showWidgets: Boolean get() = settings.showWidgets
+
     // Convenience properties mapping to type-safe settings
     val showAppDrawer: Boolean get() = settings.showAppDrawer
     val dualAppDrawer: Boolean get() = settings.dualAppDrawer
     val appDrawerRows: Int get() = settings.appDrawerRows
     val gridSize: GridSize get() = settings.gridSize
     val buttonColorMode: String get() = settings.buttonColorMode
-    val showTarsHeader: Boolean get() = settings.showTarsHeader
-    val showClock: Boolean get() = settings.showClock
+    val showTarsHeader: Boolean get() = !settings.showWidgets && settings.showTarsHeader
+    val showClock: Boolean get() = !settings.showWidgets && settings.showClock
     val selectedIconPack: String? get() = settings.selectedIconPack
     val appDrawerIconSize: Int get() = settings.appDrawerIconSize
-    val showAsciiDiamond: Boolean get() = settings.showAsciiDiamond
+    val showAsciiDiamond: Boolean get() = !settings.showWidgets && settings.showAsciiDiamond
     val asciiDiamondScale: Int get() = settings.asciiDiamondScale
     val asciiDiamondOffsetY: Int get() = settings.asciiDiamondOffsetY
     val asciiDiamondFps: Int get() = settings.asciiDiamondFps

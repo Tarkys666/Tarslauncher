@@ -33,6 +33,7 @@ class LauncherDataStore(private val context: Context) {
         val KEY_GRID_SIZE = stringPreferencesKey("grid_size")
         val KEY_BUTTON_COLOR_MODE = stringPreferencesKey("button_color_mode")
         val KEY_SHOW_TARS_HEADER = booleanPreferencesKey("show_tars_header")
+        val KEY_SHOW_WIDGETS = booleanPreferencesKey("show_widgets")
         val KEY_SHOW_CLOCK = booleanPreferencesKey("show_clock")
         val KEY_SELECTED_ICON_PACK = stringPreferencesKey("selected_icon_pack")
         val KEY_APP_DRAWER_ICON_SIZE = intPreferencesKey("app_drawer_icon_size")
@@ -95,6 +96,7 @@ class LauncherDataStore(private val context: Context) {
                 buttonColorMode = preferences[KEY_BUTTON_COLOR_MODE] ?: "transparent",
                 showTarsHeader = preferences[KEY_SHOW_TARS_HEADER] ?: true,
                 showClock = preferences[KEY_SHOW_CLOCK] ?: true,
+                showWidgets = preferences[KEY_SHOW_WIDGETS] ?: false,
                 selectedIconPack = preferences[KEY_SELECTED_ICON_PACK],
                 appDrawerIconSize = preferences[KEY_APP_DRAWER_ICON_SIZE] ?: 32,
                 showAsciiDiamond = preferences[KEY_SHOW_ASCII_DIAMOND] ?: false,
@@ -135,6 +137,8 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun updateShowTarsHeader(show: Boolean) = setPreference(KEY_SHOW_TARS_HEADER, show)
 
+    suspend fun updateShowWidgets(show: Boolean) = setPreference(KEY_SHOW_WIDGETS, show)
+
     suspend fun updateShowClock(show: Boolean) = setPreference(KEY_SHOW_CLOCK, show)
     suspend fun updateShowAsciiDiamond(enabled: Boolean) = setPreference(KEY_SHOW_ASCII_DIAMOND, enabled)
     suspend fun updateAsciiDiamondScale(scale: Int) = setPreference(KEY_ASCII_DIAMOND_SCALE, scale)
@@ -165,32 +169,40 @@ class LauncherDataStore(private val context: Context) {
 
     suspend fun getLastBackupTime(): Long? = getPreference(KEY_LAST_BACKUP_TIME)
 
-    suspend fun saveAllSettings(settings: LauncherSettings) {
-        try {
-            context.dataStore.edit { prefs ->
-                prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
-                prefs[KEY_DUAL_APP_DRAWER] = settings.appDrawerRows > 1
-                prefs[KEY_APP_DRAWER_ROWS] = settings.appDrawerRows
-                prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
-                prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
-                prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
-                prefs[KEY_SHOW_CLOCK] = settings.showClock
-                prefs[KEY_SHOW_ASCII_DIAMOND] = settings.showAsciiDiamond
-                prefs[KEY_ASCII_DIAMOND_SCALE] = settings.asciiDiamondScale
-                prefs[KEY_ASCII_DIAMOND_OFFSET_Y] = settings.asciiDiamondOffsetY
-                prefs[KEY_ASCII_DIAMOND_FPS] = settings.asciiDiamondFps
-                prefs[KEY_ASCII_DIAMOND_SPEED] = settings.asciiDiamondSpeed
-                prefs[KEY_SHOW_FOLDER_GRID] = settings.showFolderGrid
-                prefs[KEY_APP_DRAWER_OFFSET_Y] = settings.appDrawerOffsetY
-                if (settings.selectedIconPack.isNullOrBlank()) {
-                    prefs.remove(KEY_SELECTED_ICON_PACK)
-                } else {
-                    prefs[KEY_SELECTED_ICON_PACK] = settings.selectedIconPack
-                }
-                prefs[KEY_APP_DRAWER_ICON_SIZE] = settings.appDrawerIconSize
+    suspend fun saveAllSettings(
+        settings: LauncherSettings,
+        foldersJson: String? = null,
+        pwasJson: String? = null,
+        usageStatsJson: String? = null,
+        lastBackupTime: Long? = null
+    ) {
+        // One transaction: failed writes leave the previous layout and settings intact.
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHOW_APP_DRAWER] = settings.showAppDrawer
+            prefs[KEY_DUAL_APP_DRAWER] = settings.appDrawerRows > 1
+            prefs[KEY_APP_DRAWER_ROWS] = settings.appDrawerRows
+            prefs[KEY_GRID_SIZE] = settings.gridSize.serialize()
+            prefs[KEY_BUTTON_COLOR_MODE] = settings.buttonColorMode
+            prefs[KEY_SHOW_TARS_HEADER] = settings.showTarsHeader
+            prefs[KEY_SHOW_CLOCK] = settings.showClock
+            prefs[KEY_SHOW_WIDGETS] = settings.showWidgets
+            prefs[KEY_SHOW_ASCII_DIAMOND] = settings.showAsciiDiamond
+            prefs[KEY_ASCII_DIAMOND_SCALE] = settings.asciiDiamondScale
+            prefs[KEY_ASCII_DIAMOND_OFFSET_Y] = settings.asciiDiamondOffsetY
+            prefs[KEY_ASCII_DIAMOND_FPS] = settings.asciiDiamondFps
+            prefs[KEY_ASCII_DIAMOND_SPEED] = settings.asciiDiamondSpeed
+            prefs[KEY_SHOW_FOLDER_GRID] = settings.showFolderGrid
+            prefs[KEY_APP_DRAWER_OFFSET_Y] = settings.appDrawerOffsetY
+            if (settings.selectedIconPack.isNullOrBlank()) {
+                prefs.remove(KEY_SELECTED_ICON_PACK)
+            } else {
+                prefs[KEY_SELECTED_ICON_PACK] = settings.selectedIconPack
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save all settings", e)
+            prefs[KEY_APP_DRAWER_ICON_SIZE] = settings.appDrawerIconSize
+            foldersJson?.let { prefs[KEY_FOLDERS_JSON] = it }
+            pwasJson?.let { prefs[KEY_PWAS_JSON] = it }
+            usageStatsJson?.let { prefs[KEY_USAGE_STATS_JSON] = it }
+            lastBackupTime?.let { prefs[KEY_LAST_BACKUP_TIME] = it }
         }
     }
 

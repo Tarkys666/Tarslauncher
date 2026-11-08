@@ -19,5 +19,6 @@ data class LauncherSettings(
     val asciiDiamondFps: Int = 60,
     val asciiDiamondSpeed: Int = 100,
     val showFolderGrid: Boolean = true,
-    val appDrawerOffsetY: Int = 24
+    val appDrawerOffsetY: Int = 24,
+    val showWidgets: Boolean = false
 )

@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver android:name="com.tarslauncher.app.WidgetFixtures$ReadyProvider" android:exported="true" android:label="Widget fixture">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/test_widget" />
+        </receiver>
+        <receiver android:name="com.tarslauncher.app.WidgetFixtures$CancelledProvider" android:exported="true" android:label="Cancelled widget fixture">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/cancelled_test_widget" />
+        </receiver>
+        <activity android:name="com.tarslauncher.app.WidgetFixtures$ReadyConfiguration" android:exported="true" />
+        <activity android:name="com.tarslauncher.app.WidgetFixtures$CancelledConfiguration" android:exported="true" />
+    </application>
+</manifest>

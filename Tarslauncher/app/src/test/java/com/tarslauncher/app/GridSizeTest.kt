@@ -40,4 +40,14 @@ class GridSizeTest {
         assertEquals(GridSize.DEFAULT, GridSize.fromString("0x3"))
         assertEquals(GridSize.DEFAULT, GridSize.fromString("-1x4"))
     }
+
+    @Test
+    fun oversizedAndOverflowingGridsAreRejected() {
+        for (value in listOf("1000000x1000", "65536x65536", "6x1", "1x6", "2147483648x1")) {
+            assertNull(GridSize.parse(value))
+            assertEquals(GridSize.DEFAULT, GridSize.fromString(value))
+        }
+        assertTrue(runCatching { GridSize(Int.MAX_VALUE, Int.MAX_VALUE) }.isFailure)
+        assertEquals(25, GridSize(5, 5).totalCells)
+    }
 }

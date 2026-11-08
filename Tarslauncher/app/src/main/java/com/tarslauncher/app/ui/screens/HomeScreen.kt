@@ -114,6 +114,8 @@ fun HomeScreen(
     showTarsHeader: Boolean,
     appDrawerIconSize: Int,
     showClock: Boolean,
+    showWidgets: Boolean = false,
+    widgetContent: @Composable () -> Unit = {},
     showAsciiDiamond: Boolean = false,
     asciiDiamondScale: Int = 100,
     asciiDiamondOffsetY: Int = 0,
@@ -155,7 +157,7 @@ fun HomeScreen(
     
     // Responsive padding values based on screen size (memoized)
     val clockTopPadding = remember(screenHeight) { (screenHeight * 0.08f).coerceAtLeast(32.dp).coerceAtMost(64.dp) }
-    val commandBarSpacerHeight = remember(screenHeight) { (screenHeight * 0.25f).coerceAtLeast(150.dp).coerceAtMost(250.dp) }
+    val widgetAreaHeight = (screenHeight * 0.34f).coerceIn(180.dp, 320.dp)
     
     // Responsive font sizes (memoized)
     val clockFontSize = remember(screenWidth) {
@@ -218,6 +220,7 @@ fun HomeScreen(
             .draggable(
                 state = verticalDragState,
                 orientation = Orientation.Vertical,
+                enabled = !showWidgets,
                 onDragStarted = { dragAccumulator[0] = 0f },
                 onDragStopped = { velocity ->
                     if (velocity > 250f) {
@@ -229,7 +232,7 @@ fun HomeScreen(
                 }
             )
     ) {
-        if (showAsciiDiamond) {
+        if (showAsciiDiamond && !showWidgets) {
             AsciiDiamondCanvas(
                 scale = asciiDiamondScale,
                 offsetY = asciiDiamondOffsetY,
@@ -249,7 +252,7 @@ fun HomeScreen(
         ) {
             // Responsive Ayarlar Butonu (Aşağı kaydırma ile gizlenir, yukarı kaydırma ile görünür)
             AnimatedVisibility(
-                visible = isSettingsButtonVisible,
+                visible = showWidgets || isSettingsButtonVisible,
                 enter = fadeIn(animationSpec = tween(220)) + slideInVertically(animationSpec = tween(250)) { it },
                 exit = fadeOut(animationSpec = tween(180)) + slideOutVertically(animationSpec = tween(220)) { it },
                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -385,7 +388,7 @@ fun HomeScreen(
         }
         
         // ✅ RESPONSIVE SAAT OVERLAY - Her cihaza uyumlu
-        if (!showAsciiDiamond) {
+        if (!showAsciiDiamond && !showWidgets) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -404,18 +407,39 @@ fun HomeScreen(
 
         }
         
+        if (showWidgets) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = mainPadding, vertical = 8.dp)
+                    .height(widgetAreaHeight)
+                    .zIndex(11f)
+            ) {
+                widgetContent()
+            }
+        }
+
         // ✅ RESPONSIVE FOLDER GRID OVERLAY - Her cihaza uyumlu
         if (showFolderGrid) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(if (showWidgets) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier)
                     .padding(
-                        horizontal = mainPadding,
-                        vertical = (screenHeight * 0.05f).coerceAtLeast(20.dp).coerceAtMost(40.dp)
+                        start = mainPadding,
+                        end = mainPadding,
+                        top = if (showWidgets) widgetAreaHeight + 24.dp else (screenHeight * 0.05f).coerceIn(20.dp, 40.dp),
+                        bottom = if (showWidgets) {
+                            buttonHeight + 16.dp + (if (showAppDrawer) appDrawerHeight else 0.dp) +
+                                appDrawerOffsetY.dp.coerceAtMost(screenHeight * 0.25f)
+                        } else (screenHeight * 0.05f).coerceIn(20.dp, 40.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 FolderGrid(
+                    modifier = if (showWidgets) Modifier.verticalScroll(rememberScrollState()) else Modifier,
                     folders = folders,
                     onFoldersUpdate = onFoldersUpdate,
                     onAppClick = onAppClick,
@@ -485,7 +509,8 @@ fun FolderGrid(
     gridSize: GridSize,
     iconPackLoader: IconPackLoader?,
     buttonColor: Color,
-    onDeletePwa: (String) -> Unit = {}
+    onDeletePwa: (String) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     // Track selected folder by ID so updates to folders list reflect immediately in the open dialog
     var showFolderAppsDialog by remember("folder_dialog_state") { mutableStateOf(false) }
@@ -505,9 +530,9 @@ fun FolderGrid(
         }
     }
 
-    // Stable column layout with fixed positioning
+    // Scroll large grids within the space reserved below the widgets.
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .wrapContentHeight()
             .padding(horizontal = 16.dp),

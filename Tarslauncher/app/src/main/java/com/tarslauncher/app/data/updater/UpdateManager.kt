@@ -227,7 +227,7 @@ class UpdateManager(
                         } catch (e: Exception) {
                             location
                         }
-                        if (!isTrustedDownloadUrl(resolvedUrl, repoOwner, repoName)) {
+                        if (!isTrustedDownloadUrl(resolvedUrl, repoOwner, repoName, allowAssetHost = true)) {
                             return@withContext Result.failure(SecurityException("Güvenilmeyen yönlendirme adresi reddedildi."))
                         }
                         currentUrl = resolvedUrl
@@ -284,7 +284,7 @@ class UpdateManager(
                 }
 
                 // Paket adı, imza sertifikası ve sürüm kodu kontrolü
-                val identityError = verifyApkIdentity(file, expectedHash)
+                val identityError = verifyApkIdentity(file)
                 if (identityError != null) {
                     file.delete()
                     return@withContext Result.failure(SecurityException(identityError))
@@ -356,7 +356,7 @@ class UpdateManager(
      * ve daha yüksek sürüm kodu (downgrade engeli). Sorun varsa hata mesajı, yoksa null döner.
      */
     @Suppress("DEPRECATION")
-    fun verifyApkIdentity(apkFile: File, expectedHash: String? = null): String? {
+    fun verifyApkIdentity(apkFile: File): String? {
         val pm = context.packageManager
         return try {
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -406,16 +406,7 @@ class UpdateManager(
             }
             val archiveCerts = certs(archive)
             val installedCerts = certs(installed)
-            val matches = archiveCerts.isNotEmpty() && (
-                archiveCerts == installedCerts ||
-                (installedCerts.containsAll(archiveCerts) && archiveCerts.intersect(installedCerts).isNotEmpty())
-            )
-            if (!matches) {
-                if (archiveCerts.isEmpty() && !expectedHash.isNullOrBlank() && verifyApkHash(apkFile, expectedHash)) {
-                    // Android 12-14 getPackageArchiveInfo bug fallback: archive certificates could not be read,
-                    // but the APK SHA-256 hash was successfully verified against the authoritative release manifest.
-                    return null
-                }
+            if (!signingCertificatesMatch(archiveCerts, installedCerts)) {
                 return "APK imza sertifikası yüklü uygulamayla eşleşmiyor."
             }
             null
@@ -430,36 +421,40 @@ class UpdateManager(
 
     companion object {
         private val SHA256_PATTERN = Regex("^(?:sha-?256:)?[a-fA-F0-9]{64}$", RegexOption.IGNORE_CASE)
+        private val RELEASE_ASSET_HOSTS = setOf(
+            "release-assets.githubusercontent.com",
+            "objects.githubusercontent.com",
+            "github-releases.githubusercontent.com"
+        )
+
+        internal fun signingCertificatesMatch(archiveCerts: Set<String>, installedCerts: Set<String>): Boolean =
+            archiveCerts.isNotEmpty() && installedCerts.containsAll(archiveCerts)
 
         /**
-         * Yalnızca HTTPS ve GitHub'a ait alanlardan veya release yönlendirmelerinden (CDN / S3) indirmeye izin verir.
-         * İndirme URL'sinin repository yolu (/Tarkys666/Tarslauncher/) ile başladığını doğrular.
+         * İlk adres bu deponun release APK'sı olmalı; yalnız yönlendirmeler asset sunucularını kullanabilir.
          */
         fun isTrustedDownloadUrl(
             raw: String,
             repoOwner: String = "Tarkys666",
-            repoName: String = "Tarslauncher"
+            repoName: String = "Tarslauncher",
+            allowAssetHost: Boolean = false
         ): Boolean {
             return try {
                 val uri = java.net.URI(raw)
                 val host = uri.host?.lowercase() ?: return false
-                if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) {
+                if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null ||
+                    uri.port !in listOf(-1, 443)) {
                     return false
                 }
-                val isGitHub = host == "github.com"
-                val isGitHubCdn = host == "objects.githubusercontent.com" || host.endsWith(".githubusercontent.com")
-                val isGitHubS3 = host.endsWith(".amazonaws.com") &&
-                    (host.startsWith("github-production-release-asset-") || host.contains("github"))
-
-                val expectedRepoPath = "/${repoOwner.trim('/')}/${repoName.trim('/')}/".lowercase()
-
-                when {
-                    isGitHub -> {
-                        val path = uri.path?.lowercase().orEmpty()
-                        path.startsWith(expectedRepoPath)
-                    }
-                    isGitHubCdn || isGitHubS3 -> true
-                    else -> false
+                val path = uri.path.orEmpty()
+                if (path.split('/').any { it == "." || it == ".." }) return false
+                if (host == "github.com") {
+                    val prefix = "/${repoOwner.trim('/')}/${repoName.trim('/')}/releases/download/"
+                    if (!path.startsWith(prefix, ignoreCase = true)) return false
+                    val parts = path.substring(prefix.length).split('/')
+                    parts.size == 2 && parts.all { it.isNotBlank() } && parts.last().endsWith(".apk", ignoreCase = true)
+                } else {
+                    allowAssetHost && host in RELEASE_ASSET_HOSTS
                 }
             } catch (e: Exception) {
                 false

@@ -379,6 +379,7 @@ class AppRepository(
     suspend fun updateGridSize(gridSize: GridSize) = dataStore.updateGridSize(gridSize)
     suspend fun updateButtonColorMode(mode: String) = dataStore.updateButtonColorMode(mode)
     suspend fun updateShowTarsHeader(show: Boolean) = dataStore.updateShowTarsHeader(show)
+    suspend fun updateShowWidgets(show: Boolean) = dataStore.updateShowWidgets(show)
     suspend fun updateShowClock(show: Boolean) = dataStore.updateShowClock(show)
     suspend fun updateShowAsciiDiamond(enabled: Boolean) = dataStore.updateShowAsciiDiamond(enabled)
     suspend fun updateAsciiDiamondScale(scale: Int) = dataStore.updateAsciiDiamondScale(scale)

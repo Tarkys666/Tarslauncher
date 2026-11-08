@@ -96,6 +96,8 @@ fun SettingsScreen(
     onIconPackSelected: (String?) -> Unit,
     showTarsHeader: Boolean,
     onShowTarsHeaderChange: (Boolean) -> Unit,
+    showWidgets: Boolean = false,
+    onShowWidgetsChange: (Boolean) -> Unit = {},
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     showAsciiDiamond: Boolean = false,
@@ -175,6 +177,7 @@ fun SettingsScreen(
         appDrawerOffsetY,
         showTarsHeader,
         showClock,
+        showWidgets,
         showAsciiDiamond,
         asciiDiamondScale,
         asciiDiamondOffsetY,
@@ -195,6 +198,13 @@ fun SettingsScreen(
                 title = "HOME SCREEN & GRID",
                 icon = "",
                 children = buildList {
+                    add(SettingsItem.Setting(
+                        title = "Widgets",
+                        description = "Use top widgets instead of the header, clock and diamond",
+                        type = SettingType.TOGGLE,
+                        currentValue = showWidgets,
+                        onValueChange = { onShowWidgetsChange(it as Boolean) }
+                    ))
                     add(SettingsItem.Setting(
                         title = "Center App Grid",
                         description = "Show middle app and folder grid on home screen",
@@ -223,6 +233,7 @@ fun SettingsScreen(
                         description = "Show FACET text on home screen",
                         type = SettingType.TOGGLE,
                         currentValue = showTarsHeader,
+                        enabled = !showWidgets,
                         onValueChange = { onShowTarsHeaderChange(it as Boolean) }
                     ))
                     add(SettingsItem.Setting(
@@ -230,6 +241,7 @@ fun SettingsScreen(
                         description = "Show clock on home screen",
                         type = SettingType.TOGGLE,
                         currentValue = showClock,
+                        enabled = !showWidgets,
                         onValueChange = { onShowClockChange(it as Boolean) }
                     ))
                 }
@@ -279,6 +291,7 @@ fun SettingsScreen(
                         description = if (showAsciiDiamond) "Enabled (Clock & Facet logo hidden)" else "3D rotating ASCII Diamond background",
                         type = SettingType.TOGGLE,
                         currentValue = showAsciiDiamond,
+                        enabled = !showWidgets,
                         onValueChange = { onShowAsciiDiamondChange(it as Boolean) }
                     ))
                     if (showAsciiDiamond) {
@@ -930,6 +943,7 @@ fun SettingsItemView(
                     
                     Switch(
                         checked = isChecked,
+                        enabled = setting.enabled,
                         onCheckedChange = { newValue ->
                             setting.onValueChange?.invoke(newValue)
                         },

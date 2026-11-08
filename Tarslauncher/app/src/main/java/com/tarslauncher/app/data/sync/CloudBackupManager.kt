@@ -3,13 +3,12 @@ package com.tarslauncher.app.data.sync
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.tarslauncher.app.data.datastore.LauncherDataStore
-import com.tarslauncher.app.data.model.GridSize
 import com.tarslauncher.app.data.model.LauncherSettings
 import com.tarslauncher.app.utils.PwaLauncherHelper
+import com.tarslauncher.app.utils.SecurityHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -54,6 +53,7 @@ class CloudBackupManager(
                 addProperty("buttonColorMode", currentSettings.buttonColorMode)
                 addProperty("showTarsHeader", currentSettings.showTarsHeader)
                 addProperty("showClock", currentSettings.showClock)
+                addProperty("showWidgets", currentSettings.showWidgets)
                 if (currentSettings.selectedIconPack != null) {
                     addProperty("selectedIconPack", currentSettings.selectedIconPack)
                 }
@@ -125,59 +125,18 @@ class CloudBackupManager(
                 return@withContext Result.failure(Exception("Supabase bulutunda bu hesaba ait kayıtlı bir yedek bulunamadı."))
             }
 
-            val row = arr[0].asJsonObject
-            val payload = row.getAsJsonObject("payload")
-                ?: return@withContext Result.failure(Exception("Yedek verisi okunamadı."))
-
-            val foldersJson = payload.get("foldersJson")?.takeIf { !it.isJsonNull }?.asString
-            if (!foldersJson.isNullOrBlank()) {
-                dataStore.saveFoldersJson(foldersJson)
-            }
-
-            val pwasJson = payload.get("pwasJson")?.takeIf { !it.isJsonNull }?.asString
-            if (!pwasJson.isNullOrBlank()) {
-                val sanitizedPwas = sanitizePwasJson(pwasJson)
-                dataStore.savePwasJson(sanitizedPwas)
-            }
-
-            val usageStatsJson = payload.get("usageStatsJson")?.takeIf { !it.isJsonNull }?.asString
-            if (!usageStatsJson.isNullOrBlank()) {
-                dataStore.saveUsageStatsJson(usageStatsJson)
-            }
-
-            val updatedAt = row.get("updated_at")?.takeIf { !it.isJsonNull }?.asLong
-                ?: payload.get("updatedAt")?.takeIf { !it.isJsonNull }?.asLong
-                ?: System.currentTimeMillis()
-            dataStore.setLastBackupTime(updatedAt)
-
-            val settingsObj = payload.getAsJsonObject("settings")
-            val restoredSettings = if (settingsObj != null) {
-                val settings = LauncherSettings(
-                    showAppDrawer = settingsObj.get("showAppDrawer")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
-                    dualAppDrawer = settingsObj.get("dualAppDrawer")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
-                    appDrawerRows = settingsObj.get("appDrawerRows")?.takeIf { !it.isJsonNull }?.asInt ?: 1,
-                    gridSize = GridSize.fromString(settingsObj.get("gridSize")?.takeIf { !it.isJsonNull }?.asString),
-                    buttonColorMode = settingsObj.get("buttonColorMode")?.takeIf { !it.isJsonNull }?.asString ?: "transparent",
-                    showTarsHeader = settingsObj.get("showTarsHeader")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
-                    showClock = settingsObj.get("showClock")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
-                    selectedIconPack = settingsObj.get("selectedIconPack")?.takeIf { !it.isJsonNull }?.asString,
-                    appDrawerIconSize = settingsObj.get("appDrawerIconSize")?.takeIf { !it.isJsonNull }?.asInt ?: 32,
-                    showAsciiDiamond = settingsObj.get("showAsciiDiamond")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
-                    asciiDiamondScale = settingsObj.get("asciiDiamondScale")?.takeIf { !it.isJsonNull }?.asInt ?: 100,
-                    asciiDiamondOffsetY = settingsObj.get("asciiDiamondOffsetY")?.takeIf { !it.isJsonNull }?.asInt ?: 0,
-                    asciiDiamondFps = settingsObj.get("asciiDiamondFps")?.takeIf { !it.isJsonNull }?.asInt ?: 60,
-                    asciiDiamondSpeed = settingsObj.get("asciiDiamondSpeed")?.takeIf { !it.isJsonNull }?.asInt ?: 100,
-                    showFolderGrid = settingsObj.get("showFolderGrid")?.takeIf { !it.isJsonNull }?.asBoolean ?: true,
-                    appDrawerOffsetY = settingsObj.get("appDrawerOffsetY")?.takeIf { !it.isJsonNull }?.asInt ?: 24
-                )
-                dataStore.saveAllSettings(settings)
-                settings
-            } else {
-                LauncherSettings()
-            }
+            val backup = BackupPayload.fromRow(arr[0].asJsonObject)
+            val pwasJson = backup.pwasJson?.let { sanitizePwasJson(it) }
+            dataStore.saveAllSettings(
+                settings = backup.settings,
+                foldersJson = backup.foldersJson,
+                pwasJson = pwasJson,
+                usageStatsJson = backup.usageStatsJson,
+                lastBackupTime = backup.updatedAt
+            )
 
             Log.i(TAG, "Layout restored from Supabase for uid: ${user.uid}")
-            Result.success(restoredSettings)
+            Result.success(backup.settings)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -187,27 +146,22 @@ class CloudBackupManager(
     }
 
     private fun sanitizePwasJson(json: String): String {
-        return try {
-            val element = JsonParser.parseString(json)
-            if (!element.isJsonArray) return "[]"
-            val array = element.asJsonArray
-            val safeArray = JsonArray()
-            for (item in array) {
-                if (item.isJsonObject) {
-                    val obj = item.asJsonObject
-                    val rawUrl = obj.get("url")?.takeIf { !it.isJsonNull }?.asString
-                    if (!rawUrl.isNullOrBlank()) {
-                        val cleanUrl = PwaLauncherHelper.sanitizeWebUrl(rawUrl)
-                        if (cleanUrl != null && (cleanUrl.startsWith("http://", ignoreCase = true) || cleanUrl.startsWith("https://", ignoreCase = true))) {
-                            obj.addProperty("url", cleanUrl)
-                            safeArray.add(obj)
-                        }
-                    }
+        val array = JsonParser.parseString(json).asJsonArray
+        for (item in array) {
+            val obj = item.asJsonObject
+            val rawUrl = obj.get("url")?.takeUnless { it.isJsonNull }?.asString
+            if (!rawUrl.isNullOrBlank()) {
+                val cleanUrl = PwaLauncherHelper.sanitizeWebUrl(rawUrl) ?: error("Yedekteki web adresi geçersiz.")
+                obj.addProperty("url", cleanUrl)
+            } else {
+                val shortcutPackage = obj.get("shortcutPackage")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+                val shortcutId = obj.get("shortcutId")?.takeUnless { it.isJsonNull }?.asString
+                require(SecurityHelper.validatePackageName(shortcutPackage) && !shortcutId.isNullOrBlank()) {
+                    "Yedekteki kısayol geçersiz."
                 }
+                obj.addProperty("url", "")
             }
-            safeArray.toString()
-        } catch (_: Exception) {
-            "[]"
         }
+        return array.toString()
     }
 }

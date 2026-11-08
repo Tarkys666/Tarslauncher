@@ -1,6 +1,9 @@
 package com.tarslauncher.app
 
+import android.content.Intent
 import android.os.Bundle
+import com.tarslauncher.app.widgets.LauncherWidgetController
+import com.tarslauncher.app.widgets.WidgetPanel
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -32,6 +35,8 @@ import com.tarslauncher.app.utils.*
 
 class MainActivity : ComponentActivity() {
     
+    internal lateinit var widgetController: LauncherWidgetController
+        private set
     private lateinit var repository: AppRepository
     private lateinit var viewModel: LauncherViewModel
     
@@ -39,6 +44,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         
+        widgetController = LauncherWidgetController(this, savedInstanceState != null)
         repository = AppRepository(applicationContext)
         val onboardingManager = OnboardingManager(this)
         
@@ -61,11 +67,29 @@ class MainActivity : ComponentActivity() {
                     LauncherMain(
                         viewModel = viewModel,
                         onboardingManager = onboardingManager,
-                        repository = repository
+                        repository = repository,
+                        widgetController = widgetController
                     )
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgetController.startListening()
+    }
+
+    override fun onStop() {
+        widgetController.stopListening()
+        super.onStop()
+    }
+
+    @Deprecated("AppWidgetHost uses the platform activity result API")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        widgetController.onActivityResult(requestCode, resultCode, data)
     }
 }
 
@@ -73,7 +97,8 @@ class MainActivity : ComponentActivity() {
 fun LauncherMain(
     viewModel: LauncherViewModel,
     onboardingManager: OnboardingManager,
-    repository: AppRepository
+    repository: AppRepository,
+    widgetController: LauncherWidgetController
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -95,6 +120,7 @@ fun LauncherMain(
     // Güvenli broadcast receiver ile uygulama değişikliklerini dinle
     DisposableEffect(context) {
         val receiver = SecureBroadcastHelper.createSecurePackageReceiver {
+            widgetController.refresh()
             repository.invalidateAppCache()
             viewModel.refreshAppList()
         }
@@ -154,6 +180,7 @@ fun LauncherMain(
     val onGridSizeChange = remember(viewModel) { { g: GridSize -> viewModel.updateGridSize(g) } }
     val onIconPackSelected = remember(viewModel) { { p: String? -> viewModel.updateSelectedIconPack(p) } }
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
+    val onShowWidgetsChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowWidgets(s) } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
     val onShowAsciiDiamondChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAsciiDiamond(v) } }
     val onAsciiDiamondScaleChange = remember(viewModel) { { s: Int -> viewModel.updateAsciiDiamondScale(s) } }
@@ -187,6 +214,7 @@ fun LauncherMain(
                     showTarsHeader = uiState.showTarsHeader,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     showClock = uiState.showClock,
+                    showWidgets = uiState.showWidgets,
                     showAsciiDiamond = uiState.showAsciiDiamond,
                     asciiDiamondScale = uiState.asciiDiamondScale,
                     asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
@@ -218,6 +246,7 @@ fun LauncherMain(
                     showTarsHeader = uiState.showTarsHeader,
                     appDrawerIconSize = uiState.appDrawerIconSize,
                     showClock = uiState.showClock,
+                    showWidgets = uiState.showWidgets,
                     showAsciiDiamond = uiState.showAsciiDiamond,
                     asciiDiamondScale = uiState.asciiDiamondScale,
                     asciiDiamondOffsetY = uiState.asciiDiamondOffsetY,
@@ -227,7 +256,8 @@ fun LauncherMain(
                     appDrawerOffsetY = uiState.appDrawerOffsetY,
                     pwaPresets = uiState.pwaPresets,
                     onAddPwa = onAddPwa,
-                    onDeletePwa = onDeletePwa
+                    onDeletePwa = onDeletePwa,
+                    widgetContent = { WidgetPanel(widgetController) }
                 )
             } else if (uiState.currentScreen == "settings") {
                 SettingsScreen(
@@ -246,8 +276,10 @@ fun LauncherMain(
                     showTarsHeader = uiState.showTarsHeader,
                     onShowTarsHeaderChange = onShowTarsHeaderChange,
                     showClock = uiState.showClock,
+                    showWidgets = uiState.showWidgets,
                     showAsciiDiamond = uiState.showAsciiDiamond,
                     onShowClockChange = onShowClockChange,
+                    onShowWidgetsChange = onShowWidgetsChange,
                     onShowAsciiDiamondChange = onShowAsciiDiamondChange,
                     asciiDiamondScale = uiState.asciiDiamondScale,
                     onAsciiDiamondScaleChange = onAsciiDiamondScaleChange,

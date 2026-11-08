@@ -8,6 +8,41 @@ import org.junit.Test
 class UpdateManagerTest {
 
     @Test
+    fun downloadsMustStartAtThisRepositorysRelease() {
+        assertTrue(UpdateManager.isTrustedDownloadUrl("https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.27/TarsLauncher-release.apk"))
+        for (url in listOf(
+            "https://github.com/another/repository/releases/download/v1.0.0/app.apk",
+            "https://github.com/Tarkys666/Tarslauncher/blob/main/app.apk",
+            "https://github.com/Tarkys666/Tarslauncher/releases/download/v1/../app.apk",
+            "https://github.com/Tarkys666/Tarslauncher/releases/download/v1/%2e%2e/app.apk",
+            "https://github.com:8443/Tarkys666/Tarslauncher/releases/download/v1/app.apk",
+            "https://user@github.com/Tarkys666/Tarslauncher/releases/download/v1/app.apk",
+            "http://github.com/Tarkys666/Tarslauncher/releases/download/v1/app.apk",
+            "https://release-assets.githubusercontent.com/asset.apk"
+        )) assertFalse(url, UpdateManager.isTrustedDownloadUrl(url))
+    }
+
+    @Test
+    fun redirectsOnlyAllowExactGitHubAssetHosts() {
+        for (host in listOf("release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com")) {
+            assertTrue(UpdateManager.isTrustedDownloadUrl("https://$host/asset", allowAssetHost = true))
+        }
+        for (host in listOf("github-review-example.s3.amazonaws.com", "github-production-release-asset-untrusted.s3.amazonaws.com", "raw.githubusercontent.com", "user-images.githubusercontent.com", "release-assets.githubusercontent.com.example.com", "evil.release-assets.githubusercontent.com")) {
+            assertFalse(host, UpdateManager.isTrustedDownloadUrl("https://$host/asset", allowAssetHost = true))
+        }
+    }
+
+    @Test
+    fun unreadableAndMismatchedSigningCertificatesNeverPass() {
+        assertFalse(UpdateManager.signingCertificatesMatch(emptySet(), setOf("installed")))
+        assertFalse(UpdateManager.signingCertificatesMatch(setOf("archive"), emptySet()))
+        assertFalse(UpdateManager.signingCertificatesMatch(emptySet(), emptySet()))
+        assertFalse(UpdateManager.signingCertificatesMatch(setOf("unrelated"), setOf("installed")))
+        assertTrue(UpdateManager.signingCertificatesMatch(setOf("installed"), setOf("installed")))
+        assertTrue(UpdateManager.signingCertificatesMatch(setOf("old"), setOf("old", "current")))
+    }
+
+    @Test
     fun isNewerVersion_greaterPatch_returnsTrue() {
         assertTrue(UpdateManager.isNewerVersion("1.2.1", "1.2.0"))
     }

@@ -254,6 +254,10 @@ class LauncherViewModel(
         viewModelScope.launch { appRepository.updateShowTarsHeader(show) }
     }
 
+    fun updateShowWidgets(show: Boolean) {
+        viewModelScope.launch { appRepository.updateShowWidgets(show) }
+    }
+
     fun updateShowClock(show: Boolean) {
         viewModelScope.launch { appRepository.updateShowClock(show) }
     }
