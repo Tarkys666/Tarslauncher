@@ -1,8 +1,8 @@
 {
     "apkSize": 1456663,
-    "sha256": "793f3d6368285733ac04a6c9d71dc5cdbc1a59b3854de4e5cc99338b1043f7ba",
-    "versionName": "2.0.28",
-    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.28/TarsLauncher-release.apk",
-    "versionCode": 77,
-    "releaseNotes": "## v2.0.28 \u2014 Widget deste\u011fi ve g\u00fcvenlik d\u00fczeltmeleri\n\n- Ana ekran\u0131n \u00fcst b\u00f6l\u00fcm\u00fcne Android widget'lar\u0131 ekleme, kald\u0131rma ve y\u00fckseklik ayar\u0131.\n- Widget modu a\u00e7\u0131kken ba\u015fl\u0131k, saat ve elmas animasyonu otomatik kapan\u0131r; kapat\u0131ld\u0131\u011f\u0131nda \u00f6nceki g\u00f6r\u00fcn\u00fcm geri gelir.\n- Widget se\u00e7imi ve boyutlar\u0131 cihazda korunur; widget modu bulut yede\u011fine dahil edilir.\n- Google giri\u015fi ve Supabase oturumlar\u0131yla kullan\u0131c\u0131ya \u00f6zel bulut yedekleme.\n- Bozuk veya a\u015f\u0131r\u0131 b\u00fcy\u00fck yedeklerin do\u011frulanmas\u0131 ve ayarlar\u0131n tek i\u015flemde geri y\u00fcklenmesi.\n- APK indirme adresleri, imza do\u011frulamas\u0131 ve release i\u015f ak\u0131\u015f\u0131 i\u00e7in g\u00fcvenlik d\u00fczeltmeleri."
+    "sha256": "e3baffd1df115f0d916c9628abcf016b954488f2d702d61b87285cba89f5431d",
+    "versionName": "2.0.29",
+    "downloadUrl": "https://github.com/Tarkys666/Tarslauncher/releases/download/v2.0.29/TarsLauncher-release.apk",
+    "versionCode": 78,
+    "releaseNotes": "## v2.0.29 \u2014 Tek widget ve sade ana ekran\n\n- Ana ekran\u0131n \u00fcst\u00fcnde yaln\u0131zca se\u00e7ilen widget g\u00f6sterilir; ekleme, d\u00fczenleme ve kald\u0131rma yaz\u0131lar\u0131 kald\u0131r\u0131ld\u0131.\n- Widget se\u00e7imi, de\u011fi\u015ftirme, y\u00fckseklik ayar\u0131 ve kald\u0131rma i\u015flemleri ayarlara ta\u015f\u0131nd\u0131.\n- Ayn\u0131 anda yaln\u0131zca bir widget kullan\u0131labilir. Yeni widget ba\u015far\u0131yla yap\u0131land\u0131r\u0131lmadan mevcut widget silinmez.\n- \u00d6nceki s\u00fcr\u00fcmde birden fazla widget eklenmi\u015fse ilk widget korunur.\n- Widget modu a\u00e7\u0131kken ba\u015fl\u0131k, saat ve elmas animasyonu gizli kal\u0131r."
 }
