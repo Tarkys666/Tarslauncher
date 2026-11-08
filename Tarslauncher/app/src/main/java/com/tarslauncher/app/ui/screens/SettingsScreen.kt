@@ -98,6 +98,8 @@ fun SettingsScreen(
     onShowTarsHeaderChange: (Boolean) -> Unit,
     showWidgets: Boolean = false,
     onShowWidgetsChange: (Boolean) -> Unit = {},
+    widgetLabel: String? = null,
+    onManageWidgetClick: () -> Unit = {},
     showClock: Boolean,
     onShowClockChange: (Boolean) -> Unit,
     showAsciiDiamond: Boolean = false,
@@ -178,6 +180,7 @@ fun SettingsScreen(
         showTarsHeader,
         showClock,
         showWidgets,
+        widgetLabel,
         showAsciiDiamond,
         asciiDiamondScale,
         asciiDiamondOffsetY,
@@ -199,12 +202,21 @@ fun SettingsScreen(
                 icon = "",
                 children = buildList {
                     add(SettingsItem.Setting(
-                        title = "Widgets",
-                        description = "Use top widgets instead of the header, clock and diamond",
+                        title = "Widget",
+                        description = "Use one top widget instead of the header, clock and diamond",
                         type = SettingType.TOGGLE,
                         currentValue = showWidgets,
                         onValueChange = { onShowWidgetsChange(it as Boolean) }
                     ))
+                    if (showWidgets) {
+                        add(SettingsItem.Setting(
+                            title = "Selected Widget",
+                            description = widgetLabel ?: "Choose one widget",
+                            type = SettingType.BUTTON,
+                            onClick = onManageWidgetClick,
+                            buttonLabel = if (widgetLabel == null) "SELECT" else "CONFIGURE"
+                        ))
+                    }
                     add(SettingsItem.Setting(
                         title = "Center App Grid",
                         description = "Show middle app and folder grid on home screen",

@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,72 +22,40 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
+/** The home surface contains only the selected widget, without launcher controls. */
 @Composable
 fun WidgetPanel(controller: LauncherWidgetController) {
     val ids by controller.widgetIds.collectAsState()
-    var showPicker by rememberSaveable { mutableStateOf(false) }
-    var editing by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            if (ids.isNotEmpty()) {
-                TextButton(onClick = { editing = !editing }) {
-                    Text(if (editing) "DONE" else "EDIT", color = Color.White)
-                }
-            }
-            TextButton(onClick = { showPicker = true }) {
-                Text("+ ADD WIDGET", color = Color.White)
-            }
-        }
-        if (ids.isEmpty()) {
-            Box(Modifier.fillMaxSize().clickable { showPicker = true }, contentAlignment = Alignment.Center) {
-                Text("Add your first widget", color = Color.White.copy(alpha = 0.6f))
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(ids, key = { it }) { id ->
-                    val info = controller.info(id)
-                    if (info != null) {
-                        var height by remember(id) { mutableIntStateOf(controller.height(id, info)) }
-                        Column {
-                            if (editing) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(info.loadLabel(context.packageManager), modifier = Modifier.weight(1f), color = Color.White)
-                                    if (info.resizeMode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0) {
-                                        TextButton(onClick = {
-                                            controller.resize(id, height - 32)
-                                            height = controller.height(id, info)
-                                        }) { Text("−", color = Color.White) }
-                                        TextButton(onClick = {
-                                            controller.resize(id, height + 32)
-                                            height = controller.height(id, info)
-                                        }) { Text("+", color = Color.White) }
-                                    }
-                                    TextButton(onClick = { controller.remove(id) }) { Text("REMOVE", color = Color.White) }
-                                }
-                            }
-                            NativeWidget(controller, id, info, height)
-                        }
-                    }
-                }
-            }
+    val id = ids.firstOrNull() ?: return
+    val info = controller.info(id) ?: return
+    key(id) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            NativeWidget(controller, id, info, controller.height(id, info))
         }
     }
+}
 
-    if (showPicker) {
-        val providers = remember(controller) { controller.providers() }
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("Add widget") },
-            text = {
+@Composable
+fun WidgetSettingsDialog(controller: LauncherWidgetController, onDismiss: () -> Unit) {
+    val ids by controller.widgetIds.collectAsState()
+    val id = ids.firstOrNull()
+    val info = id?.let(controller::info)
+    var choosing by rememberSaveable { mutableStateOf(id == null) }
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (choosing || info == null) "Choose widget" else "Widget") },
+        text = {
+            if (choosing || info == null) {
+                val providers = remember(controller) { controller.providers() }
                 if (providers.isEmpty()) {
                     Text("No widgets available. Install an app that provides widgets to get started.")
                 } else {
                     LazyColumn(Modifier.heightIn(max = 420.dp)) {
                         items(providers, key = { "${it.profile}:${it.provider.flattenToString()}" }) { provider ->
                             Column(Modifier.fillMaxWidth().clickable {
-                                showPicker = false
+                                onDismiss()
                                 controller.add(provider)
                             }.padding(vertical = 14.dp, horizontal = 4.dp)) {
                                 Text(provider.loadLabel(context.packageManager))
@@ -100,10 +70,33 @@ fun WidgetPanel(controller: LauncherWidgetController) {
                         }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showPicker = false }) { Text("CANCEL") } }
-        )
-    }
+            } else if (id != null) {
+                var height by remember(id) { mutableIntStateOf(controller.height(id, info)) }
+                Column {
+                    Text(info.loadLabel(context.packageManager))
+                    if (info.resizeMode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Height: ${height}dp", Modifier.weight(1f))
+                            TextButton(onClick = {
+                                controller.resize(id, height - 32)
+                                height = controller.height(id, info)
+                            }) { Text("−") }
+                            TextButton(onClick = {
+                                controller.resize(id, height + 32)
+                                height = controller.height(id, info)
+                            }) { Text("+") }
+                        }
+                    }
+                    TextButton(onClick = { choosing = true }) { Text("Change widget") }
+                    TextButton(onClick = {
+                        controller.remove(id)
+                        onDismiss()
+                    }) { Text("Remove widget") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("DONE") } }
+    )
 }
 
 @Suppress("DEPRECATION")

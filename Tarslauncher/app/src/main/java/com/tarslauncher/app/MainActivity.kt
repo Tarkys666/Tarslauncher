@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import com.tarslauncher.app.widgets.LauncherWidgetController
 import com.tarslauncher.app.widgets.WidgetPanel
+import com.tarslauncher.app.widgets.WidgetSettingsDialog
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -102,6 +104,8 @@ fun LauncherMain(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val widgetIds by widgetController.widgetIds.collectAsState()
+    var showWidgetSettings by rememberSaveable { mutableStateOf(false) }
 
     val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -180,7 +184,10 @@ fun LauncherMain(
     val onGridSizeChange = remember(viewModel) { { g: GridSize -> viewModel.updateGridSize(g) } }
     val onIconPackSelected = remember(viewModel) { { p: String? -> viewModel.updateSelectedIconPack(p) } }
     val onShowTarsHeaderChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowTarsHeader(s) } }
-    val onShowWidgetsChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowWidgets(s) } }
+    val onShowWidgetsChange = remember(viewModel, widgetController) { { s: Boolean ->
+        viewModel.updateShowWidgets(s)
+        if (s && widgetController.widgetIds.value.isEmpty()) showWidgetSettings = true
+    } }
     val onShowClockChange = remember(viewModel) { { s: Boolean -> viewModel.updateShowClock(s) } }
     val onShowAsciiDiamondChange = remember(viewModel) { { v: Boolean -> viewModel.updateShowAsciiDiamond(v) } }
     val onAsciiDiamondScaleChange = remember(viewModel) { { s: Int -> viewModel.updateAsciiDiamondScale(s) } }
@@ -280,6 +287,8 @@ fun LauncherMain(
                     showAsciiDiamond = uiState.showAsciiDiamond,
                     onShowClockChange = onShowClockChange,
                     onShowWidgetsChange = onShowWidgetsChange,
+                    widgetLabel = widgetIds.firstOrNull()?.let { widgetController.info(it)?.loadLabel(context.packageManager) },
+                    onManageWidgetClick = { showWidgetSettings = true },
                     onShowAsciiDiamondChange = onShowAsciiDiamondChange,
                     asciiDiamondScale = uiState.asciiDiamondScale,
                     onAsciiDiamondScaleChange = onAsciiDiamondScaleChange,
@@ -326,6 +335,10 @@ fun LauncherMain(
                         viewModel.setOnboardingComplete()
                     }
                 )
+            }
+
+            if (showWidgetSettings) {
+                WidgetSettingsDialog(widgetController, onDismiss = { showWidgetSettings = false })
             }
 
             // In-App System Update Dialog

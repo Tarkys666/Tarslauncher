@@ -1,8 +1,7 @@
-## v2.0.28 — Widget desteği ve güvenlik düzeltmeleri
+## v2.0.29 — Tek widget ve sade ana ekran
 
-- Ana ekranın üst bölümüne Android widget'ları ekleme, kaldırma ve yükseklik ayarı.
-- Widget modu açıkken başlık, saat ve elmas animasyonu otomatik kapanır; kapatıldığında önceki görünüm geri gelir.
-- Widget seçimi ve boyutları cihazda korunur; widget modu bulut yedeğine dahil edilir.
-- Google girişi ve Supabase oturumlarıyla kullanıcıya özel bulut yedekleme.
-- Bozuk veya aşırı büyük yedeklerin doğrulanması ve ayarların tek işlemde geri yüklenmesi.
-- APK indirme adresleri, imza doğrulaması ve release iş akışı için güvenlik düzeltmeleri.
+- Ana ekranın üstünde yalnızca seçilen widget gösterilir; ekleme, düzenleme ve kaldırma yazıları kaldırıldı.
+- Widget seçimi, değiştirme, yükseklik ayarı ve kaldırma işlemleri ayarlara taşındı.
+- Aynı anda yalnızca bir widget kullanılabilir. Yeni widget başarıyla yapılandırılmadan mevcut widget silinmez.
+- Önceki sürümde birden fazla widget eklenmişse ilk widget korunur.
+- Widget modu açıkken başlık, saat ve elmas animasyonu gizli kalır.

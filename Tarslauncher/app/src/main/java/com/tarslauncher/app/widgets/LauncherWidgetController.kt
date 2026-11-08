@@ -44,7 +44,10 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
     fun stopListening() = host.stopListening()
 
     fun refresh() {
-        mutableIds.value = host.appWidgetIds.filter { it != pendingId && info(it) != null }.sorted()
+        val boundIds = host.appWidgetIds.filter { it != pendingId && info(it) != null }.sorted()
+        // Preserve the first visible widget when upgrading from the multi-widget layout.
+        boundIds.drop(1).forEach(::deleteBinding)
+        mutableIds.value = boundIds.take(1)
     }
 
     fun info(id: Int): AppWidgetProviderInfo? = manager.getAppWidgetInfo(id)
@@ -108,7 +111,10 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
     }
 
     private fun finishAdding() {
+        val id = pendingId
+        // Keep the previous widget until the replacement has been configured successfully.
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
+        host.appWidgetIds.filter { it != id }.forEach(::deleteBinding)
         refresh()
     }
 
@@ -116,7 +122,7 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
         val id = pendingId
         // Never delete an ID supplied by another app's result intent.
         if (id != AppWidgetManager.INVALID_APPWIDGET_ID && id in host.appWidgetIds) {
-            host.deleteAppWidgetId(id)
+            deleteBinding(id)
         }
         pendingId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
@@ -128,9 +134,13 @@ class LauncherWidgetController(private val activity: Activity, restoringActivity
 
     fun remove(id: Int) {
         if (id !in widgetIds.value) return
+        deleteBinding(id)
+        refresh()
+    }
+
+    private fun deleteBinding(id: Int) {
         host.deleteAppWidgetId(id)
         preferences.edit().remove("height_$id").apply()
-        refresh()
     }
 
     fun minimumHeight(info: AppWidgetProviderInfo): Int {
